@@ -1,6 +1,8 @@
 package com.vexo.studio.ui.screens
 
 import android.content.res.Configuration
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -23,6 +25,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
@@ -401,8 +407,19 @@ fun CompactTransportBar(
         val maxDur = playback.durationMs.coerceAtLeast(1L).toFloat()
         var scrubPosition by remember { mutableStateOf<Float?>(null) }
         LaunchedEffect(playback.currentIndex) { scrubPosition = null }
+        val timelinePosition = (scrubPosition ?: playback.positionMs.toFloat()).coerceIn(0f, maxDur)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(formatDuration(timelinePosition.toLong()), style = MaterialTheme.typography.labelSmall, color = palette.accent)
+            Text(formatDuration(playback.durationMs), style = MaterialTheme.typography.labelSmall, color = palette.textSecondary)
+        }
+        Canvas(Modifier.fillMaxWidth().height(8.dp)) {
+            for (i in 0..20) {
+                val x = size.width * i / 20f
+                drawLine(palette.border, Offset(x, 0f), Offset(x, if (i % 5 == 0) size.height else size.height * 0.5f), strokeWidth = 1.dp.toPx())
+            }
+        }
         Slider(
-            value = (scrubPosition ?: playback.positionMs.toFloat()).coerceIn(0f, maxDur),
+            value = timelinePosition,
             enabled = playback.durationMs > 0L,
             onValueChange = { scrubPosition = it },
             onValueChangeFinished = {
@@ -460,13 +477,11 @@ private fun StudioWorkspacePanel(
                         .padding(vertical = 10.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = tab.label.uppercase(),
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
-                        color = if (active) palette.accentOn else palette.textSecondary,
-                        maxLines = 1
-                    )
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        val glyph = when(tab) { StudioTab.LAYERS -> Icons.Default.Layers; StudioTab.PROPERTIES -> Icons.Default.Tune; StudioTab.ASSETS -> Icons.Default.Image; StudioTab.PRESETS -> Icons.Default.Dashboard }
+                        Icon(glyph, contentDescription = null, tint = if(active) palette.accentOn else palette.textSecondary, modifier = Modifier.size(18.dp))
+                        Text(tab.label, style = MaterialTheme.typography.labelSmall, color = if(active) palette.accentOn else palette.textSecondary, maxLines = 1)
+                    }
                 }
             }
         }

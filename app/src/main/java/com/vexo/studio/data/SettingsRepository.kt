@@ -17,8 +17,8 @@ private val Context.vexoDataStore by preferencesDataStore(name = "vexo_settings"
 
 class SettingsRepository(private val context: Context) {
     private object Keys {
-        val THEME_PRESET = stringPreferencesKey("theme_preset")
-        val CUSTOM_ACCENT = intPreferencesKey("custom_accent")
+        val THEME_PRESET = stringPreferencesKey("theme_preset_vex")
+        val CUSTOM_ACCENT = intPreferencesKey("custom_accent_vex")
         val DEFAULT_FFT = intPreferencesKey("default_fft")
         val DEFAULT_HOP = intPreferencesKey("default_hop")
         val PREVIEW_SCALE = floatPreferencesKey("preview_scale")

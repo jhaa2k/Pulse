@@ -139,6 +139,20 @@ class VexoPlaybackController(
         }
     }
 
+    fun loadProjectAudio(uri: String?) {
+        if (uri != null && currentAudioUri() == uri) return
+        player.pause()
+        player.clearMediaItems()
+        ringBuffer.resetGeneration()
+        playbackPositionUs = 0L
+        _state.value = _state.value.copy(queue = emptyList(), currentIndex = -1, positionMs = 0L, durationMs = 0L, isPlaying = false,
+            trackMeta = TrackMetadataSnapshot(artworkVersion = ++artworkCounter), errorMessage = null)
+        if (!uri.isNullOrBlank()) {
+            importTracks(listOf(Uri.parse(uri)), playFirstImmediately = false)
+            updateCurrentTrackMetadata(0)
+        }
+    }
+
     fun importTracks(uris: List<Uri>, playFirstImmediately: Boolean = true) {
         if (uris.isEmpty()) return
         val newItems = uris.map { uri ->
@@ -182,7 +196,7 @@ class VexoPlaybackController(
             startForegroundService()
             updateCurrentTrackMetadata(startIndex)
         } else {
-            val curPos = player.currentPosition
+            val curPos = if (existing.isEmpty()) 0L else player.currentPosition
             val wasPlaying = player.isPlaying
             player.setMediaItems(mediaItems, startIndex.coerceAtLeast(0), curPos)
             player.prepare()

@@ -551,7 +551,7 @@ fun SettingsScreen(
         StudioToggleRow("Portrait overlay workspace", settings.portraitOverlay) { value -> vm.updateSettings { it.copy(portraitOverlay = value) } }
         StudioSlider("Preview area", settings.previewShare * 100f, 30f, 65f, 44f, "%", 1f, onValueChange = { value -> vm.updateSettings { it.copy(previewShare = value / 100f) } })
         StudioChipSelector("Preview FPS limit", listOf(30, 60), settings.previewFps, { "$it FPS" }) { fps -> vm.updateSettings { it.copy(previewFps = fps) } }
-        TextButton(onClick = { vm.updateSettings { current -> current.copy(glassEnabled = true, glassOpacity = 0.82f, backdropBlurDp = 24f, cornerRadiusDp = 12f, controlScale = 1f, uiTextScale = 1f, previewFps = 60, previewShare = 0.44f, portraitOverlay = true) } }) { Text("RESET INTERFACE SETTINGS") }
+        TextButton(onClick = { vm.updateSettings { current -> current.copy(themePreset = ThemePreset.LIME_STUDIO, customAccentArgb = 0xFFC5F84A.toInt(), glassEnabled = true, glassOpacity = 0.82f, backdropBlurDp = 24f, cornerRadiusDp = 8f, controlScale = 1f, uiTextScale = 1f, previewFps = 60, previewShare = 0.44f, portraitOverlay = false) } }) { Text("RESET INTERFACE SETTINGS") }
         Text("AUDIO ANALYSIS", style = MaterialTheme.typography.titleMedium, color = palette.accent)
         StudioChipSelector("Default FFT Size", listOf(256, 512, 1024, 2048, 4096), settings.defaultFftSize, { "$it" }) { sz ->
             vm.updateSettings { it.copy(defaultFftSize = sz) }

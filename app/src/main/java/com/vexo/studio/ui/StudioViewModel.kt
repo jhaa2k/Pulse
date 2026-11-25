@@ -95,6 +95,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
             selectedLayerId = firstComp.layers.firstOrNull()?.common?.id,
             projects = projectRepo.listProjects()
         )
+        playbackController.loadProjectAudio(recovered.audioUri)
         startAnalysisLoop()
     }
 
@@ -363,6 +364,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
             navDestination = NavDestination.STUDIO,
             statusBanner = "Loaded ${fresh.name}"
         )
+        playbackController.loadProjectAudio(fresh.audioUri)
     }
 
     fun openProject(id: String) {
@@ -377,6 +379,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
             canRedo = false,
             navDestination = NavDestination.STUDIO
         )
+        playbackController.loadProjectAudio(loaded.audioUri)
     }
 
     fun duplicateProject(id: String) {
@@ -399,6 +402,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                 project = fallback,
                 projects = projectRepo.listProjects()
             )
+            playbackController.loadProjectAudio(fallback.audioUri)
         } else {
             _uiState.value = _uiState.value.copy(projects = remaining)
         }
@@ -423,7 +427,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun exportPresetToUri(uri: Uri) {
-        val project = _uiState.value.project
+        val project = _uiState.value.project.copy(audioUri = playbackController.currentAudioUri() ?: _uiState.value.project.audioUri)
         viewModelScope.launch(Dispatchers.IO) {
             runCatching {
                 app.contentResolver.openOutputStream(uri, "wt")?.use { out ->

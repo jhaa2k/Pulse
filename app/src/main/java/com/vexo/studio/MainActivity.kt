@@ -31,6 +31,8 @@ import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
 import androidx.compose.foundation.layout.fillMaxSize
@@ -200,6 +202,9 @@ private fun VexoRootApp(vm: StudioViewModel) {
                             modifier = Modifier.clickable { showRenameProject = true }
                         )
                     }
+                    IconButton(onClick = { presetExportPicker.launch("${uiState.project.name}.VEX") }) {
+                        Icon(Icons.Default.Save, "Save VEX project", tint = palette.textSecondary)
+                    }
                     Box(
                         modifier = Modifier
                             .background(palette.accent, palette.shape)
@@ -220,7 +225,8 @@ private fun VexoRootApp(vm: StudioViewModel) {
                     horizontalArrangement = Arrangement.spacedBy(2.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    NavDestination.entries.forEach { dest ->
+                    val destinations = if (uiState.navDestination == NavDestination.STUDIO) listOf(NavDestination.STUDIO, NavDestination.PROJECTS, NavDestination.AUDIO, NavDestination.TEMPLATES, NavDestination.SETTINGS) else NavDestination.entries.toList()
+                    destinations.forEach { dest ->
                         val active = dest == uiState.navDestination
                         val icon = when(dest) {
                             NavDestination.STUDIO -> Icons.Default.Tune

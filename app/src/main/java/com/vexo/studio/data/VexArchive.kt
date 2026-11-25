@@ -120,7 +120,10 @@ object VexArchive {
                 return AveeJsonCodec.importFromText(legacyText ?: error("No project.json in archive"), fallbackName)
             }
             val project = remap(NativeVexCodec.decode(native)) { ref ->
-                if(!ref.startsWith(PREFIX)) ref else Uri.fromFile(assets[ref.removePrefix(PREFIX)] ?: error("Missing bundled media")).toString()
+                if(!ref.startsWith(PREFIX)) {
+                    require(!isLocal(ref)) { "Unbundled local media reference" }
+                    ref
+                } else Uri.fromFile(assets[ref.removePrefix(PREFIX)] ?: error("Missing bundled media")).toString()
             }
             if(assets.isEmpty()) dir.deleteRecursively()
             return project
