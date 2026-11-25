@@ -922,6 +922,22 @@ private fun PropertiesTab(
         ) {
             when (val cfg = layer.config) {
                 is LayerConfig.Bars -> {
+                    StudioChipSelector("Audio Provider", uiState.project.audioProviders.map { it.index }, cfg.audioProviderIndex, { "Provider $it" }) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(audioProviderIndex = v)) } }
+                    StudioSlider("Bar Height Multiplier", cfg.barHeightMultiplier, -2f, 2f, 1f, "x", 0.05f, onValueChange = { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(barHeightMultiplier = v)) }
+                    }, onCommit = ::endDrag)
+                    StudioSlider("Fixed Height", cfg.fixedHeight, -50f, 50f, 0f, "", 0.5f, onValueChange = { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(fixedHeight = v)) }
+                    }, onCommit = ::endDrag)
+                    StudioSlider("Gradient Offset", cfg.colorBlendOffset, 0f, 1f, 0f, "", 0.01f, onValueChange = { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(colorBlendOffset = v)) }
+                    }, onCommit = ::endDrag)
+                    StudioSlider("Polygon Sides", cfg.polygonSides.toFloat(), 3f, 12f, 6f, "", 1f, onValueChange = { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(polygonSides = v.toInt())) }
+                    }, onCommit = ::endDrag)
+                    StudioSlider("Path Angle", cfg.pathAngleDeg, -360f, 360f, 0f, "deg", 1f, onValueChange = { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(pathAngleDeg = v)) }
+                    }, onCommit = ::endDrag)
                     StudioChipSelector("Path Shape", BarsShapePath.entries, cfg.shapePath, { it.label }) { path ->
                         vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(shapePath = path)) }
                     }
@@ -968,6 +984,13 @@ private fun PropertiesTab(
                     StudioChipSelector("Source", ImageSourceType.entries, cfg.sourceType, { it.label }) { src ->
                         vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(sourceType = src)) }
                     }
+                    if (cfg.sourceType == ImageSourceType.COMPOSITION) {
+                    StudioChipSelector("Source Composition", uiState.project.compositions.map { it.index }.filter { it != uiState.selectedCompositionIndex }, cfg.sourceCompositionIndex, { "Composition $it" }) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(sourceCompositionIndex = v)) } }
+                    }
+                    StudioSlider("Image Opacity Strength", cfg.opacityStrength, 0f, 1f, 1f, "x", 0.01f, onValueChange = { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(opacityStrength = v)) }
+                    }, onCommit = ::endDrag)
+                    StudioColorPickerRow("Chroma Key Color", cfg.colorKeyArgb) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(colorKeyArgb = v)) } }
                     StudioChipSelector("Shape Mask", ImageShape.entries, cfg.shape, { it.label }) { sh ->
                         vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(shape = sh)) }
                     }
@@ -1007,6 +1030,20 @@ private fun PropertiesTab(
                     StudioToggleRow("Italic", cfg.italic) { i ->
                         vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(italic = i)) }
                     }
+                    StudioChipSelector("Text Alignment", listOf(-1, 0, 1), cfg.alignment, { when(it) { -1 -> "Left"; 1 -> "Right"; else -> "Center" } }) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(alignment = v)) } }
+                    StudioSlider("Letter Spacing", cfg.letterSpacing, 0f, 0.5f, 0.04f, "", 0.01f, onValueChange = { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(letterSpacing = v)) }
+                    }, onCommit = ::endDrag)
+                    StudioSlider("Line Spacing", cfg.lineSpacing, 0.8f, 2.5f, 1.2f, "x", 0.05f, onValueChange = { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(lineSpacing = v)) }
+                    }, onCommit = ::endDrag)
+                    StudioSlider("Stroke Width", cfg.strokeWidth, 0f, 12f, 0f, "px", 0.5f, onValueChange = { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(strokeWidth = v)) }
+                    }, onCommit = ::endDrag)
+                    StudioColorPickerRow("Stroke Color", cfg.strokeColorArgb) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(strokeColorArgb = v)) } }
+                    StudioSlider("Shadow Radius", cfg.shadowRadius, 0f, 24f, 4f, "px", 0.5f, onValueChange = { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(shadowRadius = v)) }
+                    }, onCommit = ::endDrag)
                     StudioColorPickerRow("Text Color", cfg.colorArgb) { col ->
                         vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(colorArgb = col)) }
                     }
@@ -1029,6 +1066,53 @@ private fun PropertiesTab(
                     }
                 }
                 is LayerConfig.Particles -> {
+                    StudioSlider("Spawn Interval", cfg.spawnTimeSec, 0.005f, 0.25f, 0.015f, "s", 0.005f, onValueChange = { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(spawnTimeSec = v)) }
+                    }, onCommit = ::endDrag)
+                    StudioSlider("Lifetime", cfg.lifetimeSec, 0.1f, 10f, 6f, "s", 0.1f, onValueChange = { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(lifetimeSec = v)) }
+                    }, onCommit = ::endDrag)
+                    StudioSlider("Speed Random", cfg.speedRandom, -300f, 300f, 80f, "", 1f, onValueChange = { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(speedRandom = v)) }
+                    }, onCommit = ::endDrag)
+                    StudioSlider("Gravity X", cfg.gravityX, -300f, 300f, 0f, "", 1f, onValueChange = { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(gravityX = v)) }
+                    }, onCommit = ::endDrag)
+                    StudioSlider("Gravity Y", cfg.gravityY, -300f, 300f, 0f, "", 1f, onValueChange = { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(gravityY = v)) }
+                    }, onCommit = ::endDrag)
+                    StudioSlider("Start Size", cfg.startSize, 0f, 20f, 2f, "", 0.1f, onValueChange = { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(startSize = v)) }
+                    }, onCommit = ::endDrag)
+                    StudioSlider("End Size", cfg.endSize, 0f, 20f, 4f, "", 0.1f, onValueChange = { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(endSize = v)) }
+                    }, onCommit = ::endDrag)
+                    StudioSlider("Random End Size", cfg.endSizeRandom, 0f, 20f, 0f, "", 0.1f, onValueChange = { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(endSizeRandom = v)) }
+                    }, onCommit = ::endDrag)
+                    StudioSlider("Fade In / Out", cfg.fadeInAndOutTime, 0.02f, 0.49f, 0.15f, "", 0.01f, onValueChange = { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(fadeInAndOutTime = v)) }
+                    }, onCommit = ::endDrag)
+                    StudioSlider("Perspective Depth", cfg.perspectiveDepth, 100f, 2000f, 900f, "", 10f, onValueChange = { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(perspectiveDepth = v)) }
+                    }, onCommit = ::endDrag)
+                    StudioSlider("Perspective FOV", cfg.perspectiveFov, 20f, 150f, 48.75f, "deg", 0.5f, onValueChange = { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(perspectiveFov = v)) }
+                    }, onCommit = ::endDrag)
+                    StudioSlider("Near Camera Fade", cfg.nearCameraFadeOutDistance, 0f, 500f, 75f, "", 1f, onValueChange = { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(nearCameraFadeOutDistance = v)) }
+                    }, onCommit = ::endDrag)
+                    StudioSlider("Vector Z", cfg.vectorAngleZ, -1f, 1f, 0f, "", 0.05f, onValueChange = { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(vectorAngleZ = v)) }
+                    }, onCommit = ::endDrag)
+                    StudioSlider("Side Wave Frequency", cfg.sideSineWaveFreq, 0f, 10f, 0f, "", 0.1f, onValueChange = { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(sideSineWaveFreq = v)) }
+                    }, onCommit = ::endDrag)
+                    StudioSlider("Side Wave Magnitude", cfg.sideSineWaveMag, 0f, 10f, 0f, "", 0.1f, onValueChange = { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(sideSineWaveMag = v)) }
+                    }, onCommit = ::endDrag)
+                    StudioToggleRow("Random Vector", cfg.useRandomVectorInstead) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(useRandomVectorInstead = v)) } }
+                    StudioToggleRow("Vector Relative To Center", cfg.vectorRelativeToCenter) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(vectorRelativeToCenter = v)) } }
                     StudioChipSelector("Spawn Area", SpawnAreaType.entries, cfg.spawnArea, { it.label }) { s ->
                         vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(spawnArea = s)) }
                     }
@@ -1055,6 +1139,8 @@ private fun PropertiesTab(
                     }
                 }
                 is LayerConfig.BlurEffect -> {
+                    StudioChipSelector("Source Composition", uiState.project.compositions.map { it.index }.filter { it != uiState.selectedCompositionIndex }, cfg.sourceCompositionIndex, { "Composition $it" }) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(sourceCompositionIndex = v)) } }
+                    StudioToggleRow("Show Unblurred Content", cfg.showUnblurredContent) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(showUnblurredContent = v)) } }
                     RegisteredSlider("blurRadius", cfg.blurRadius, settings.showPropertyHelpHints, { v ->
                         beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(blurRadius = v)) }
                     }, ::endDrag)
@@ -1066,6 +1152,12 @@ private fun PropertiesTab(
                     }
                 }
                 is LayerConfig.RgbSplitEffect -> {
+                    StudioChipSelector("Source Composition", uiState.project.compositions.map { it.index }.filter { it != uiState.selectedCompositionIndex }, cfg.targetCompositionIndex, { "Composition $it" }) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(targetCompositionIndex = v)) } }
+                    StudioSlider("Split Y", cfg.splitAmountY, -0.1f, 0.1f, 0.008f, "", 0.002f, onValueChange = { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(splitAmountY = v)) }
+                    }, onCommit = ::endDrag)
+                    StudioColorPickerRow("Green Channel", cfg.splitColor1Argb) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(splitColor1Argb = v)) } }
+                    StudioColorPickerRow("Blue Channel", cfg.splitColor2Argb) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(splitColor2Argb = v)) } }
                     RegisteredSlider("splitMultiplier", cfg.splitMultiplier, settings.showPropertyHelpHints, { v ->
                         beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(splitMultiplier = v)) }
                     }, ::endDrag)
@@ -1077,11 +1169,14 @@ private fun PropertiesTab(
                     }
                 }
                 is LayerConfig.MotionBlurEffect -> {
+                    StudioChipSelector("Source Composition", uiState.project.compositions.map { it.index }.filter { it != uiState.selectedCompositionIndex }, cfg.targetCompositionIndex, { "Composition $it" }) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(targetCompositionIndex = v)) } }
                     StudioSlider("Blur Amount", cfg.blurAmountMultiplier, 0.4f, 3f, 0.85f, "x", 0.05f, onValueChange = { v ->
                         beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(blurAmountMultiplier = v)) }
                     }, onCommit = ::endDrag)
                 }
                 is LayerConfig.MirrorEffect -> {
+                    StudioChipSelector("Source Composition", uiState.project.compositions.map { it.index }.filter { it != uiState.selectedCompositionIndex }, cfg.targetCompositionIndex, { "Composition $it" }) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(targetCompositionIndex = v)) } }
+                    StudioColorPickerRow("Mirror Tint", cfg.colorArgb) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(colorArgb = v)) } }
                     StudioChipSelector("Mirror Mode", MirrorMode.entries, cfg.mirrorMode, { it.label }) { m ->
                         vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(mirrorMode = m)) }
                     }
@@ -1146,7 +1241,7 @@ private fun AudioProviderEditorSection(
         StudioChipSelector("Sample Mode", SampleProviderType.entries, provider.sampleProvider, { it.aveeName }) { mode ->
             vm.updateAudioProvider(provider.index) { it.copy(sampleProvider = mode) }
         }
-        StudioChipSelector("FFT Size", listOf(256, 512, 1024, 2048, 4096), provider.fftSize, { "$it" }) { sz ->
+        StudioChipSelector("FFT Size", listOf(256, 512, 1024, 2048, 4096, 8192), provider.fftSize, { "$it" }) { sz ->
             vm.updateAudioProvider(provider.index) { it.copy(fftSize = sz) }
         }
         StudioChipSelector("Window", WindowType.entries, provider.window, { it.label }) { win ->
@@ -1160,6 +1255,13 @@ private fun AudioProviderEditorSection(
             }
             vm.updateAudioProvider(provider.index) { it.copy(channelMode = ch) }
         }
+        StudioToggleRow("Provider Enabled", provider.enabled) { v -> vm.updateAudioProvider(provider.index) { it.copy(enabled = v) } }
+        StudioSlider("Smooth", provider.smooth, 0.1f, 1f, 0.75f, "", 0.01f, onValueChange = { v ->
+            onBeginDrag(); vm.updateAudioProvider(provider.index, false) { it.copy(smooth = v) }
+        }, onCommit = onEndDrag)
+        StudioSlider("Frequency Shift", provider.freqShift, -0.5f, 0.5f, 0f, "", 0.01f, onValueChange = { v ->
+            onBeginDrag(); vm.updateAudioProvider(provider.index, false) { it.copy(freqShift = v) }
+        }, onCommit = onEndDrag)
         RegisteredSlider("sampleOutCount", provider.sampleOutCount.toFloat(), settings.showPropertyHelpHints, { v ->
             onBeginDrag(); vm.updateAudioProvider(provider.index, false) { it.copy(sampleOutCount = v.toInt()) }
         }, onEndDrag)
@@ -1213,6 +1315,21 @@ private fun AudioProviderEditorSection(
         RegisteredSlider("releaseMs", provider.releaseMs, settings.showPropertyHelpHints, { v ->
             onBeginDrag(); vm.updateAudioProvider(provider.index, false) { it.copy(releaseMs = v) }
         }, onEndDrag)
+        StudioSlider("Beat Smooth", provider.beatSmooth, 0.1f, 1f, 0.4f, "", 0.01f, onValueChange = { v ->
+            onBeginDrag(); vm.updateAudioProvider(provider.index, false) { it.copy(beatSmooth = v) }
+        }, onCommit = onEndDrag)
+        StudioSlider("Beat Range Lower", provider.beatRangeValueLower, 0f, 50f, 0.7f, "", 0.1f, onValueChange = { v ->
+            onBeginDrag(); vm.updateAudioProvider(provider.index, false) { it.copy(beatRangeValueLower = v) }
+        }, onCommit = onEndDrag)
+        StudioSlider("Beat Range Higher", provider.beatRangeValueHigher, 0f, 100f, 35f, "", 0.1f, onValueChange = { v ->
+            onBeginDrag(); vm.updateAudioProvider(provider.index, false) { it.copy(beatRangeValueHigher = v) }
+        }, onCommit = onEndDrag)
+        StudioSlider("Peak Hold", provider.peakHoldMs, 0f, 1000f, 180f, "", 5f, onValueChange = { v ->
+            onBeginDrag(); vm.updateAudioProvider(provider.index, false) { it.copy(peakHoldMs = v) }
+        }, onCommit = onEndDrag)
+        StudioSlider("Peak Decay", provider.peakDecay, 0.5f, 0.995f, 0.85f, "", 0.005f, onValueChange = { v ->
+            onBeginDrag(); vm.updateAudioProvider(provider.index, false) { it.copy(peakDecay = v) }
+        }, onCommit = onEndDrag)
         RegisteredSlider("beatSensitivity", provider.beatSensitivity, settings.showPropertyHelpHints, { v ->
             onBeginDrag(); vm.updateAudioProvider(provider.index, false) { it.copy(beatSensitivity = v) }
         }, onEndDrag)

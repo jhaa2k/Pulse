@@ -377,7 +377,7 @@ class VexoGlRenderer(
             val srcIdx = if (cfg.flipInput) count - 1 - i else i
             val rawAmp = delayedBars[srcIdx]
             val amp = (rawAmp * cfg.heightScale * cfg.barHeightMultiplier)
-                .coerceIn(cfg.minHeightScale, cfg.maxHeightScale)
+                .coerceIn(minOf(cfg.minHeightScale, cfg.maxHeightScale), maxOf(cfg.minHeightScale, cfg.maxHeightScale))
             val gradColor = MeasureEvaluator.blendArgb(
                 barColor0, barColor1,
                 ((i.toFloat() / count) + cfg.colorBlendOffset).coerceIn(0f, 1f)
@@ -525,7 +525,7 @@ class VexoGlRenderer(
             .replace("{Album}", meta.album, ignoreCase = true)
             .replace("{Time}", formatTimeMs(meta.positionMs), ignoreCase = true)
 
-        val key = "txt_${resolved}_${cfg.fontSize}_${cfg.bold}_${cfg.italic}_${cfg.colorArgb}_${cfg.alignment}"
+        val key = "txt_${resolved}_${cfg.fontSize}_${cfg.bold}_${cfg.italic}_${cfg.colorArgb}_${cfg.alignment}_${cfg.letterSpacing}_${cfg.lineSpacing}_${cfg.strokeWidth}_${cfg.strokeColorArgb}_${cfg.shadowRadius}"
         val texId = textureCache[key] ?: run {
             val bmp = renderTextBitmap(resolved, cfg)
             val id = uploadBitmapToGl(bmp)

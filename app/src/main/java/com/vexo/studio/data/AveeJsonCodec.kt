@@ -300,6 +300,8 @@ object AveeJsonCodec {
         return AudioProviderConfig(
             index = index,
             tag = obj["_name"]?.primitiveString() ?: "Audio Provider",
+            enabled = obj.propBool("enabled", true), attackMs = obj.propFloat("attackMs", 8f), releaseMs = obj.propFloat("releaseMs", 75f),
+            peakHoldMs = obj.propFloat("peakHoldMs", 180f), peakDecay = obj.propFloat("peakDecay", 0.85f), beatSensitivity = obj.propFloat("beatSensitivity", 1.2f),
             sampleProvider = SampleProviderType.fromAvee(obj.propString("sampleProvider", "Spectrum")),
             fftSize = fftSize,
             sampleOutCount = obj.propInt("sampleOutCount", 96).coerceIn(1, 512),
@@ -321,7 +323,7 @@ object AveeJsonCodec {
             beatRangeBarLast = obj.propFloat("beatRangeBarLast", 0.2f),
             beatRangeValueLower = obj.propFloat("beatRangeValueLower", 0.7f),
             beatRangeValueHigher = obj.propFloat("beatRangeValueHigher", 35f),
-            extraFields = extractExtraFields(obj, knownAudioProviderKeys)
+            extraFields = extractExtraFields(obj, emptySet())
         )
     }
 
@@ -414,7 +416,12 @@ object AveeJsonCodec {
                 flipInput = obj.propBool("flipInput", false),
                 softness = obj.propInt("softness", 6),
                 reactionDelay = obj.propInt("reactionDelay", 0),
-                reactionAccumulatedDelay = obj.propInt("reactionAccumulatedDelay", 0)
+                reactionAccumulatedDelay = obj.propInt("reactionAccumulatedDelay", 0),
+                colorBlendOffset = parseMvarfValue(obj.propString("colorBlendOffset", "Constant 0 0"), 0f),
+                circleRadius = obj.propFloat("circleRadius", 0.28f),
+                polygonSides = obj.propInt("polygonSides", 6),
+                pathAngleDeg = obj.propFloat("pathAngleDeg", 0f),
+                alternatingDirection = obj.propBool("alternatingDirection", false)
             )
         )
     }
@@ -426,7 +433,11 @@ object AveeJsonCodec {
             text = obj.propString("text", "{Artist}"),
             colorArgb = obj.propInt("color", -1),
             fontSize = obj.propInt("fontSize", 56).coerceIn(8, 120),
-            fontAssetUri = obj.propString("typeFace", "").ifBlank { null }
+            fontAssetUri = obj.propString("typeFace", "").ifBlank { null },
+            bold = obj.propBool("bold", true), italic = obj.propBool("italic", false),
+            alignment = obj.propInt("alignment", 0), letterSpacing = obj.propFloat("letterSpacing", 0.04f),
+            lineSpacing = obj.propFloat("lineSpacing", 1.2f), strokeWidth = obj.propFloat("strokeWidth", 0f),
+            strokeColorArgb = obj.propInt("strokeColor", 0xFF000000.toInt()), shadowRadius = obj.propFloat("shadowRadius", 4f)
         )
     )
 
@@ -501,6 +512,7 @@ object AveeJsonCodec {
             config = LayerConfig.RgbSplitEffect(
                 targetCompositionIndex = target,
                 splitMultiplier = parseMvarfValue(obj.propString("splitMultiplier", "Constant 6 6"), 6f),
+                splitAmountX = obj.propFloat("splitAmountX", 0.015f), splitAmountY = obj.propFloat("splitAmountY", 0.008f),
                 splitMeasure = parseMvarf2Measure(obj.propString("splitAmount", "BeatRandomShake 0.5 0.5")),
                 splitColor0Argb = obj.propInt("splitColor0", -65536),
                 splitColor1Argb = obj.propInt("splitColor1", -16711936),
@@ -552,6 +564,8 @@ object AveeJsonCodec {
         put("ver", "10")
         put("v", "AudioProvider")
         put("sampleProvider", propObj(p.sampleProvider.aveeName))
+        put("enabled", propObj(if (p.enabled) 1 else 0)); put("attackMs", propObj(p.attackMs)); put("releaseMs", propObj(p.releaseMs))
+        put("peakHoldMs", propObj(p.peakHoldMs)); put("peakDecay", propObj(p.peakDecay)); put("beatSensitivity", propObj(p.beatSensitivity))
         val pow = kotlin.math.log2(p.fftSize.toDouble()).roundToInt().coerceIn(7, 13)
         put("fftSize", propObj(pow))
         put("sampleOutCount", propObj(p.sampleOutCount))
@@ -606,6 +620,11 @@ object AveeJsonCodec {
                 put("softness", propObj(cfg.softness))
                 put("reactionDelay", propObj(cfg.reactionDelay))
                 put("reactionAccumulatedDelay", propObj(cfg.reactionAccumulatedDelay))
+                put("colorBlendOffset", propObj("Constant ${cfg.colorBlendOffset} ${cfg.colorBlendOffset}"))
+                put("circleRadius", propObj(cfg.circleRadius))
+                put("polygonSides", propObj(cfg.polygonSides))
+                put("pathAngleDeg", propObj(cfg.pathAngleDeg))
+                put("alternatingDirection", propObj(if (cfg.alternatingDirection) 1 else 0))
                 put("Segment1", buildJsonObject {
                     put("v", cfg.segment1.aveeName)
                     put("barWidth", propObj(cfg.barWidth))
@@ -639,6 +658,9 @@ object AveeJsonCodec {
                 put("text", propObj(cfg.text))
                 put("color", propObj(cfg.colorArgb))
                 put("fontSize", propObj(cfg.fontSize))
+                put("bold", propObj(if (cfg.bold) 1 else 0)); put("italic", propObj(if (cfg.italic) 1 else 0))
+                put("alignment", propObj(cfg.alignment)); put("letterSpacing", propObj(cfg.letterSpacing)); put("lineSpacing", propObj(cfg.lineSpacing))
+                put("strokeWidth", propObj(cfg.strokeWidth)); put("strokeColor", propObj(cfg.strokeColorArgb)); put("shadowRadius", propObj(cfg.shadowRadius))
             }
             is LayerConfig.Shape -> {
                 put("shapeKind", propObj(cfg.kind.name))
@@ -659,7 +681,9 @@ object AveeJsonCodec {
                 put("startSize", propObj(cfg.startSize))
                 put("endSize", propObj(cfg.endSize))
                 put("fadeInAndOutTime", propObj(cfg.fadeInAndOutTime))
-                put("SpawnArea", buildJsonObject { put("v", cfg.spawnArea.aveeName); put("vectorAngle", propObj(cfg.vectorAngleDeg)) })
+                put("endSizeRandom", propObj(cfg.endSizeRandom)); put("perspectiveDepth", propObj(cfg.perspectiveDepth)); put("perspectiveFov", propObj(cfg.perspectiveFov))
+                put("nearCameraFadeOutDistance", propObj(cfg.nearCameraFadeOutDistance)); put("sideSineWaveFreq", propObj(cfg.sideSineWaveFreq)); put("sideSineWaveMag", propObj(cfg.sideSineWaveMag))
+                put("SpawnArea", buildJsonObject { put("v", cfg.spawnArea.aveeName); put("vectorAngle", propObj(cfg.vectorAngleDeg)); put("vectorAngleZ", propObj(cfg.vectorAngleZ)); put("useRandomVectorInstead", propObj(if (cfg.useRandomVectorInstead) 1 else 0)); put("vectorRelativeToCenter", propObj(if (cfg.vectorRelativeToCenter) 1 else 0)) })
             }
             is LayerConfig.BlurEffect -> {
                 put("sourceCompositionIndex", propObj(cfg.sourceCompositionIndex))
@@ -670,6 +694,7 @@ object AveeJsonCodec {
             }
             is LayerConfig.RgbSplitEffect -> {
                 put("targetImage", propObj("composition:${cfg.targetCompositionIndex}"))
+                put("splitAmountX", propObj(cfg.splitAmountX)); put("splitAmountY", propObj(cfg.splitAmountY))
                 put("splitMultiplier", propObj("Constant ${cfg.splitMultiplier} ${cfg.splitMultiplier}"))
                 put("splitColor0", propObj(cfg.splitColor0Argb))
                 put("splitColor1", propObj(cfg.splitColor1Argb))
@@ -683,7 +708,7 @@ object AveeJsonCodec {
             is LayerConfig.MirrorEffect -> {
                 put("TargetImage", propObj("composition:${cfg.targetCompositionIndex}"))
                 put("mirrorMode", propObj(cfg.mirrorMode.aveeName))
-                put("flipMirror", propObj(if (cfg.flipMirror) 1 else 0))
+                put("flipMirror", propObj(if (cfg.flipMirror) 1 else 0)); put("color", propObj(cfg.colorArgb))
             }
         }
     })
