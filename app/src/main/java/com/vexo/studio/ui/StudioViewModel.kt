@@ -406,15 +406,11 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch(Dispatchers.IO) {
             runCatching {
                 val stream = app.contentResolver.openInputStream(uri) ?: error("Cannot open preset file")
-                val imported = stream.use { s ->
-                    if (displayName.endsWith(".viz", ignoreCase = true) || displayName.endsWith(".zip", ignoreCase = true)) {
-                        AveeJsonCodec.importFromVizZip(s, displayName.substringBeforeLast('.'))
-                    } else {
-                        AveeJsonCodec.importFromText(s.readBytes().toString(Charsets.UTF_8), displayName.substringBeforeLast('.'))
-                    }
-                }
+                val imported = stream.use { s -> AveeJsonCodec.importAuto(s, displayName.substringBeforeLast('.')) }
                 withContext(Dispatchers.Main) {
                     createNewProject(imported.name, imported)
+                    val unsupported = imported.compositions.sumOf { it.preservedElements.size }
+                    _uiState.value = _uiState.value.copy(statusBanner = "Imported ${imported.compositions.size} compositions · ${imported.compositions.sumOf { it.layers.size }} editable layers" + if (unsupported > 0) " · $unsupported unsupported elements preserved" else "")
                 }
             }.onFailure { err ->
                 withContext(Dispatchers.Main) {
@@ -424,16 +420,16 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun exportPresetToUri(uri: Uri) {
+    fun exportPresetToUri(uri: Uri, asViz: Boolean = true) {
         viewModelScope.launch(Dispatchers.IO) {
             runCatching {
                 val jsonText = AveeJsonCodec.exportProjectAsAveeJson(_uiState.value.project)
                 app.contentResolver.openOutputStream(uri)?.use { out ->
-                    out.write(jsonText.toByteArray(Charsets.UTF_8))
+                    if (asViz) AveeJsonCodec.exportViz(_uiState.value.project, out) else out.write(jsonText.toByteArray(Charsets.UTF_8))
                 } ?: error("Cannot write to target URI")
             }.onSuccess {
                 withContext(Dispatchers.Main) {
-                    _uiState.value = _uiState.value.copy(statusBanner = "Preset exported as JSON")
+                    _uiState.value = _uiState.value.copy(statusBanner = if (asViz) "VIZ preset exported" else "Preset exported as JSON")
                 }
             }.onFailure { err ->
                 withContext(Dispatchers.Main) {

@@ -32,6 +32,10 @@ import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.floatOrNull
 import kotlinx.serialization.json.put
 import java.io.InputStream
+import java.io.OutputStream
+import java.io.BufferedInputStream
+import java.util.zip.ZipOutputStream
+import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import kotlin.math.roundToInt
 
@@ -54,6 +58,11 @@ object AveeJsonCodec {
         if (trimmed.isEmpty()) error("Empty preset file")
 
         val root = json.parseToJsonElement(trimmed)
+        if (root is JsonObject) {
+            if (root.containsKey("vexoProject") || root.containsKey("vexoSchema")) return decodeNativeProject(root)
+            val comps = root["compositions"] as? JsonArray
+            if (comps != null) return decodeAveeRoot(root, comps, fallbackName)
+        }
         val objects = mutableListOf<JsonObject>()
         collectAveeObjects(root, objects)
 
@@ -111,18 +120,94 @@ object AveeJsonCodec {
         )
     }
 
+    private fun decodeAveeRoot(root: JsonObject, comps: JsonArray, name: String): VexoProject {
+        require(comps.size in 1..128) { "Invalid composition count" }
+        val providers = mutableListOf<AudioProviderConfig>()
+        val result = comps.mapIndexed { index, value ->
+            val comp = value as? JsonObject ?: error("Invalid composition $index")
+            val elements = (comp["elements"] ?: comp["layers"]) as? JsonArray ?: JsonArray(emptyList())
+            require(elements.size <= 2048) { "Too many elements" }
+            val layers = mutableListOf<LayerNode>()
+            val preserved = linkedMapOf<Int, String>()
+            val providerIndices = mutableListOf<Int>()
+            elements.forEachIndexed { position, el ->
+                val obj = el as? JsonObject
+                if (obj == null) preserved[position] = el.toString()
+                else if (obj["objType"]?.primitiveString() == "AudioProvider") {
+                    val providerIndex = providers.size + 1
+                    providers.add(parseAudioProvider(obj, providerIndex))
+                    providerIndices.add(providerIndex)
+                } else {
+                    val layer = decodeLayerByObjType(obj)
+                    if (layer != null) layers.add(layer) else preserved[position] = obj.toString()
+                }
+            }
+            CompositionNode(index = index, name = if (index == 0) "Final Composition" else comp["_name"]?.primitiveString() ?: "Composition $index",
+                layers = layers, aveeMetadata = comp.filterKeys { it != "elements" && it != "layers" }.mapValues { it.value.toString() },
+                preservedElements = preserved, providerIndices = providerIndices)
+        }
+        return VexoProject(name = name, audioProviders = providers.ifEmpty { listOf(AudioProviderConfig()) },
+            compositions = result, aveeRootMetadata = root.filterKeys { it != "compositions" }.mapValues { it.value.toString() })
+    }
+
+    fun importAuto(input: InputStream, name: String): VexoProject {
+        val stream = BufferedInputStream(input)
+        stream.mark(4)
+        val a = stream.read()
+        val b = stream.read()
+        stream.reset()
+        return if (a == 0x50 && b == 0x4b) importFromVizZip(stream, name)
+        else importFromText(readBounded(stream, MAX_VIZ_ENTRY_BYTES).toString(Charsets.UTF_8).removePrefix("\uFEFF"), name)
+    }
+
+    fun exportViz(project: VexoProject, output: OutputStream) {
+        ZipOutputStream(output).use { zip ->
+            zip.putNextEntry(ZipEntry("scene.json"))
+            zip.write(exportAveeScene(project).toByteArray(Charsets.UTF_8))
+            zip.closeEntry()
+        }
+    }
+
+    fun exportAveeScene(project: VexoProject): String {
+        val root = buildJsonObject {
+            project.aveeRootMetadata.forEach { (k, v) -> runCatching { json.parseToJsonElement(v) }.getOrNull()?.let { put(k, it) } }
+            put("objType", "Root")
+            put("ver", "10")
+            put("compositions", buildJsonArray {
+                project.compositions.forEach { comp ->
+                    add(buildJsonObject {
+                        comp.aveeMetadata.forEach { (k, v) -> runCatching { json.parseToJsonElement(v) }.getOrNull()?.let { put(k, it) } }
+                        put("objType", "Composition")
+                        put("v", "Composition")
+                        put("ver", "10")
+                        val assigned = project.compositions.flatMap { it.providerIndices }.toSet()
+                        val elements = mutableListOf<JsonElement>()
+                        project.audioProviders.filter { it.index in comp.providerIndices || (comp.index == 0 && it.index !in assigned) }.forEach { elements.add(encodeAudioProvider(it)) }
+                        comp.layers.forEach { elements.add(encodeLayer(it)) }
+                        comp.preservedElements.toSortedMap().forEach { (index, raw) -> runCatching { json.parseToJsonElement(raw) }.getOrNull()?.let { elements.add(index.coerceIn(0, elements.size), it) } }
+                        put("elements", JsonArray(elements))
+                    })
+                }
+            })
+        }
+        return json.encodeToString(JsonElement.serializer(), root)
+    }
+
     fun importFromVizZip(inputStream: InputStream, fallbackName: String = "VIZ Preset"): VexoProject {
         ZipInputStream(inputStream).use { zis ->
+            var scanned = 0
             var entry = zis.nextEntry
             while (entry != null) {
+                require(++scanned <= 128) { "Too many ZIP entries" }
                 val safeName = entry.name.replace('\\', '/')
                 if (safeName.contains("..") || safeName.startsWith("/")) {
                     error("Unsafe zip path detected: ${entry.name}")
                 }
-                if (!entry.isDirectory && safeName.endsWith(".json", ignoreCase = true)) {
+                if (!entry.isDirectory && safeName.substringAfterLast('/') == "scene.json") {
                     val bytes = readBounded(zis, MAX_VIZ_ENTRY_BYTES)
                     return importFromText(bytes.toString(Charsets.UTF_8), fallbackName)
                 }
+                if (!entry.isDirectory) readBounded(zis, MAX_VIZ_ENTRY_BYTES)
                 zis.closeEntry()
                 entry = zis.nextEntry
             }
@@ -133,6 +218,7 @@ object AveeJsonCodec {
     fun exportProjectAsAveeJson(project: VexoProject): String {
         val root = buildJsonObject {
             put("vexoSchema", project.schemaVersion)
+            put("aveeRootMetadata", JsonObject(project.aveeRootMetadata.mapValues { JsonPrimitive(it.value) }))
             put("name", project.name)
             put("aspectRatio", project.canvas.aspectRatio.name)
             put("audioProviders", buildJsonArray {
@@ -141,6 +227,9 @@ object AveeJsonCodec {
             put("compositions", buildJsonArray {
                 project.compositions.forEach { comp ->
                     add(buildJsonObject {
+                        put("aveeMetadata", JsonObject(comp.aveeMetadata.mapValues { JsonPrimitive(it.value) }))
+                        put("preservedElements", JsonObject(comp.preservedElements.mapKeys { it.key.toString() }.mapValues { JsonPrimitive(it.value) }))
+                        put("providerIndices", JsonArray(comp.providerIndices.map { JsonPrimitive(it) }))
                         put("index", comp.index)
                         put("name", comp.name)
                         put("layers", buildJsonArray {
@@ -166,9 +255,13 @@ object AveeJsonCodec {
             val cLayers = (obj["layers"] as? JsonArray)?.mapNotNull { lEl ->
                 (lEl as? JsonObject)?.let { decodeLayerByObjType(it) }
             } ?: emptyList()
-            CompositionNode(index = idx, name = cName, layers = cLayers)
+            CompositionNode(index = idx, name = cName, layers = cLayers,
+                aveeMetadata = (obj["aveeMetadata"] as? JsonObject)?.mapValues { it.value.primitiveString() ?: "" } ?: emptyMap(),
+                preservedElements = (obj["preservedElements"] as? JsonObject)?.mapNotNull { (k,v) -> k.toIntOrNull()?.let { it to (v.primitiveString() ?: "") } }?.toMap() ?: emptyMap(),
+                providerIndices = (obj["providerIndices"] as? JsonArray)?.mapNotNull { it.primitiveInt() } ?: emptyList())
         }?.ifEmpty { listOf(CompositionNode(index = 0)) } ?: listOf(CompositionNode(index = 0))
-        return VexoProject(name = name, audioProviders = providers, compositions = comps)
+        return VexoProject(name = name, audioProviders = providers, compositions = comps,
+            aveeRootMetadata = (inner["aveeRootMetadata"] as? JsonObject)?.mapValues { it.value.primitiveString() ?: "" } ?: emptyMap())
     }
 
     private fun decodeLayerByObjType(obj: JsonObject): LayerNode? {
@@ -251,6 +344,7 @@ object AveeJsonCodec {
             scaleY = sy,
             scaleIsUniform = obj.propBool("scaleIsUniform", false),
             rotationDeg = obj.propFloat("rotation", 0f),
+            opacity = obj.propFloat("opacity", 1f),
             measurePos = parseMeasure(obj["MeasurePos"]),
             measureScale = parseMeasure(obj["measureScale"]),
             measureRot = parseMeasure(obj["measureRot"]),
@@ -279,6 +373,7 @@ object AveeJsonCodec {
                 shape = ImageShape.fromAvee(obj.propString("Shape", "None")),
                 keepAspectRatio = obj.propBool("keepAspectRatio", false),
                 keepAspectRatioAndCropToFit = obj.propBool("keepAspectRatioAndCropToFit", false),
+                saturation = parseMvarfValue(obj.propString("saturation", "Constant 1 1"), 1f),
                 colorKeyEnabled = obj.propBool("colorKeyEnabled", false),
                 colorKeyArgb = obj.propInt("colorKey", -16711936),
                 autoDetectColorKey = obj.propBool("autoDetectColorKey", true),
@@ -451,7 +546,7 @@ object AveeJsonCodec {
         )
     }
 
-    private fun encodeAudioProvider(p: AudioProviderConfig): JsonObject = buildJsonObject {
+    private fun encodeAudioProvider(p: AudioProviderConfig): JsonObject = mergeOriginal(p.extraFields, buildJsonObject {
         put("_name", p.tag)
         put("objType", "AudioProvider")
         put("ver", "10")
@@ -478,10 +573,9 @@ object AveeJsonCodec {
         put("beatRangeBarLast", propObj(p.beatRangeBarLast))
         put("beatRangeValueLower", propObj(p.beatRangeValueLower))
         put("beatRangeValueHigher", propObj(p.beatRangeValueHigher))
-        p.extraFields.forEach { (k, v) -> put(k, v) }
-    }
+    })
 
-    private fun encodeLayer(layer: LayerNode): JsonObject = buildJsonObject {
+    private fun encodeLayer(layer: LayerNode): JsonObject = mergeOriginal(layer.common.extraFields, buildJsonObject {
         val c = layer.common
         put("_name", c.name)
         put("objType", layer.type.aveeObjType)
@@ -496,6 +590,11 @@ object AveeJsonCodec {
         put("scale", propObj("${c.scaleX} ${c.scaleY}"))
         put("scaleIsUniform", propObj(if (c.scaleIsUniform) 1 else 0))
         put("rotation", propObj(c.rotationDeg))
+        put("_id", propObj(c.aveeId))
+        put("opacity", propObj(c.opacity))
+        put("MeasurePos", encodeMeasure(c.measurePos))
+        put("measureScale", encodeMeasure(c.measureScale))
+        put("measureRot", encodeMeasure(c.measureRot))
         when (val cfg = layer.config) {
             is LayerConfig.Bars -> {
                 put("audioProviderIndex", propObj(cfg.audioProviderIndex))
@@ -505,6 +604,8 @@ object AveeJsonCodec {
                 put("maxHeightScale", propObj(cfg.maxHeightScale))
                 put("flipInput", propObj(if (cfg.flipInput) 1 else 0))
                 put("softness", propObj(cfg.softness))
+                put("reactionDelay", propObj(cfg.reactionDelay))
+                put("reactionAccumulatedDelay", propObj(cfg.reactionAccumulatedDelay))
                 put("Segment1", buildJsonObject {
                     put("v", cfg.segment1.aveeName)
                     put("barWidth", propObj(cfg.barWidth))
@@ -530,6 +631,9 @@ object AveeJsonCodec {
                 put("colorKey", propObj(cfg.colorKeyArgb))
                 put("blurEnabled", propObj(if (cfg.blurEnabled) 1 else 0))
                 put("blurRadius", propObj(cfg.blurRadius))
+                put("opacityStrength", propObj(cfg.opacityStrength))
+                put("transparencyStrength", propObj(cfg.transparencyStrength))
+                put("saturation", propObj("Constant ${cfg.saturation} ${cfg.saturation}"))
             }
             is LayerConfig.Text -> {
                 put("text", propObj(cfg.text))
@@ -550,6 +654,12 @@ object AveeJsonCodec {
                 put("lifetime", propObj(cfg.lifetimeSec))
                 put("ForceField", propObj(cfg.forceField.aveeName))
                 put("customImage", propObj(cfg.customImage))
+                put("gravity", propObj("${cfg.gravityX} ${cfg.gravityY}"))
+                put("particleScale", propObj(cfg.particleScale))
+                put("startSize", propObj(cfg.startSize))
+                put("endSize", propObj(cfg.endSize))
+                put("fadeInAndOutTime", propObj(cfg.fadeInAndOutTime))
+                put("SpawnArea", buildJsonObject { put("v", cfg.spawnArea.aveeName); put("vectorAngle", propObj(cfg.vectorAngleDeg)) })
             }
             is LayerConfig.BlurEffect -> {
                 put("sourceCompositionIndex", propObj(cfg.sourceCompositionIndex))
@@ -576,11 +686,26 @@ object AveeJsonCodec {
                 put("flipMirror", propObj(if (cfg.flipMirror) 1 else 0))
             }
         }
+    })
+
+    private fun mergeOriginal(raw: Map<String, String>, edited: JsonObject): JsonObject {
+        val old = raw.mapNotNull { (k, v) -> runCatching { k to json.parseToJsonElement(v) }.getOrNull() }.toMap()
+        fun merge(a: JsonObject, b: JsonObject): JsonObject = JsonObject(a + b.mapValues { (k, v) ->
+            val prior = a[k]
+            if (prior is JsonObject && v is JsonObject) merge(prior, v) else v
+        })
+        return merge(JsonObject(old), edited)
     }
 
     private fun propObj(v: String): JsonObject = buildJsonObject { put("v", v) }
     private fun propObj(v: Int): JsonObject = buildJsonObject { put("v", v) }
     private fun propObj(v: Float): JsonObject = buildJsonObject { put("v", v) }
+
+    private fun encodeMeasure(m: MeasureConfig): JsonObject = buildJsonObject {
+        put("measureWhat", propObj(m.measureWhat.aveeName))
+        put("A", propObj(m.amountA))
+        put("B", propObj(m.amountB))
+    }
 
     private fun parseMeasure(el: JsonElement?): MeasureConfig {
         val obj = el as? JsonObject ?: return MeasureConfig()
@@ -639,7 +764,7 @@ object AveeJsonCodec {
     private fun extractExtraFields(obj: JsonObject, known: Set<String>): Map<String, String> {
         val map = linkedMapOf<String, String>()
         for ((k, v) in obj) {
-            if (k !in known && (k.startsWith("extra_") || k == "hint" || k == "ver")) {
+            if (k !in known) {
                 map[k] = v.toString()
             }
         }

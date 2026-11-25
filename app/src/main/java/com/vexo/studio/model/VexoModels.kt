@@ -510,7 +510,10 @@ data class CompositionNode(
     val id: String = UUID.randomUUID().toString(),
     val index: Int = 0, // 0 = Final Composition
     val name: String = if (index == 0) "Final Composition" else "Composition $index",
-    val layers: List<LayerNode> = emptyList()
+    val layers: List<LayerNode> = emptyList(),
+    val aveeMetadata: Map<String, String> = emptyMap(),
+    val preservedElements: Map<Int, String> = emptyMap(),
+    val providerIndices: List<Int> = emptyList()
 )
 
 data class AudioTrackItem(
@@ -553,7 +556,8 @@ data class VexoProject(
         CompositionNode(index = 0, name = "Final Composition", layers = emptyList())
     ),
     val keyframes: List<KeyframeTrack> = emptyList(),
-    val exportSettings: ExportSettings = ExportSettings()
+    val exportSettings: ExportSettings = ExportSettings(),
+    val aveeRootMetadata: Map<String, String> = emptyMap()
 )
 
 enum class ThemePreset(val label: String) {

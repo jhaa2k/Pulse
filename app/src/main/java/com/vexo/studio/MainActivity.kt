@@ -129,10 +129,11 @@ private fun VexoRootApp(vm: StudioViewModel) {
     }
 
     val presetExportPicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/json")
+        ActivityResultContracts.CreateDocument("application/octet-stream")
     ) { uri ->
         if (uri != null) {
-            vm.exportPresetToUri(uri)
+            val name = DocumentFile.fromSingleUri(context, uri)?.name.orEmpty()
+            vm.exportPresetToUri(uri, asViz = !name.endsWith(".json", ignoreCase = true))
         }
     }
 
@@ -270,7 +271,7 @@ private fun VexoRootApp(vm: StudioViewModel) {
                     onPickAudio = { audioPicker.launch(arrayOf("audio/*")) },
                     onPickImage = { imagePicker.launch(arrayOf("image/*")) },
                     onImportPreset = { presetImportPicker.launch(arrayOf("application/json", "application/octet-stream", "*/*")) },
-                    onExportPreset = { presetExportPicker.launch("${uiState.project.name}.json") }
+                    onExportPreset = { presetExportPicker.launch("${uiState.project.name}.viz") }
                 )
                 NavDestination.PROJECTS -> ProjectsScreen(vm = vm, uiState = uiState)
                 NavDestination.AUDIO -> AudioLibraryScreen(

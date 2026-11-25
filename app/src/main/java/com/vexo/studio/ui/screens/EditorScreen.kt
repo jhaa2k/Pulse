@@ -1358,7 +1358,7 @@ private fun PresetsTab(
                     .padding(vertical = 11.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text("EXPORT .JSON", style = MaterialTheme.typography.labelSmall, color = palette.accent)
+                Text("EXPORT .VIZ", style = MaterialTheme.typography.labelSmall, color = palette.accent)
             }
         }
 
