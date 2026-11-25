@@ -98,16 +98,16 @@ class VexoGlRenderer(
     private val tempMatrix = FloatArray(16)
     private val quadPosBuf: FloatBuffer = allocFloatBuffer(8)
     private val quadUvBuf: FloatBuffer = allocFloatBuffer(8).apply {
-        put(floatArrayOf(0f, 1f, 1f, 1f, 0f, 0f, 1f, 0f))
-        position(0)
-    }
-    private val quadUvFlipBuf: FloatBuffer = allocFloatBuffer(8).apply {
         put(floatArrayOf(0f, 0f, 1f, 0f, 0f, 1f, 1f, 1f))
         position(0)
     }
+    private val quadUvFlipBuf: FloatBuffer = allocFloatBuffer(8).apply {
+        put(floatArrayOf(0f, 1f, 1f, 1f, 0f, 0f, 1f, 0f))
+        position(0)
+    }
 
-    private val quadUvHorizontalBuf = allocFloatBuffer(8).apply { put(floatArrayOf(1f, 1f, 0f, 1f, 1f, 0f, 0f, 0f)); position(0) }
-    private val quadUvBothBuf = allocFloatBuffer(8).apply { put(floatArrayOf(1f, 0f, 0f, 0f, 1f, 1f, 0f, 1f)); position(0) }
+    private val quadUvHorizontalBuf = allocFloatBuffer(8).apply { put(floatArrayOf(1f, 0f, 0f, 0f, 1f, 1f, 0f, 1f)); position(0) }
+    private val quadUvBothBuf = allocFloatBuffer(8).apply { put(floatArrayOf(1f, 1f, 0f, 1f, 1f, 0f, 0f, 0f)); position(0) }
     private var vertexScratch = FloatArray(512 * 12)
     private var colorScratch = FloatArray(512 * 24)
     private var vertexBuf: FloatBuffer = allocFloatBuffer(vertexScratch.size)
@@ -115,6 +115,7 @@ class VexoGlRenderer(
 
     // Caches & simulation state
     private val textureCache = mutableMapOf<String, Int>()
+    private val bitmapSizes = mutableMapOf<Int, Pair<Int, Int>>()
     private val particleSims = mutableMapOf<String, ParticleSimulator>()
     private val barDelayHistory = mutableMapOf<String, ArrayDeque<FloatArray>>()
     private var lastProjectId: String? = null
@@ -169,12 +170,14 @@ class VexoGlRenderer(
         rgbSplitShader?.release(); rgbSplitShader = null
         mirrorShader?.release(); mirrorShader = null
         fboPool.releaseAll()
+        bitmapSizes.clear()
         if (textureCache.isNotEmpty()) {
             val ids = textureCache.values.toIntArray()
             GLES20.glDeleteTextures(ids.size, ids, 0)
             textureCache.clear()
         }
         if (artworkTexId != 0) {
+            bitmapSizes.remove(artworkTexId)
             GLES20.glDeleteTextures(1, intArrayOf(artworkTexId), 0)
             artworkTexId = 0
         }
@@ -285,13 +288,13 @@ class VexoGlRenderer(
             c.measurePos, audioSnap, scene.totalTimeSec, scene.playingTimeSec, trackNorm, scene.isPlaying, keyframePos
         )
         val dScale = MeasureEvaluator.evaluatePair(
-            c.measureScale, audioSnap, scene.totalTimeSec, scene.playingTimeSec, trackNorm, scene.isPlaying
+            c.measureScale, scene.audioSnapshots[c.measureScale.providerIndex] ?: audioSnap, scene.totalTimeSec, scene.playingTimeSec, trackNorm, scene.isPlaying
         )
         val dRot = MeasureEvaluator.evaluateScalar(
-            c.measureRot, audioSnap, scene.totalTimeSec, scene.playingTimeSec, trackNorm, scene.isPlaying
+            c.measureRot, scene.audioSnapshots[c.measureRot.providerIndex] ?: audioSnap, scene.totalTimeSec, scene.playingTimeSec, trackNorm, scene.isPlaying
         )
         val dOpacity = MeasureEvaluator.evaluateScalar(
-            c.measureOpacity, audioSnap, scene.totalTimeSec, scene.playingTimeSec, trackNorm, scene.isPlaying
+            c.measureOpacity, scene.audioSnapshots[c.measureOpacity.providerIndex] ?: audioSnap, scene.totalTimeSec, scene.playingTimeSec, trackNorm, scene.isPlaying
         )
 
         val tx = (c.posX + dPos.x) * w
@@ -573,12 +576,23 @@ class VexoGlRenderer(
         )
         GLES20.glUniform1f(shader.uniform("uOpacity"), opacity * cfg.opacityStrength.coerceIn(0f, 1f))
 
-        val (drawW, drawH) = if (cfg.keepAspectRatio && !cfg.keepAspectRatioAndCropToFit) {
-            val s = minOf(w, h).toFloat()
-            s to s
-        } else {
-            w.toFloat() to h.toFloat()
-        }
+        val (sourceW, sourceH) = if (cfg.sourceType == ImageSourceType.COMPOSITION) w to h else bitmapSizes[texId] ?: (w to h)
+        val imageRatio = sourceW.toFloat() / sourceH.coerceAtLeast(1)
+        val shapeSquare = cfg.shape != ImageShape.NONE
+        val frameW = if (shapeSquare) minOf(w,h).toFloat() else w.toFloat()
+        val frameH = if (shapeSquare) minOf(w,h).toFloat() else h.toFloat()
+        val frameRatio = frameW / frameH.coerceAtLeast(1f)
+        val crop = cfg.keepAspectRatioAndCropToFit
+        val (drawW, drawH) = if (cfg.keepAspectRatio && !crop && !shapeSquare) {
+            if(imageRatio > frameRatio) frameW to frameW / imageRatio else frameH * imageRatio to frameH
+        } else frameW to frameH
+        val uvX = if (crop || shapeSquare) minOf(1f, frameRatio / imageRatio) else 1f
+        val uvY = if (crop || shapeSquare) minOf(1f, imageRatio / frameRatio) else 1f
+        GLES20.glUniform1i(shader.uniform("uImageFxEnabled"), 1)
+        GLES20.glUniform2f(shader.uniform("uUvScale"), uvX, uvY)
+        val blur = if(cfg.blurEnabled) cfg.blurRadius.coerceIn(0, 64).toFloat() / cfg.blurDivider.coerceAtLeast(1) else 0f
+        GLES20.glUniform2f(shader.uniform("uImageBlurStep"), blur / sourceW.coerceAtLeast(1), blur / sourceH.coerceAtLeast(1))
+        GLES20.glUniform1f(shader.uniform("uKeyStrength"), cfg.transparencyStrength.coerceIn(0f,1f))
         val left = (w - drawW) * 0.5f
         val top = (h - drawH) * 0.5f
         val maskIsComp = cfg.maskImage.startsWith("composition:")
@@ -600,8 +614,9 @@ class VexoGlRenderer(
             GLES20.glUniform1i(shader.uniform("uMaskTex"), 1)
             GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
         }
-        drawTexturedQuad(shader, left, top, left + drawW, top + drawH, flipV = cfg.flipV, flipU = cfg.flipU)
+        drawTexturedQuad(shader, left, top, left + drawW, top + drawH, flipV = cfg.flipV xor (cfg.sourceType == ImageSourceType.COMPOSITION), flipU = cfg.flipU)
         GLES20.glUniform1i(shader.uniform("uMaskEnabled"), 0)
+        GLES20.glUniform1i(shader.uniform("uImageFxEnabled"), 0)
     }
 
     private fun drawTextLayer(
@@ -626,6 +641,7 @@ class VexoGlRenderer(
                 val oldestKey = textureCache.keys.firstOrNull { it.startsWith("txt_") }
                 if (oldestKey != null) {
                     val oldId = textureCache.remove(oldestKey) ?: 0
+                    bitmapSizes.remove(oldId)
                     if (oldId != 0) GLES20.glDeleteTextures(1, intArrayOf(oldId), 0)
                 }
             }
@@ -871,6 +887,7 @@ class VexoGlRenderer(
         val offY = (cfg.splitAmountY + delta.y * 0.015f) * cfg.splitMultiplier * 0.4f
 
         val shader = rgbSplitShader ?: return
+        applyBlendMode(cfg.blendModeContent)
         shader.use()
         GLES20.glUniformMatrix4fv(shader.uniform("uMvp"), 1, false, mvpMatrix, 0)
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
@@ -974,6 +991,7 @@ class VexoGlRenderer(
         }
         GLES20.glUniform1i(shader.uniform("uMode"), modeInt)
         GLES20.glUniform1i(shader.uniform("uFlip"), if (cfg.flipMirror) 1 else 0)
+        GLES20.glUniform1f(shader.uniform("uRepeat"), cfg.repeatCount.coerceIn(1, 12).toFloat())
         GLES20.glUniform4f(
             shader.uniform("uTint"),
             ((cfg.colorArgb ushr 16) and 0xFF) / 255f,
@@ -1103,6 +1121,7 @@ class VexoGlRenderer(
 
     private fun uploadArtworkTexture(bitmap: Bitmap?) {
         if (artworkTexId != 0) {
+            bitmapSizes.remove(artworkTexId)
             GLES20.glDeleteTextures(1, intArrayOf(artworkTexId), 0)
             artworkTexId = 0
         }
@@ -1259,6 +1278,7 @@ class VexoGlRenderer(
         GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE)
         GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE)
         GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, bitmap, 0)
+        bitmapSizes[ids[0]] = bitmap.width to bitmap.height
         return ids[0]
     }
 

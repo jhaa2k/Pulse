@@ -103,6 +103,10 @@ object VexoShaders {
         uniform int uMaskEnabled;
         uniform int uMaskMode;
         uniform int uMaskFlipV;
+        uniform int uImageFxEnabled;
+        uniform vec2 uUvScale;
+        uniform vec2 uImageBlurStep;
+        uniform float uKeyStrength;
         void main() {
             vec2 uv = vUv;
             if (uShape == 1) {
@@ -112,13 +116,25 @@ object VexoShaders {
                 vec2 d = abs(uv - vec2(0.5)) * 2.0;
                 if (d.x * 0.866 + d.y * 0.5 > 0.866 || d.y > 0.866) discard;
             }
-            vec4 tex = texture2D(uTex, uv);
+            vec2 sampleUv = uImageFxEnabled == 1 ? (uv - 0.5) * uUvScale + 0.5 : uv;
+            vec4 tex = texture2D(uTex, sampleUv);
+            if (uImageFxEnabled == 1 && (uImageBlurStep.x > 0.0 || uImageBlurStep.y > 0.0)) {
+                tex *= 0.25;
+                tex += texture2D(uTex, sampleUv + vec2(uImageBlurStep.x, 0.0)) * 0.125;
+                tex += texture2D(uTex, sampleUv - vec2(uImageBlurStep.x, 0.0)) * 0.125;
+                tex += texture2D(uTex, sampleUv + vec2(0.0, uImageBlurStep.y)) * 0.125;
+                tex += texture2D(uTex, sampleUv - vec2(0.0, uImageBlurStep.y)) * 0.125;
+                tex += texture2D(uTex, sampleUv + uImageBlurStep) * 0.0625;
+                tex += texture2D(uTex, sampleUv - uImageBlurStep) * 0.0625;
+                tex += texture2D(uTex, sampleUv + vec2(uImageBlurStep.x, -uImageBlurStep.y)) * 0.0625;
+                tex += texture2D(uTex, sampleUv + vec2(-uImageBlurStep.x, uImageBlurStep.y)) * 0.0625;
+            }
             float luma = dot(tex.rgb, vec3(0.299, 0.587, 0.114));
             vec3 satColor = mix(vec3(luma), tex.rgb, uSaturation);
             float alpha = tex.a * uTint.a * uOpacity;
             if (uColorKeyEnabled == 1) {
                 float dist = distance(tex.rgb, uKeyColor);
-                alpha *= smoothstep(0.12, 0.32, dist);
+                alpha *= mix(1.0, smoothstep(0.12, 0.32, dist), uImageFxEnabled == 1 ? clamp(uKeyStrength, 0.0, 1.0) : 1.0);
             }
             if (uMaskEnabled == 1) {
                 vec2 maskUv = vec2(uv.x, uMaskFlipV == 1 ? 1.0 - uv.y : uv.y);
@@ -178,17 +194,18 @@ object VexoShaders {
         uniform sampler2D uTex;
         uniform int uMode;
         uniform int uFlip;
+        uniform float uRepeat;
         uniform vec4 uTint;
         void main() {
             vec2 uv = vUv;
             if (uMode == 0 || uMode == 2) {
-                uv.x = (uFlip == 1) ? (1.0 - abs(uv.x * 2.0 - 1.0)) : abs(uv.x * 2.0 - 1.0);
-                uv.x = (uFlip == 1) ? (1.0 - uv.x * 0.5) : uv.x * 0.5;
-                uv.x = (vUv.x > 0.5) ? (1.0 - vUv.x) : vUv.x;
+                float x = fract(uv.x * max(1.0, uRepeat));
+                uv.x = min(x, 1.0 - x);
                 if (uFlip == 1) uv.x = 1.0 - uv.x;
             }
             if (uMode == 1 || uMode == 2) {
-                uv.y = (vUv.y > 0.5) ? (1.0 - vUv.y) : vUv.y;
+                float y = fract(uv.y * max(1.0, uRepeat));
+                uv.y = min(y, 1.0 - y);
                 if (uFlip == 1) uv.y = 1.0 - uv.y;
             }
             gl_FragColor = texture2D(uTex, clamp(uv, 0.0, 1.0)) * uTint;

@@ -214,7 +214,15 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     fun addLayer(type: LayerType) {
         val p = _uiState.value.project
         val compIdx = _uiState.value.selectedCompositionIndex
-        val newLayer = createDefaultLayer(type)
+        val defaultLayer = createDefaultLayer(type)
+        val target = p.compositions.firstOrNull { it.index != compIdx && it.index != 0 }?.index ?: p.compositions.firstOrNull { it.index != compIdx }?.index
+        val newLayer = if(target == null) defaultLayer else defaultLayer.copy(config = when(val cfg = defaultLayer.config) {
+            is LayerConfig.BlurEffect -> cfg.copy(sourceCompositionIndex = target)
+            is LayerConfig.MotionBlurEffect -> cfg.copy(targetCompositionIndex = target)
+            is LayerConfig.MirrorEffect -> cfg.copy(targetCompositionIndex = target)
+            is LayerConfig.RgbSplitEffect -> cfg.copy(targetCompositionIndex = target)
+            else -> cfg
+        })
         val updatedComps = p.compositions.map { comp ->
             if (comp.index == compIdx) comp.copy(layers = comp.layers + newLayer) else comp
         }

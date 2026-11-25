@@ -1032,6 +1032,12 @@ private fun PropertiesTab(
                     val maskChoices = listOf("") + uiState.project.compositions.filter { it.index != uiState.selectedCompositionIndex }.map { "composition:${it.index}" } + listOf("internalres:white", "internalres:black", "internalres:vignette80")
                     StudioChipSelector("Mask Source", (maskChoices + cfg.maskImage).distinct(), cfg.maskImage, { it.ifBlank { "None" } }) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(maskImage = v)) } }
                     StudioChipSelector("Mask Mode", com.vexo.studio.model.MaskMode.entries, cfg.maskMode, { it.label }) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(maskMode = v)) } }
+                    StudioToggleRow("Image Blur", cfg.blurEnabled) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(blurEnabled = v)) } }
+                    if (cfg.blurEnabled) {
+                        StudioSlider("Image Blur Radius", cfg.blurRadius.toFloat(), 0f, 64f, 7f, "px", 1f, onValueChange = { v -> beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(blurRadius = v.toInt())) } }, onCommit = ::endDrag)
+                        StudioSlider("Blur Divider", cfg.blurDivider.toFloat(), 1f, 12f, 5f, "", 1f, onValueChange = { v -> beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(blurDivider = v.toInt())) } }, onCommit = ::endDrag)
+                    }
+                    if (cfg.colorKeyEnabled) StudioSlider("Key Strength", cfg.transparencyStrength, 0f, 1f, 1f, "", 0.01f, onValueChange = { v -> beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(transparencyStrength = v)) } }, onCommit = ::endDrag)
                     StudioToggleRow("Flip Horizontal", cfg.flipU) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(flipU = v)) } }
                     StudioToggleRow("Flip Vertical", cfg.flipV) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(flipV = v)) } }
                     StudioToggleRow("Color Key Chroma", cfg.colorKeyEnabled) { k ->
@@ -1191,6 +1197,7 @@ private fun PropertiesTab(
                 }
                 is LayerConfig.RgbSplitEffect -> {
                     StudioChipSelector("Source Composition", uiState.project.compositions.map { it.index }.filter { it != uiState.selectedCompositionIndex }, cfg.targetCompositionIndex, { "Composition $it" }) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(targetCompositionIndex = v)) } }
+                    StudioChipSelector("Effect Blend", BlendMode.entries, cfg.blendModeContent, { it.label }) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(blendModeContent = v)) } }
                     StudioSlider("Split Y", cfg.splitAmountY, -0.1f, 0.1f, 0.008f, "", 0.002f, onValueChange = { v ->
                         beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(splitAmountY = v)) }
                     }, onCommit = ::endDrag)
@@ -1208,6 +1215,10 @@ private fun PropertiesTab(
                 }
                 is LayerConfig.MotionBlurEffect -> {
                     StudioChipSelector("Source Composition", uiState.project.compositions.map { it.index }.filter { it != uiState.selectedCompositionIndex }, cfg.targetCompositionIndex, { "Composition $it" }) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(targetCompositionIndex = v)) } }
+                    StudioToggleRow("Show Source Under", cfg.showUnblurredContentUnder) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(showUnblurredContentUnder = v)) } }
+                    StudioToggleRow("Show Source Above", cfg.showUnblurredContent) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(showUnblurredContent = v)) } }
+                    StudioColorPickerRow("Trail Tint", cfg.colorArgb) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(colorArgb = v)) } }
+                    StudioChipSelector("Content Blend", BlendMode.entries, cfg.blendModeContent, { it.label }) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(blendModeContent = v)) } }
                     StudioSlider("Blur Amount", cfg.blurAmountMultiplier, 0.4f, 3f, 0.85f, "x", 0.05f, onValueChange = { v ->
                         beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(blurAmountMultiplier = v)) }
                     }, onCommit = ::endDrag)
@@ -1218,6 +1229,7 @@ private fun PropertiesTab(
                     StudioChipSelector("Mirror Mode", MirrorMode.entries, cfg.mirrorMode, { it.label }) { m ->
                         vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(mirrorMode = m)) }
                     }
+                    StudioSlider("Mirror Repeats", cfg.repeatCount.toFloat(), 1f, 12f, 1f, "", 1f, onValueChange = { v -> beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(repeatCount = v.toInt())) } }, onCommit = ::endDrag)
                     StudioToggleRow("Flip Mirror", cfg.flipMirror) { f ->
                         vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(flipMirror = f)) }
                     }
