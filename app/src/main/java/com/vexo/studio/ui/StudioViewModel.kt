@@ -302,8 +302,9 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun commitUndoSnapshot(previousProject: VexoProject) {
-        history.pushState(previousProject)
         val cur = _uiState.value.project
+        if (previousProject == cur || previousProject.id != cur.id) return
+        history.pushState(previousProject)
         projectRepo.saveProject(cur)
         _uiState.value = _uiState.value.copy(
             canUndo = history.canUndo,
@@ -334,8 +335,12 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     fun undo() {
         val prev = history.undo(_uiState.value.project) ?: return
         projectRepo.saveProject(prev)
+        val comp = prev.compositions.firstOrNull { it.index == _uiState.value.selectedCompositionIndex } ?: prev.compositions.first()
         _uiState.value = _uiState.value.copy(
             project = prev,
+            selectedCompositionIndex = comp.index,
+            selectedLayerId = comp.layers.firstOrNull { it.common.id == _uiState.value.selectedLayerId }?.common?.id ?: comp.layers.firstOrNull()?.common?.id,
+            selectedProviderIndex = prev.audioProviders.firstOrNull { it.index == _uiState.value.selectedProviderIndex }?.index ?: prev.audioProviders.first().index,
             canUndo = history.canUndo,
             canRedo = history.canRedo,
             projects = projectRepo.listProjects()
@@ -345,8 +350,12 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     fun redo() {
         val next = history.redo(_uiState.value.project) ?: return
         projectRepo.saveProject(next)
+        val comp = next.compositions.firstOrNull { it.index == _uiState.value.selectedCompositionIndex } ?: next.compositions.first()
         _uiState.value = _uiState.value.copy(
             project = next,
+            selectedCompositionIndex = comp.index,
+            selectedLayerId = comp.layers.firstOrNull { it.common.id == _uiState.value.selectedLayerId }?.common?.id ?: comp.layers.firstOrNull()?.common?.id,
+            selectedProviderIndex = next.audioProviders.firstOrNull { it.index == _uiState.value.selectedProviderIndex }?.index ?: next.audioProviders.first().index,
             canUndo = history.canUndo,
             canRedo = history.canRedo,
             projects = projectRepo.listProjects()
@@ -543,6 +552,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun commitProjectChange(next: VexoProject) {
+        if (next == _uiState.value.project) return
         history.pushState(_uiState.value.project)
         projectRepo.saveProject(next)
         _uiState.value = _uiState.value.copy(

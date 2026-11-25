@@ -4,7 +4,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -136,7 +136,7 @@ fun StudioSlider(
             val formatted = if (step >= 1f) {
                 "${clamped.roundToInt()}${if (units.isNotEmpty()) " $units" else ""}"
             } else {
-                "${"%.2f".format(clamped)}${if (units.isNotEmpty()) " $units" else ""}"
+                "${if (step < 0.01f) "%.3f".format(clamped) else "%.2f".format(clamped)}${if (units.isNotEmpty()) " $units" else ""}"
             }
             Box(
                 modifier = Modifier
@@ -160,32 +160,32 @@ fun StudioSlider(
                 .fillMaxWidth()
                 .height((36f * palette.controlScale).dp)
                 .onSizeChanged { trackWidthPx = it.width.toFloat().coerceAtLeast(1f) }
-                .pointerInput(min, max, step, defaultValue) {
+                .pointerInput(min, max, step, defaultValue, palette.controlScale) {
                     detectTapGestures(
                         onDoubleTap = {
                             currentChange(defaultValue)
                             currentCommit()
                         },
                         onTap = { offset ->
-                            val ratio = ((offset.x - 7.dp.toPx()) / (trackWidthPx - 14.dp.toPx()).coerceAtLeast(1f)).coerceIn(0f, 1f)
+                            val ratio = ((offset.x - (7f * palette.controlScale).dp.toPx()) / (trackWidthPx - (14f * palette.controlScale).dp.toPx()).coerceAtLeast(1f)).coerceIn(0f, 1f)
                             currentChange(quantize(min + ratio * range))
                             currentCommit()
                         }
                     )
                 }
-                .pointerInput(min, max, step) {
-                    detectDragGestures(
+                .pointerInput(min, max, step, palette.controlScale) {
+                    detectHorizontalDragGestures(
                         onDragEnd = { currentCommit() },
                         onDragCancel = { currentCommit() }
                     ) { change, _ ->
                         change.consume()
-                        val ratio = ((change.position.x - 7.dp.toPx()) / (trackWidthPx - 14.dp.toPx()).coerceAtLeast(1f)).coerceIn(0f, 1f)
+                        val ratio = ((change.position.x - (7f * palette.controlScale).dp.toPx()) / (trackWidthPx - (14f * palette.controlScale).dp.toPx()).coerceAtLeast(1f)).coerceIn(0f, 1f)
                         currentChange(quantize(min + ratio * range))
                     }
                 }
         ) {
             val midY = size.height * 0.5f
-            val pad = 7.dp.toPx()
+            val pad = (7f * palette.controlScale).dp.toPx()
             val usable = (size.width - pad * 2f).coerceAtLeast(1f)
 
             // Base thin track

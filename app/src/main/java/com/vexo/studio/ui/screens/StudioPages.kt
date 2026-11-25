@@ -35,6 +35,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -529,8 +530,9 @@ fun SettingsScreen(
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Text("APPEARANCE & INTERFACE", style = MaterialTheme.typography.titleMedium, color = palette.accent)
-        Text("Personalize the studio. Changes are saved automatically.", style = MaterialTheme.typography.bodySmall, color = palette.textSecondary)
+        val sections = remember { mutableStateMapOf<String, Boolean>() }
+        Text("Settings", style = MaterialTheme.typography.titleMedium)
+        ExpandableSectionHeader("Appearance", sections["appearance"] == true, { toggleAccordion(sections,"appearance") }) {
 
         StudioChipSelector("Theme Preset", ThemePreset.entries, settings.themePreset, { it.label }) { theme ->
             vm.updateSettings { it.copy(themePreset = theme) }
@@ -547,12 +549,16 @@ fun SettingsScreen(
         StudioSlider("Corner radius", settings.cornerRadiusDp, 0f, 28f, 12f, "dp", 1f, onValueChange = { value -> vm.updateSettings { it.copy(cornerRadiusDp = value) } })
         StudioSlider("Slider control size", settings.controlScale, 0.85f, 1.25f, 1f, "x", 0.05f, onValueChange = { value -> vm.updateSettings { it.copy(controlScale = value) } })
         StudioSlider("Interface text size", settings.uiTextScale, 0.9f, 1.25f, 1f, "x", 0.05f, onValueChange = { value -> vm.updateSettings { it.copy(uiTextScale = value) } })
-        Text("EDITOR & PERFORMANCE", style = MaterialTheme.typography.titleMedium, color = palette.accent)
+
+        }
+        ExpandableSectionHeader("Editor & performance", sections["editor"] == true, { toggleAccordion(sections,"editor") }) {
         StudioToggleRow("Portrait overlay workspace", settings.portraitOverlay) { value -> vm.updateSettings { it.copy(portraitOverlay = value) } }
         StudioSlider("Preview area", settings.previewShare * 100f, 30f, 65f, 44f, "%", 1f, onValueChange = { value -> vm.updateSettings { it.copy(previewShare = value / 100f) } })
         StudioChipSelector("Preview FPS limit", listOf(30, 60), settings.previewFps, { "$it FPS" }) { fps -> vm.updateSettings { it.copy(previewFps = fps) } }
         TextButton(onClick = { vm.updateSettings { current -> current.copy(themePreset = ThemePreset.LIME_STUDIO, customAccentArgb = 0xFFC5F84A.toInt(), glassEnabled = true, glassOpacity = 0.82f, backdropBlurDp = 24f, cornerRadiusDp = 8f, controlScale = 1f, uiTextScale = 1f, previewFps = 60, previewShare = 0.44f, portraitOverlay = false) } }) { Text("RESET INTERFACE SETTINGS") }
-        Text("AUDIO ANALYSIS", style = MaterialTheme.typography.titleMedium, color = palette.accent)
+
+        }
+        ExpandableSectionHeader("Audio analysis", sections["audio"] == true, { toggleAccordion(sections,"audio") }) {
         StudioChipSelector("Default FFT Size", listOf(256, 512, 1024, 2048, 4096), settings.defaultFftSize, { "$it" }) { sz ->
             vm.updateSettings { it.copy(defaultFftSize = sz) }
         }
@@ -564,6 +570,7 @@ fun SettingsScreen(
         }
         StudioToggleRow("Show Property Help Icons", settings.showPropertyHelpHints) { show ->
             vm.updateSettings { it.copy(showPropertyHelpHints = show) }
+        }
         }
     }
 }

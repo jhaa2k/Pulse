@@ -32,6 +32,11 @@ import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.ArrowBack
+import kotlinx.coroutines.delay
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
@@ -95,11 +100,13 @@ private fun VexoRootApp(vm: StudioViewModel) {
     val palette = LocalVexoPalette.current
     val uiState by vm.uiState.collectAsState()
     val playback by vm.playbackState.collectAsState()
-    val sceneSnapshot by vm.sceneSnapshot.collectAsState()
+    val sceneSnapshot = vm.sceneSnapshot
     val exportState by vm.exportState.collectAsState()
     val settings by vm.appSettings.collectAsState()
 
     var showRenameProject by remember { mutableStateOf(false) }
+    var showAppMenu by remember { mutableStateOf(false) }
+    LaunchedEffect(uiState.statusBanner) { if (uiState.statusBanner != null) { delay(3500); vm.clearBanner() } }
 
     val notifPermLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -202,6 +209,12 @@ private fun VexoRootApp(vm: StudioViewModel) {
                             modifier = Modifier.clickable { showRenameProject = true }
                         )
                     }
+                    Box {
+                        IconButton(onClick = { showAppMenu = true }) { Icon(Icons.Default.MoreVert, "Studio menu", tint = palette.textSecondary) }
+                        DropdownMenu(expanded = showAppMenu, onDismissRequest = { showAppMenu = false }) {
+                            NavDestination.entries.forEach { dest -> DropdownMenuItem(text = { Text(dest.label) }, onClick = { showAppMenu = false; vm.navigateTo(dest) }) }
+                        }
+                    }
                     IconButton(onClick = { presetExportPicker.launch("${uiState.project.name}.VEX") }) {
                         Icon(Icons.Default.Save, "Save VEX project", tint = palette.textSecondary)
                     }
@@ -217,7 +230,7 @@ private fun VexoRootApp(vm: StudioViewModel) {
             }
         },
         bottomBar = {
-            if (!uiState.isFullscreenPreview) {
+            if (!uiState.isFullscreenPreview && uiState.navDestination != NavDestination.STUDIO) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)
                         .background(palette.glassPanel, palette.shape).border(1.dp, palette.border, palette.shape)

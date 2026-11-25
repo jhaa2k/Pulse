@@ -113,11 +113,11 @@ fun VexoPreviewSurface(
         } else {
             val availW = maxWidth
             val availH = maxHeight
-            val fitW = min(availW.value, availH.value * ratio)
+            val fitW = min(availW.value, availH.value * ratio).coerceAtLeast(0f)
             val fitH = fitW / ratio
             Modifier.size(
-                width = androidx.compose.ui.unit.Dp(fitW.coerceAtLeast(16f)),
-                height = androidx.compose.ui.unit.Dp(fitH.coerceAtLeast(16f))
+                width = androidx.compose.ui.unit.Dp(fitW.coerceAtLeast(0f)),
+                height = androidx.compose.ui.unit.Dp(fitH.coerceAtLeast(0f))
             )
         }
 

@@ -50,6 +50,11 @@ import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -60,6 +65,8 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import kotlinx.coroutines.flow.StateFlow
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -116,7 +123,7 @@ fun EditorScreen(
     vm: StudioViewModel,
     uiState: StudioUiState,
     playback: PlaybackUiState,
-    sceneSnapshot: RenderSceneSnapshot?,
+    sceneSnapshot: StateFlow<RenderSceneSnapshot?>,
     settings: AppSettings,
     onPickAudio: () -> Unit,
     onPickImage: () -> Unit,
@@ -132,7 +139,7 @@ fun EditorScreen(
         Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
             VexoPreviewSurface(
                 aspectRatio = uiState.project.canvas.aspectRatio,
-                sceneSnapshot = sceneSnapshot,
+                sceneSnapshot = sceneSnapshot.collectAsState().value,
                 onTransformGesture = vm::updatePreviewTransform,
                 modifier = Modifier.fillMaxSize(),
                 fillBounds = false,
@@ -264,7 +271,7 @@ fun EditorScreen(
 private fun PreviewBlock(
     vm: StudioViewModel,
     uiState: StudioUiState,
-    sceneSnapshot: RenderSceneSnapshot?,
+    sceneSnapshot: StateFlow<RenderSceneSnapshot?>,
     targetFps: Int,
     continuousRendering: Boolean,
     modifier: Modifier = Modifier
@@ -273,7 +280,7 @@ private fun PreviewBlock(
     Box(modifier = modifier.background(Color.Black)) {
         VexoPreviewSurface(
             aspectRatio = uiState.project.canvas.aspectRatio,
-            sceneSnapshot = sceneSnapshot,
+            sceneSnapshot = sceneSnapshot.collectAsState().value,
             onTransformGesture = vm::updatePreviewTransform,
             modifier = Modifier.fillMaxSize(),
             targetFps = targetFps,
@@ -452,13 +459,6 @@ private fun StudioWorkspacePanel(
 ) {
     val palette = LocalVexoPalette.current
     Column(modifier = modifier.padding(horizontal = 6.dp, vertical = 4.dp).background(palette.glassPanel, palette.shape).border(1.dp, palette.border, palette.shape)) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("WORKSPACE", style = MaterialTheme.typography.labelSmall, color = palette.textSecondary)
-                Text(uiState.project.compositions.firstOrNull { it.index == uiState.selectedCompositionIndex }?.name ?: "Scene", style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-            Text("${uiState.project.compositions.size} COMP", style = MaterialTheme.typography.labelSmall, color = palette.textSecondary)
-        }
         // Editor Tabs
         Row(
             modifier = Modifier
@@ -510,55 +510,20 @@ private fun LayersTab(
         ?: uiState.project.compositions.first()
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // Composition selector strip
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 10.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            uiState.project.compositions.forEach { comp ->
-                val selected = comp.index == activeComp.index
-                Box(
-                    modifier = Modifier
-                        .border(1.dp, if (selected) palette.accent else palette.border, palette.shape)
-                        .background(if (selected) palette.accent else palette.panel)
-                        .clickable { vm.selectComposition(comp.index) }
-                        .padding(horizontal = 10.dp, vertical = 6.dp)
-                ) {
-                    Text(
-                        text = comp.name.uppercase(),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (selected) palette.accentOn else palette.textPrimary
-                    )
+        var compositionMenu by remember { mutableStateOf(false) }
+        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Box(Modifier.weight(1f)) {
+                Row(Modifier.fillMaxWidth().clickable { compositionMenu = true }.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(activeComp.name, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
+                    Icon(Icons.Default.ExpandMore, "Select composition", tint = palette.textSecondary)
+                }
+                DropdownMenu(expanded = compositionMenu, onDismissRequest = { compositionMenu = false }) {
+                    uiState.project.compositions.forEach { comp -> DropdownMenuItem(text = { Text(comp.name) }, onClick = { vm.selectComposition(comp.index); compositionMenu = false }) }
+                    DropdownMenuItem(text = { Text("New composition") }, onClick = { vm.addComposition(); compositionMenu = false })
                 }
             }
-            Box(
-                modifier = Modifier
-                    .border(1.dp, palette.border, palette.shape)
-                    .background(palette.panelElevated)
-                    .clickable { vm.addComposition() }
-                    .padding(horizontal = 10.dp, vertical = 6.dp)
-            ) {
-                Text("+ COMP", style = MaterialTheme.typography.labelSmall, color = palette.accent)
-            }
-            Spacer(Modifier.width(8.dp))
-            Box(
-                modifier = Modifier
-                    .background(palette.accent)
-                    .clickable { showAddLayerDialog = true }
-                    .padding(horizontal = 12.dp, vertical = 6.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Add, null, tint = palette.accentOn, modifier = Modifier.size(14.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("ADD LAYER", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = palette.accentOn)
-                }
-            }
+            TextButton(onClick = { showAddLayerDialog = true }) { Icon(Icons.Default.Add, null, tint = palette.accent); Text("Layer", color = palette.accent) }
         }
-
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -582,28 +547,13 @@ private fun LayersTab(
                                 it.copy(common = it.common.copy(visible = !it.common.visible))
                             }
                         },
-                        modifier = Modifier.size(28.dp)
+                        modifier = Modifier.size(40.dp)
                     ) {
                         Icon(
                             if (layer.common.visible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
                             "Toggle visibility",
                             tint = if (layer.common.visible) palette.accent else palette.textSecondary,
                             modifier = Modifier.size(16.dp)
-                        )
-                    }
-                    IconButton(
-                        onClick = {
-                            vm.updateLayer(layer.common.id) {
-                                it.copy(common = it.common.copy(locked = !it.common.locked))
-                            }
-                        },
-                        modifier = Modifier.size(28.dp)
-                    ) {
-                        Icon(
-                            if (layer.common.locked) Icons.Default.Lock else Icons.Default.LockOpen,
-                            "Toggle lock",
-                            tint = if (layer.common.locked) palette.danger else palette.textSecondary,
-                            modifier = Modifier.size(15.dp)
                         )
                     }
                     Column(modifier = Modifier.weight(1f).padding(horizontal = 6.dp)) {
@@ -622,20 +572,17 @@ private fun LayersTab(
                             maxLines = 1
                         )
                     }
-                    IconButton(onClick = { vm.moveLayer(layer.common.id, -1) }, modifier = Modifier.size(26.dp)) {
-                        Icon(Icons.Default.ArrowUpward, "Move up", tint = palette.textSecondary, modifier = Modifier.size(15.dp))
-                    }
-                    IconButton(onClick = { vm.moveLayer(layer.common.id, 1) }, modifier = Modifier.size(26.dp)) {
-                        Icon(Icons.Default.ArrowDownward, "Move down", tint = palette.textSecondary, modifier = Modifier.size(15.dp))
-                    }
-                    IconButton(onClick = { renameLayerTarget = layer }, modifier = Modifier.size(26.dp)) {
-                        Icon(Icons.Default.Edit, "Rename", tint = palette.textSecondary, modifier = Modifier.size(15.dp))
-                    }
-                    IconButton(onClick = { vm.duplicateLayer(layer.common.id) }, modifier = Modifier.size(26.dp)) {
-                        Icon(Icons.Default.ContentCopy, "Duplicate", tint = palette.textSecondary, modifier = Modifier.size(15.dp))
-                    }
-                    IconButton(onClick = { deleteLayerTarget = layer }, modifier = Modifier.size(26.dp)) {
-                        Icon(Icons.Default.Delete, "Delete", tint = palette.danger, modifier = Modifier.size(15.dp))
+                    var menu by remember { mutableStateOf(false) }
+                    Box {
+                        IconButton(onClick = { menu = true }, modifier = Modifier.size(40.dp)) { Icon(Icons.Default.MoreVert, "Layer actions", tint = palette.textSecondary) }
+                        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                            DropdownMenuItem(text = { Text(if(layer.common.locked) "Unlock" else "Lock") }, onClick = { menu = false; vm.updateLayer(layer.common.id) { it.copy(common = it.common.copy(locked = !it.common.locked)) } })
+                            DropdownMenuItem(text = { Text("Move up") }, onClick = { menu = false; vm.moveLayer(layer.common.id, -1) })
+                            DropdownMenuItem(text = { Text("Move down") }, onClick = { menu = false; vm.moveLayer(layer.common.id, 1) })
+                            DropdownMenuItem(text = { Text("Rename") }, onClick = { menu = false; renameLayerTarget = layer })
+                            DropdownMenuItem(text = { Text("Duplicate") }, onClick = { menu = false; vm.duplicateLayer(layer.common.id) })
+                            DropdownMenuItem(text = { Text("Delete", color = palette.danger) }, onClick = { menu = false; deleteLayerTarget = layer })
+                        }
                     }
                 }
             }
@@ -648,7 +595,7 @@ private fun LayersTab(
             onDismissRequest = { showAddLayerDialog = false },
             title = { Text("ADD LAYER OR EFFECT", style = MaterialTheme.typography.titleMedium) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Column(Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     LayerType.entries.forEach { type ->
                         Box(
                             modifier = Modifier
@@ -657,6 +604,7 @@ private fun LayersTab(
                                 .background(palette.glassPanel, palette.shape)
                                 .clickable {
                                     vm.addLayer(type)
+                                    vm.selectStudioTab(StudioTab.PROPERTIES)
                                     showAddLayerDialog = false
                                 }
                                 .padding(horizontal = 12.dp, vertical = 10.dp)
@@ -723,17 +671,7 @@ private fun PropertiesTab(
 ) {
     val palette = LocalVexoPalette.current
     var editTarget by rememberSaveable { mutableStateOf("LAYER") } // LAYER or PROVIDER
-    val expandedSections = remember {
-        mutableStateMapOf(
-            "transform" to true,
-            "specific" to true,
-            "measures" to false,
-            "provider_general" to true,
-            "provider_hz" to true,
-            "provider_response" to true,
-            "provider_beat" to false
-        )
-    }
+    val expandedSections = remember(uiState.selectedLayerId, uiState.selectedProviderIndex, editTarget) { mutableStateMapOf<String, Boolean>() }
     var undoAnchor by remember { mutableStateOf<VexoProject?>(null) }
 
     fun beginDrag() {
@@ -809,11 +747,18 @@ private fun PropertiesTab(
             return@Column
         }
 
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(layer.common.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(layer.type.label, style = MaterialTheme.typography.bodySmall, color = palette.textSecondary)
+            }
+            TextButton(onClick = { vm.selectStudioTab(StudioTab.LAYERS) }) { Text("Layers") }
+        }
         // Section 1: Transform & Blend
         ExpandableSectionHeader(
-            title = "COMMON & TRANSFORM · ${layer.common.name.uppercase()}",
-            expanded = expandedSections["transform"] ?: true,
-            onToggle = { expandedSections["transform"] = !(expandedSections["transform"] ?: true) }
+            title = "General & Transform",
+            expanded = expandedSections["transform"] ?: false,
+            onToggle = { toggleAccordion(expandedSections, "transform") }
         ) {
             StudioToggleRow(
                 label = "Visible",
@@ -856,9 +801,9 @@ private fun PropertiesTab(
 
         // Section 2: Audio-Reactive Measures
         ExpandableSectionHeader(
-            title = "AUDIO-REACTIVE MEASURES",
+            title = "Audio reactive",
             expanded = expandedSections["measures"] ?: false,
-            onToggle = { expandedSections["measures"] = !(expandedSections["measures"] ?: false) }
+            onToggle = { toggleAccordion(expandedSections, "measures") }
         ) {
             StudioChipSelector(
                 label = "Measure Scale",
@@ -933,24 +878,9 @@ private fun PropertiesTab(
             )
         }
 
-        // Section 3: Layer-specific properties
-        ExpandableSectionHeader(
-            title = "${layer.type.label.uppercase()} PROPERTIES",
-            expanded = expandedSections["specific"] ?: true,
-            onToggle = { expandedSections["specific"] = !(expandedSections["specific"] ?: true) }
-        ) {
-            when (val cfg = layer.config) {
-                is LayerConfig.Bars -> {
-                    StudioChipSelector("Audio Provider", uiState.project.audioProviders.map { it.index }, cfg.audioProviderIndex, { "Provider $it" }) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(audioProviderIndex = v)) } }
-                    StudioSlider("Bar Height Multiplier", cfg.barHeightMultiplier, -2f, 2f, 1f, "x", 0.05f, onValueChange = { v ->
-                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(barHeightMultiplier = v)) }
-                    }, onCommit = ::endDrag)
-                    StudioSlider("Fixed Height", cfg.fixedHeight, -50f, 50f, 0f, "", 0.5f, onValueChange = { v ->
-                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(fixedHeight = v)) }
-                    }, onCommit = ::endDrag)
-                    StudioSlider("Gradient Offset", cfg.colorBlendOffset, 0f, 1f, 0f, "", 0.01f, onValueChange = { v ->
-                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(colorBlendOffset = v)) }
-                    }, onCommit = ::endDrag)
+        when (val cfg = layer.config) {
+            is LayerConfig.Bars -> {
+                ExpandableSectionHeader("Path & geometry", expandedSections["Bars_Pathgeometry"] == true, { toggleAccordion(expandedSections, "Bars_Pathgeometry") }) {
                     StudioSlider("Polygon Sides", cfg.polygonSides.toFloat(), 3f, 12f, 6f, "", 1f, onValueChange = { v ->
                         beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(polygonSides = v.toInt())) }
                     }, onCommit = ::endDrag)
@@ -960,11 +890,6 @@ private fun PropertiesTab(
                     StudioChipSelector("Path Shape", BarsShapePath.entries, cfg.shapePath, { it.label }) { path ->
                         vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(shapePath = path)) }
                     }
-                    StudioChipSelector("Segment Style", BarsSegmentType.entries, cfg.segment1, { it.label }) { seg ->
-                        vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(segment1 = seg)) }
-                    }
-                    StudioChipSelector("Secondary Segment", BarsSegmentType.entries, cfg.segment2, { it.label }) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(segment2 = v)) } }
-                    if (cfg.segment2 != BarsSegmentType.NONE) {
                     StudioSlider("Segment 2 Width", cfg.segment2Width, 0.05f, 1.5f, 0.72f, "", 0.01f, onValueChange = { v -> beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(segment2Width = v)) } }, onCommit = ::endDrag)
                     StudioSlider("Segment 2 Height", cfg.segment2HeightMultiplier, -2f, 2f, 1f, "", 0.05f, onValueChange = { v -> beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(segment2HeightMultiplier = v)) } }, onCommit = ::endDrag)
                     StudioSlider("Segment 2 Fixed Height", cfg.segment2FixedHeight, -50f, 50f, 0f, "", 0.5f, onValueChange = { v -> beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(segment2FixedHeight = v)) } }, onCommit = ::endDrag)
@@ -973,6 +898,22 @@ private fun PropertiesTab(
                         StudioColorPickerRow("Segment 2 Color To", cfg.segment2ColorTo) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(segment2ColorTo = v)) } }
                     }
                     StudioSlider("Circular Path Gap", cfg.pathGap, 0f, 0.9f, 0f, "", 0.01f, onValueChange = { v -> beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(pathGap = v)) } }, onCommit = ::endDrag)
+                    if (cfg.shapePath == BarsShapePath.CIRCLE || cfg.shapePath == BarsShapePath.SIDED_POLYGON) {
+                        RegisteredSlider("circleRadius", cfg.circleRadius, settings.showPropertyHelpHints, { v ->
+                            beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(circleRadius = v)) }
+                        }, ::endDrag)
+                    }
+                }
+                ExpandableSectionHeader("Primary segment", expandedSections["Bars_Primarysegment"] == true, { toggleAccordion(expandedSections, "Bars_Primarysegment") }) {
+                    StudioSlider("Bar Height Multiplier", cfg.barHeightMultiplier, -2f, 2f, 1f, "x", 0.05f, onValueChange = { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(barHeightMultiplier = v)) }
+                    }, onCommit = ::endDrag)
+                    StudioSlider("Fixed Height", cfg.fixedHeight, -50f, 50f, 0f, "", 0.5f, onValueChange = { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(fixedHeight = v)) }
+                    }, onCommit = ::endDrag)
+                    StudioChipSelector("Segment Style", BarsSegmentType.entries, cfg.segment1, { it.label }) { seg ->
+                        vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(segment1 = seg)) }
+                    }
                     StudioToggleRow("Mirror Symmetry", cfg.mirror) { m ->
                         vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(mirror = m)) }
                     }
@@ -994,13 +935,14 @@ private fun PropertiesTab(
                     RegisteredSlider("maxHeightScale", cfg.maxHeightScale, settings.showPropertyHelpHints, { v ->
                         beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(maxHeightScale = v)) }
                     }, ::endDrag)
-                    if (cfg.shapePath == BarsShapePath.CIRCLE || cfg.shapePath == BarsShapePath.SIDED_POLYGON) {
-                        RegisteredSlider("circleRadius", cfg.circleRadius, settings.showPropertyHelpHints, { v ->
-                            beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(circleRadius = v)) }
-                        }, ::endDrag)
-                    }
-                    StudioSlider("Reaction Delay", cfg.reactionDelay.toFloat(), 0f, 9f, 0f, "frames", 1f, onValueChange = { v ->
-                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(reactionDelay = v.toInt())) }
+                }
+                ExpandableSectionHeader("Secondary segment", expandedSections["Bars_Secondarysegment"] == true, { toggleAccordion(expandedSections, "Bars_Secondarysegment") }) {
+                    StudioChipSelector("Secondary Segment", BarsSegmentType.entries, cfg.segment2, { it.label }) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(segment2 = v)) } }
+                    if (cfg.segment2 != BarsSegmentType.NONE) {
+                }
+                ExpandableSectionHeader("Colors", expandedSections["Bars_Colors"] == true, { toggleAccordion(expandedSections, "Bars_Colors") }) {
+                    StudioSlider("Gradient Offset", cfg.colorBlendOffset, 0f, 1f, 0f, "", 0.01f, onValueChange = { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(colorBlendOffset = v)) }
                     }, onCommit = ::endDrag)
                     StudioColorPickerRow("Color From", cfg.colorFromArgb) { col ->
                         vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(colorFromArgb = col)) }
@@ -1009,17 +951,21 @@ private fun PropertiesTab(
                         vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(colorToArgb = col)) }
                     }
                 }
-                is LayerConfig.Image -> {
+                ExpandableSectionHeader("Audio response", expandedSections["Bars_Audioresponse"] == true, { toggleAccordion(expandedSections, "Bars_Audioresponse") }) {
+                    StudioChipSelector("Audio Provider", uiState.project.audioProviders.map { it.index }, cfg.audioProviderIndex, { "Provider $it" }) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(audioProviderIndex = v)) } }
+                    StudioSlider("Reaction Delay", cfg.reactionDelay.toFloat(), 0f, 9f, 0f, "frames", 1f, onValueChange = { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(reactionDelay = v.toInt())) }
+                    }, onCommit = ::endDrag)
+                }
+            }
+            is LayerConfig.Image -> {
+                ExpandableSectionHeader("Source & fitting", expandedSections["Image_Sourcefitting"] == true, { toggleAccordion(expandedSections, "Image_Sourcefitting") }) {
                     StudioChipSelector("Source", ImageSourceType.entries, cfg.sourceType, { it.label }) { src ->
                         vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(sourceType = src)) }
                     }
                     if (cfg.sourceType == ImageSourceType.COMPOSITION) {
                     StudioChipSelector("Source Composition", uiState.project.compositions.map { it.index }.filter { it != uiState.selectedCompositionIndex }, cfg.sourceCompositionIndex, { "Composition $it" }) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(sourceCompositionIndex = v)) } }
                     }
-                    StudioSlider("Image Opacity Strength", cfg.opacityStrength, 0f, 1f, 1f, "x", 0.01f, onValueChange = { v ->
-                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(opacityStrength = v)) }
-                    }, onCommit = ::endDrag)
-                    StudioColorPickerRow("Chroma Key Color", cfg.colorKeyArgb) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(colorKeyArgb = v)) } }
                     StudioChipSelector("Shape Mask", ImageShape.entries, cfg.shape, { it.label }) { sh ->
                         vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(shape = sh)) }
                     }
@@ -1029,20 +975,23 @@ private fun PropertiesTab(
                     StudioToggleRow("Crop To Fit", cfg.keepAspectRatioAndCropToFit) { k ->
                         vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(keepAspectRatioAndCropToFit = k)) }
                     }
+                    StudioToggleRow("Flip Horizontal", cfg.flipU) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(flipU = v)) } }
+                    StudioToggleRow("Flip Vertical", cfg.flipV) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(flipV = v)) } }
+                }
+                ExpandableSectionHeader("Mask & chroma key", expandedSections["Image_Maskchromakey"] == true, { toggleAccordion(expandedSections, "Image_Maskchromakey") }) {
+                    StudioColorPickerRow("Chroma Key Color", cfg.colorKeyArgb) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(colorKeyArgb = v)) } }
                     val maskChoices = listOf("") + uiState.project.compositions.filter { it.index != uiState.selectedCompositionIndex }.map { "composition:${it.index}" } + listOf("internalres:white", "internalres:black", "internalres:vignette80")
                     StudioChipSelector("Mask Source", (maskChoices + cfg.maskImage).distinct(), cfg.maskImage, { it.ifBlank { "None" } }) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(maskImage = v)) } }
                     StudioChipSelector("Mask Mode", com.vexo.studio.model.MaskMode.entries, cfg.maskMode, { it.label }) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(maskMode = v)) } }
-                    StudioToggleRow("Image Blur", cfg.blurEnabled) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(blurEnabled = v)) } }
-                    if (cfg.blurEnabled) {
-                        StudioSlider("Image Blur Radius", cfg.blurRadius.toFloat(), 0f, 64f, 7f, "px", 1f, onValueChange = { v -> beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(blurRadius = v.toInt())) } }, onCommit = ::endDrag)
-                        StudioSlider("Blur Divider", cfg.blurDivider.toFloat(), 1f, 12f, 5f, "", 1f, onValueChange = { v -> beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(blurDivider = v.toInt())) } }, onCommit = ::endDrag)
-                    }
                     if (cfg.colorKeyEnabled) StudioSlider("Key Strength", cfg.transparencyStrength, 0f, 1f, 1f, "", 0.01f, onValueChange = { v -> beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(transparencyStrength = v)) } }, onCommit = ::endDrag)
-                    StudioToggleRow("Flip Horizontal", cfg.flipU) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(flipU = v)) } }
-                    StudioToggleRow("Flip Vertical", cfg.flipV) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(flipV = v)) } }
                     StudioToggleRow("Color Key Chroma", cfg.colorKeyEnabled) { k ->
                         vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(colorKeyEnabled = k)) }
                     }
+                }
+                ExpandableSectionHeader("Color & opacity", expandedSections["Image_Coloropacity"] == true, { toggleAccordion(expandedSections, "Image_Coloropacity") }) {
+                    StudioSlider("Image Opacity Strength", cfg.opacityStrength, 0f, 1f, 1f, "x", 0.01f, onValueChange = { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(opacityStrength = v)) }
+                    }, onCommit = ::endDrag)
                     StudioSlider("Saturation", cfg.saturation, 0f, 2f, 1f, "", 0.02f, onValueChange = { v ->
                         beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(saturation = v)) }
                     }, onCommit = ::endDrag)
@@ -1053,7 +1002,16 @@ private fun PropertiesTab(
                         vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(colorArgb = col)) }
                     }
                 }
-                is LayerConfig.Text -> {
+                ExpandableSectionHeader("Blur", expandedSections["Image_Blur"] == true, { toggleAccordion(expandedSections, "Image_Blur") }) {
+                    StudioToggleRow("Image Blur", cfg.blurEnabled) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(blurEnabled = v)) } }
+                    if (cfg.blurEnabled) {
+                        StudioSlider("Image Blur Radius", cfg.blurRadius.toFloat(), 0f, 64f, 7f, "px", 1f, onValueChange = { v -> beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(blurRadius = v.toInt())) } }, onCommit = ::endDrag)
+                        StudioSlider("Blur Divider", cfg.blurDivider.toFloat(), 1f, 12f, 5f, "", 1f, onValueChange = { v -> beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(blurDivider = v.toInt())) } }, onCommit = ::endDrag)
+                    }
+                }
+            }
+            is LayerConfig.Text -> {
+                ExpandableSectionHeader("Content & typography", expandedSections["Text_Contenttypography"] == true, { toggleAccordion(expandedSections, "Text_Contenttypography") }) {
                     var textVal by remember(layer.common.id) { mutableStateOf(cfg.text) }
                     OutlinedTextField(
                         value = textVal,
@@ -1080,6 +1038,8 @@ private fun PropertiesTab(
                     StudioSlider("Line Spacing", cfg.lineSpacing, 0.8f, 2.5f, 1.2f, "x", 0.05f, onValueChange = { v ->
                         beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(lineSpacing = v)) }
                     }, onCommit = ::endDrag)
+                }
+                ExpandableSectionHeader("Color & effects", expandedSections["Text_Coloreffects"] == true, { toggleAccordion(expandedSections, "Text_Coloreffects") }) {
                     StudioSlider("Stroke Width", cfg.strokeWidth, 0f, 12f, 0f, "px", 0.5f, onValueChange = { v ->
                         beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(strokeWidth = v)) }
                     }, onCommit = ::endDrag)
@@ -1091,13 +1051,17 @@ private fun PropertiesTab(
                         vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(colorArgb = col)) }
                     }
                 }
-                is LayerConfig.Shape -> {
+            }
+            is LayerConfig.Shape -> {
+                ExpandableSectionHeader("Geometry", expandedSections["Shape_Geometry"] == true, { toggleAccordion(expandedSections, "Shape_Geometry") }) {
                     StudioChipSelector("Shape Kind", ShapeKind.entries, cfg.kind, { it.label }) { k ->
                         vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(kind = k)) }
                     }
                     StudioSlider("Sides", cfg.sides.toFloat(), 3f, 16f, 6f, "", 1f, onValueChange = { v ->
                         beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(sides = v.toInt())) }
                     }, onCommit = ::endDrag)
+                }
+                ExpandableSectionHeader("Fill & stroke", expandedSections["Shape_Fillstroke"] == true, { toggleAccordion(expandedSections, "Shape_Fillstroke") }) {
                     StudioSlider("Stroke Width", cfg.strokeWidth, 1f, 24f, 3f, "px", 0.5f, onValueChange = { v ->
                         beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(strokeWidth = v)) }
                     }, onCommit = ::endDrag)
@@ -1109,13 +1073,23 @@ private fun PropertiesTab(
                         vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(fillColorArgb = col)) }
                     }
                 }
-                is LayerConfig.Particles -> {
+            }
+            is LayerConfig.Particles -> {
+                ExpandableSectionHeader("Emission", expandedSections["Particles_Emission"] == true, { toggleAccordion(expandedSections, "Particles_Emission") }) {
                     StudioSlider("Spawn Interval", cfg.spawnTimeSec, 0.005f, 0.25f, 0.015f, "s", 0.005f, onValueChange = { v ->
                         beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(spawnTimeSec = v)) }
                     }, onCommit = ::endDrag)
                     StudioSlider("Lifetime", cfg.lifetimeSec, 0.1f, 10f, 6f, "s", 0.1f, onValueChange = { v ->
                         beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(lifetimeSec = v)) }
                     }, onCommit = ::endDrag)
+                    StudioChipSelector("Spawn Area", SpawnAreaType.entries, cfg.spawnArea, { it.label }) { s ->
+                        vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(spawnArea = s)) }
+                    }
+                    RegisteredSlider("countLimit", cfg.countLimit.toFloat(), settings.showPropertyHelpHints, { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(countLimit = v.toInt())) }
+                    }, ::endDrag)
+                }
+                ExpandableSectionHeader("Motion & forces", expandedSections["Particles_Motionforces"] == true, { toggleAccordion(expandedSections, "Particles_Motionforces") }) {
                     StudioSlider("Speed Random", cfg.speedRandom, -300f, 300f, 80f, "", 1f, onValueChange = { v ->
                         beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(speedRandom = v)) }
                     }, onCommit = ::endDrag)
@@ -1124,27 +1098,6 @@ private fun PropertiesTab(
                     }, onCommit = ::endDrag)
                     StudioSlider("Gravity Y", cfg.gravityY, -300f, 300f, 0f, "", 1f, onValueChange = { v ->
                         beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(gravityY = v)) }
-                    }, onCommit = ::endDrag)
-                    StudioSlider("Start Size", cfg.startSize, 0f, 20f, 2f, "", 0.1f, onValueChange = { v ->
-                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(startSize = v)) }
-                    }, onCommit = ::endDrag)
-                    StudioSlider("End Size", cfg.endSize, 0f, 20f, 4f, "", 0.1f, onValueChange = { v ->
-                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(endSize = v)) }
-                    }, onCommit = ::endDrag)
-                    StudioSlider("Random End Size", cfg.endSizeRandom, 0f, 20f, 0f, "", 0.1f, onValueChange = { v ->
-                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(endSizeRandom = v)) }
-                    }, onCommit = ::endDrag)
-                    StudioSlider("Fade In / Out", cfg.fadeInAndOutTime, 0.02f, 0.49f, 0.15f, "", 0.01f, onValueChange = { v ->
-                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(fadeInAndOutTime = v)) }
-                    }, onCommit = ::endDrag)
-                    StudioSlider("Perspective Depth", cfg.perspectiveDepth, 100f, 2000f, 900f, "", 10f, onValueChange = { v ->
-                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(perspectiveDepth = v)) }
-                    }, onCommit = ::endDrag)
-                    StudioSlider("Perspective FOV", cfg.perspectiveFov, 20f, 150f, 48.75f, "deg", 0.5f, onValueChange = { v ->
-                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(perspectiveFov = v)) }
-                    }, onCommit = ::endDrag)
-                    StudioSlider("Near Camera Fade", cfg.nearCameraFadeOutDistance, 0f, 500f, 75f, "", 1f, onValueChange = { v ->
-                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(nearCameraFadeOutDistance = v)) }
                     }, onCommit = ::endDrag)
                     StudioSlider("Vector Z", cfg.vectorAngleZ, -1f, 1f, 0f, "", 0.05f, onValueChange = { v ->
                         beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(vectorAngleZ = v)) }
@@ -1157,24 +1110,45 @@ private fun PropertiesTab(
                     }, onCommit = ::endDrag)
                     StudioToggleRow("Random Vector", cfg.useRandomVectorInstead) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(useRandomVectorInstead = v)) } }
                     StudioToggleRow("Vector Relative To Center", cfg.vectorRelativeToCenter) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(vectorRelativeToCenter = v)) } }
-                    StudioChipSelector("Spawn Area", SpawnAreaType.entries, cfg.spawnArea, { it.label }) { s ->
-                        vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(spawnArea = s)) }
-                    }
                     StudioChipSelector("Force Field", ForceFieldType.entries, cfg.forceField, { it.label }) { f ->
                         vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(forceField = f)) }
                     }
-                    RegisteredSlider("countLimit", cfg.countLimit.toFloat(), settings.showPropertyHelpHints, { v ->
-                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(countLimit = v.toInt())) }
-                    }, ::endDrag)
                     RegisteredSlider("speed", cfg.speed, settings.showPropertyHelpHints, { v ->
                         beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(speed = v)) }
                     }, ::endDrag)
                     StudioSlider("Vector Angle", cfg.vectorAngleDeg, 0f, 360f, 270f, "deg", 5f, onValueChange = { v ->
                         beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(vectorAngleDeg = v)) }
                     }, onCommit = ::endDrag)
+                }
+                ExpandableSectionHeader("Size & fading", expandedSections["Particles_Sizefading"] == true, { toggleAccordion(expandedSections, "Particles_Sizefading") }) {
+                    StudioSlider("Start Size", cfg.startSize, 0f, 20f, 2f, "", 0.1f, onValueChange = { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(startSize = v)) }
+                    }, onCommit = ::endDrag)
+                    StudioSlider("End Size", cfg.endSize, 0f, 20f, 4f, "", 0.1f, onValueChange = { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(endSize = v)) }
+                    }, onCommit = ::endDrag)
+                    StudioSlider("Random End Size", cfg.endSizeRandom, 0f, 20f, 0f, "", 0.1f, onValueChange = { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(endSizeRandom = v)) }
+                    }, onCommit = ::endDrag)
+                    StudioSlider("Fade In / Out", cfg.fadeInAndOutTime, 0.02f, 0.49f, 0.15f, "", 0.01f, onValueChange = { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(fadeInAndOutTime = v)) }
+                    }, onCommit = ::endDrag)
                     StudioSlider("Particle Scale", cfg.particleScale, 0.1f, 3f, 0.65f, "x", 0.05f, onValueChange = { v ->
                         beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(particleScale = v)) }
                     }, onCommit = ::endDrag)
+                }
+                ExpandableSectionHeader("Perspective", expandedSections["Particles_Perspective"] == true, { toggleAccordion(expandedSections, "Particles_Perspective") }) {
+                    StudioSlider("Perspective Depth", cfg.perspectiveDepth, 100f, 2000f, 900f, "", 10f, onValueChange = { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(perspectiveDepth = v)) }
+                    }, onCommit = ::endDrag)
+                    StudioSlider("Perspective FOV", cfg.perspectiveFov, 20f, 150f, 48.75f, "deg", 0.5f, onValueChange = { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(perspectiveFov = v)) }
+                    }, onCommit = ::endDrag)
+                    StudioSlider("Near Camera Fade", cfg.nearCameraFadeOutDistance, 0f, 500f, 75f, "", 1f, onValueChange = { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(nearCameraFadeOutDistance = v)) }
+                    }, onCommit = ::endDrag)
+                }
+                ExpandableSectionHeader("Colors", expandedSections["Particles_Colors"] == true, { toggleAccordion(expandedSections, "Particles_Colors") }) {
                     StudioColorPickerRow("Color From", cfg.colorFromArgb) { col ->
                         vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(colorFromArgb = col)) }
                     }
@@ -1182,50 +1156,67 @@ private fun PropertiesTab(
                         vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(colorToArgb = col)) }
                     }
                 }
-                is LayerConfig.BlurEffect -> {
+            }
+            is LayerConfig.BlurEffect -> {
+                ExpandableSectionHeader("Source & compositing", expandedSections["BlurEffect_Sourcecompositing"] == true, { toggleAccordion(expandedSections, "BlurEffect_Sourcecompositing") }) {
                     StudioChipSelector("Source Composition", uiState.project.compositions.map { it.index }.filter { it != uiState.selectedCompositionIndex }, cfg.sourceCompositionIndex, { "Composition $it" }) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(sourceCompositionIndex = v)) } }
                     StudioToggleRow("Show Unblurred Content", cfg.showUnblurredContent) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(showUnblurredContent = v)) } }
+                    StudioToggleRow("Show Unblurred Under", cfg.showUnblurredContentUnder) { s ->
+                        vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(showUnblurredContentUnder = s)) }
+                    }
+                }
+                ExpandableSectionHeader("Blur parameters", expandedSections["BlurEffect_Blurparameters"] == true, { toggleAccordion(expandedSections, "BlurEffect_Blurparameters") }) {
                     RegisteredSlider("blurRadius", cfg.blurRadius, settings.showPropertyHelpHints, { v ->
                         beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(blurRadius = v)) }
                     }, ::endDrag)
                     RegisteredSlider("blurMultiplier", cfg.blurMultiplier, settings.showPropertyHelpHints, { v ->
                         beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(blurMultiplier = v)) }
                     }, ::endDrag)
-                    StudioToggleRow("Show Unblurred Under", cfg.showUnblurredContentUnder) { s ->
-                        vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(showUnblurredContentUnder = s)) }
-                    }
                 }
-                is LayerConfig.RgbSplitEffect -> {
+            }
+            is LayerConfig.RgbSplitEffect -> {
+                ExpandableSectionHeader("Source & blend", expandedSections["RgbSplitEffect_Sourceblend"] == true, { toggleAccordion(expandedSections, "RgbSplitEffect_Sourceblend") }) {
                     StudioChipSelector("Source Composition", uiState.project.compositions.map { it.index }.filter { it != uiState.selectedCompositionIndex }, cfg.targetCompositionIndex, { "Composition $it" }) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(targetCompositionIndex = v)) } }
                     StudioChipSelector("Effect Blend", BlendMode.entries, cfg.blendModeContent, { it.label }) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(blendModeContent = v)) } }
+                }
+                ExpandableSectionHeader("Channel offsets", expandedSections["RgbSplitEffect_Channeloffsets"] == true, { toggleAccordion(expandedSections, "RgbSplitEffect_Channeloffsets") }) {
                     StudioSlider("Split Y", cfg.splitAmountY, -0.1f, 0.1f, 0.008f, "", 0.002f, onValueChange = { v ->
                         beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(splitAmountY = v)) }
                     }, onCommit = ::endDrag)
-                    StudioColorPickerRow("Green Channel", cfg.splitColor1Argb) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(splitColor1Argb = v)) } }
-                    StudioColorPickerRow("Blue Channel", cfg.splitColor2Argb) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(splitColor2Argb = v)) } }
                     RegisteredSlider("splitMultiplier", cfg.splitMultiplier, settings.showPropertyHelpHints, { v ->
                         beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(splitMultiplier = v)) }
                     }, ::endDrag)
                     StudioSlider("Split X", cfg.splitAmountX, -0.1f, 0.1f, 0.015f, "", 0.002f, onValueChange = { v ->
                         beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(splitAmountX = v)) }
                     }, onCommit = ::endDrag)
+                }
+                ExpandableSectionHeader("Channel colors", expandedSections["RgbSplitEffect_Channelcolors"] == true, { toggleAccordion(expandedSections, "RgbSplitEffect_Channelcolors") }) {
+                    StudioColorPickerRow("Green Channel", cfg.splitColor1Argb) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(splitColor1Argb = v)) } }
+                    StudioColorPickerRow("Blue Channel", cfg.splitColor2Argb) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(splitColor2Argb = v)) } }
                     StudioColorPickerRow("Channel 0", cfg.splitColor0Argb) { col ->
                         vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(splitColor0Argb = col)) }
                     }
                 }
-                is LayerConfig.MotionBlurEffect -> {
+            }
+            is LayerConfig.MotionBlurEffect -> {
+                ExpandableSectionHeader("Source & blend", expandedSections["MotionBlurEffect_Sourceblend"] == true, { toggleAccordion(expandedSections, "MotionBlurEffect_Sourceblend") }) {
                     StudioChipSelector("Source Composition", uiState.project.compositions.map { it.index }.filter { it != uiState.selectedCompositionIndex }, cfg.targetCompositionIndex, { "Composition $it" }) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(targetCompositionIndex = v)) } }
                     StudioToggleRow("Show Source Under", cfg.showUnblurredContentUnder) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(showUnblurredContentUnder = v)) } }
                     StudioToggleRow("Show Source Above", cfg.showUnblurredContent) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(showUnblurredContent = v)) } }
-                    StudioColorPickerRow("Trail Tint", cfg.colorArgb) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(colorArgb = v)) } }
                     StudioChipSelector("Content Blend", BlendMode.entries, cfg.blendModeContent, { it.label }) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(blendModeContent = v)) } }
+                }
+                ExpandableSectionHeader("Motion trail", expandedSections["MotionBlurEffect_Motiontrail"] == true, { toggleAccordion(expandedSections, "MotionBlurEffect_Motiontrail") }) {
+                    StudioColorPickerRow("Trail Tint", cfg.colorArgb) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(colorArgb = v)) } }
                     StudioSlider("Blur Amount", cfg.blurAmountMultiplier, 0.4f, 3f, 0.85f, "x", 0.05f, onValueChange = { v ->
                         beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(blurAmountMultiplier = v)) }
                     }, onCommit = ::endDrag)
                 }
-                is LayerConfig.MirrorEffect -> {
+            }
+            is LayerConfig.MirrorEffect -> {
+                ExpandableSectionHeader("Source", expandedSections["MirrorEffect_Source"] == true, { toggleAccordion(expandedSections, "MirrorEffect_Source") }) {
                     StudioChipSelector("Source Composition", uiState.project.compositions.map { it.index }.filter { it != uiState.selectedCompositionIndex }, cfg.targetCompositionIndex, { "Composition $it" }) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(targetCompositionIndex = v)) } }
-                    StudioColorPickerRow("Mirror Tint", cfg.colorArgb) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(colorArgb = v)) } }
+                }
+                ExpandableSectionHeader("Mirror geometry", expandedSections["MirrorEffect_Mirrorgeometry"] == true, { toggleAccordion(expandedSections, "MirrorEffect_Mirrorgeometry") }) {
                     StudioChipSelector("Mirror Mode", MirrorMode.entries, cfg.mirrorMode, { it.label }) { m ->
                         vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(mirrorMode = m)) }
                     }
@@ -1233,6 +1224,9 @@ private fun PropertiesTab(
                     StudioToggleRow("Flip Mirror", cfg.flipMirror) { f ->
                         vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(flipMirror = f)) }
                     }
+                }
+                ExpandableSectionHeader("Tint", expandedSections["MirrorEffect_Tint"] == true, { toggleAccordion(expandedSections, "MirrorEffect_Tint") }) {
+                    StudioColorPickerRow("Mirror Tint", cfg.colorArgb) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(colorArgb = v)) } }
                 }
             }
         }
@@ -1285,8 +1279,8 @@ private fun AudioProviderEditorSection(
 
     ExpandableSectionHeader(
         title = "GENERAL & SPECTRUM",
-        expanded = expandedSections["provider_general"] ?: true,
-        onToggle = { expandedSections["provider_general"] = !(expandedSections["provider_general"] ?: true) }
+        expanded = expandedSections["provider_general"] ?: false,
+        onToggle = { toggleAccordion(expandedSections, "provider_general") }
     ) {
         StudioChipSelector("Sample Mode", SampleProviderType.entries, provider.sampleProvider, { it.aveeName }) { mode ->
             vm.updateAudioProvider(provider.index) { it.copy(sampleProvider = mode) }
@@ -1331,8 +1325,8 @@ private fun AudioProviderEditorSection(
 
     ExpandableSectionHeader(
         title = "HZ RANGE & FILTERING",
-        expanded = expandedSections["provider_hz"] ?: true,
-        onToggle = { expandedSections["provider_hz"] = !(expandedSections["provider_hz"] ?: true) }
+        expanded = expandedSections["provider_hz"] ?: false,
+        onToggle = { toggleAccordion(expandedSections, "provider_hz") }
     ) {
         RegisteredSlider("lowerHz", provider.lowerHz, settings.showPropertyHelpHints, { v ->
             onBeginDrag(); vm.updateAudioProvider(provider.index, false) { it.copy(lowerHz = v) }
@@ -1356,8 +1350,8 @@ private fun AudioProviderEditorSection(
 
     ExpandableSectionHeader(
         title = "RESPONSE & BEAT ENVELOPE",
-        expanded = expandedSections["provider_response"] ?: true,
-        onToggle = { expandedSections["provider_response"] = !(expandedSections["provider_response"] ?: true) }
+        expanded = expandedSections["provider_response"] ?: false,
+        onToggle = { toggleAccordion(expandedSections, "provider_response") }
     ) {
         RegisteredSlider("attackMs", provider.attackMs, settings.showPropertyHelpHints, { v ->
             onBeginDrag(); vm.updateAudioProvider(provider.index, false) { it.copy(attackMs = v) }
@@ -1392,8 +1386,14 @@ private fun AudioProviderEditorSection(
     }
 }
 
+internal fun toggleAccordion(sections: MutableMap<String, Boolean>, key: String) {
+    val opening = sections[key] != true
+    sections.clear()
+    if (opening) sections[key] = true
+}
+
 @Composable
-private fun ExpandableSectionHeader(
+internal fun ExpandableSectionHeader(
     title: String,
     expanded: Boolean,
     onToggle: () -> Unit,
@@ -1414,8 +1414,8 @@ private fun ExpandableSectionHeader(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(title, style = MaterialTheme.typography.labelSmall, color = palette.accent)
-            Text(if (expanded) "−" else "+", style = MaterialTheme.typography.titleMedium, color = palette.textSecondary)
+            Text(title, style = MaterialTheme.typography.bodyMedium, color = if (expanded) palette.accent else palette.textPrimary, modifier = Modifier.weight(1f))
+            Icon(if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, contentDescription = if (expanded) "Collapse" else "Expand", tint = palette.textSecondary, modifier = Modifier.size(20.dp))
         }
         if (expanded) {
             Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
