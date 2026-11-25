@@ -319,11 +319,17 @@ class VexoGlRenderer(
         h: Int
     ) {
         if (cfg.segment1 == BarsSegmentType.NONE && cfg.segment2 == BarsSegmentType.NONE) return
+        if (cfg.segment2 != BarsSegmentType.NONE) {
+            if (cfg.segment1 != BarsSegmentType.NONE) drawBarsLayer(layerId, cfg.copy(segment2 = BarsSegmentType.NONE), audioSnap, opacity, w, h)
+            drawBarsLayer("${layerId}_segment2", cfg.copy(segment1 = cfg.segment2, segment2 = BarsSegmentType.NONE, barWidth = cfg.segment2Width, barHeightMultiplier = cfg.segment2HeightMultiplier, fixedHeight = cfg.segment2FixedHeight, mirror = cfg.segment2Mirror, colorFromArgb = cfg.segment2ColorFrom, colorToArgb = cfg.segment2ColorTo), audioSnap, opacity, w, h)
+            return
+        }
         val rawBars = audioSnap?.bars ?: FloatArray(64) { i ->
             0.08f + 0.14f * kotlin.math.abs(sin(i * 0.22f))
         }
         val delayedBars = applyReactionDelay(layerId, rawBars, cfg.reactionDelay)
-        val count = delayedBars.size.coerceAtLeast(4)
+        val count = delayedBars.size
+        if (count == 0) return
         val minDim = minOf(w, h).toFloat()
 
         // Ensure vertex scratch capacity (each bar = 6 vertices = 12 floats pos + 24 floats color)
@@ -376,8 +382,9 @@ class VexoGlRenderer(
         for (i in 0 until count) {
             val srcIdx = if (cfg.flipInput) count - 1 - i else i
             val rawAmp = delayedBars[srcIdx]
-            val amp = (rawAmp * cfg.heightScale * cfg.barHeightMultiplier)
-                .coerceIn(minOf(cfg.minHeightScale, cfg.maxHeightScale), maxOf(cfg.minHeightScale, cfg.maxHeightScale))
+            val signedGain = cfg.heightScale * cfg.barHeightMultiplier
+            val amp = (rawAmp * kotlin.math.abs(signedGain))
+                .coerceIn(minOf(kotlin.math.abs(cfg.minHeightScale), kotlin.math.abs(cfg.maxHeightScale)), maxOf(kotlin.math.abs(cfg.minHeightScale), kotlin.math.abs(cfg.maxHeightScale))) * (if (signedGain < 0f) -1f else 1f)
             val gradColor = MeasureEvaluator.blendArgb(
                 barColor0, barColor1,
                 ((i.toFloat() / count) + cfg.colorBlendOffset).coerceIn(0f, 1f)
@@ -415,7 +422,7 @@ class VexoGlRenderer(
                     val cx = w * 0.5f
                     val cy = h * 0.5f
                     val angle = Math.toRadians(cfg.pathAngleDeg.toDouble()).toFloat() +
-                        (i.toFloat() / count) * 2f * PI.toFloat()
+                        (i.toFloat() / count) * 2f * PI.toFloat() * (1f - cfg.pathGap.coerceIn(0f, 0.9f))
                     val baseR = if (cfg.shapePath == BarsShapePath.SIDED_POLYGON) {
                         val sides = cfg.polygonSides.coerceIn(3, 12)
                         val sector = (2f * PI.toFloat()) / sides

@@ -269,6 +269,7 @@ object AveeJsonCodec {
             "Image" -> parseImageLayer(obj)
             "Bars" -> parseBarsLayer(obj)
             "Text" -> parseTextLayer(obj)
+            "AppLogo" -> parseTextLayer(obj).let { l -> l.copy(common = l.common.copy(name = "AppLogo"), config = (l.config as LayerConfig.Text).copy(text = obj.propString("text", "VEXO"), fontSize = obj.propInt("fontSize", 22))) }
             "Particles" -> parseParticlesLayer(obj)
             "BlurEffect" -> parseBlurEffect(obj)
             "RgbSplitEffect" -> parseRgbSplitEffect(obj)
@@ -404,6 +405,13 @@ object AveeJsonCodec {
                 shapePath = BarsShapePath.fromAvee(obj.propString("ShapePath", "HorizontalLine")),
                 segment1 = seg1Type,
                 segment2 = seg2Type,
+                segment2Width = seg2Obj?.propFloat("barWidth", 0.72f) ?: 0.72f,
+                segment2HeightMultiplier = seg2Obj?.propFloat("barHeightMultiplier", 1f) ?: 1f,
+                segment2FixedHeight = seg2Obj?.propFloat("fixedHeight", 0f) ?: 0f,
+                segment2Mirror = seg2Obj?.propBool("mirror", false) ?: false,
+                segment2ColorFrom = seg2Obj?.propInt("colorFrom", -1) ?: -1,
+                segment2ColorTo = seg2Obj?.propInt("colorTo", -1) ?: -1,
+                pathGap = (obj["ShapePath"] as? JsonObject)?.propFloat("gap", 0f) ?: 0f,
                 barWidth = seg1Obj?.propFloat("barWidth", 0.6f) ?: 0.6f,
                 barHeightMultiplier = seg1Obj?.propFloat("barHeightMultiplier", 1f) ?: 1f,
                 fixedHeight = seg1Obj?.propFloat("fixedHeight", 0f) ?: 0f,
@@ -418,7 +426,7 @@ object AveeJsonCodec {
                 reactionDelay = obj.propInt("reactionDelay", 0),
                 reactionAccumulatedDelay = obj.propInt("reactionAccumulatedDelay", 0),
                 colorBlendOffset = parseMvarfValue(obj.propString("colorBlendOffset", "Constant 0 0"), 0f),
-                circleRadius = obj.propFloat("circleRadius", 0.28f),
+                circleRadius = obj.propFloat("circleRadius", ((obj["ShapePath"] as? JsonObject)?.propFloat("radius", 1f) ?: 1f) * 0.28f),
                 polygonSides = obj.propInt("polygonSides", 6),
                 pathAngleDeg = obj.propFloat("pathAngleDeg", 0f),
                 alternatingDirection = obj.propBool("alternatingDirection", false)
@@ -592,8 +600,9 @@ object AveeJsonCodec {
     private fun encodeLayer(layer: LayerNode): JsonObject = mergeOriginal(layer.common.extraFields, buildJsonObject {
         val c = layer.common
         put("_name", c.name)
-        put("objType", layer.type.aveeObjType)
-        put("v", layer.type.aveeObjType)
+        val originalType = if (c.extraFields["objType"] == "\"AppLogo\"" && layer.type == LayerType.TEXT) "AppLogo" else layer.type.aveeObjType
+        put("objType", originalType)
+        put("v", originalType)
         put("ver", "10")
         put("visible", propObj(if (c.visible) 1 else 0))
         put("blendMode", propObj(c.blendMode.aveeName))
@@ -612,7 +621,7 @@ object AveeJsonCodec {
         when (val cfg = layer.config) {
             is LayerConfig.Bars -> {
                 put("audioProviderIndex", propObj(cfg.audioProviderIndex))
-                put("ShapePath", propObj(cfg.shapePath.aveeName))
+                put("ShapePath", buildJsonObject { put("v", cfg.shapePath.aveeName); put("radius", propObj(cfg.circleRadius / 0.28f)); put("gap", propObj(cfg.pathGap)) })
                 put("heightScale", propObj(cfg.heightScale))
                 put("minHeightScale", propObj(cfg.minHeightScale))
                 put("maxHeightScale", propObj(cfg.maxHeightScale))
@@ -634,7 +643,9 @@ object AveeJsonCodec {
                     put("colorFrom", propObj(cfg.colorFromArgb))
                     put("colorTo", propObj(cfg.colorToArgb))
                 })
-                put("Segment2", propObj(cfg.segment2.aveeName))
+                put("Segment2", buildJsonObject {
+                    put("v", cfg.segment2.aveeName); put("barWidth", propObj(cfg.segment2Width)); put("barHeightMultiplier", propObj(cfg.segment2HeightMultiplier)); put("fixedHeight", propObj(cfg.segment2FixedHeight)); put("mirror", propObj(if (cfg.segment2Mirror) 1 else 0)); put("colorFrom", propObj(cfg.segment2ColorFrom)); put("colorTo", propObj(cfg.segment2ColorTo))
+                })
             }
             is LayerConfig.Image -> {
                 val imgRef = when (cfg.sourceType) {
