@@ -21,6 +21,18 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.LibraryMusic
+import androidx.compose.material.icons.filled.Dashboard
+import androidx.compose.material.icons.filled.FileUpload
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Icon
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -181,7 +193,7 @@ private fun VexoRootApp(vm: StudioViewModel) {
                             color = palette.accent
                         )
                         Text(
-                            text = uiState.project.name.uppercase(),
+                            text = uiState.project.name,
                             style = MaterialTheme.typography.labelSmall,
                             color = palette.textSecondary,
                             maxLines = 1,
@@ -203,29 +215,32 @@ private fun VexoRootApp(vm: StudioViewModel) {
         bottomBar = {
             if (!uiState.isFullscreenPreview) {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(palette.glassPanel, palette.shape)
-                        .border(1.dp, palette.border, palette.shape)
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)
+                        .background(palette.glassPanel, palette.shape).border(1.dp, palette.border, palette.shape)
                         .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.SpaceEvenly
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     NavDestination.entries.forEach { dest ->
                         val active = dest == uiState.navDestination
-                        Box(
-                            modifier = Modifier
-                                .background(if (active) palette.accent else Color.Transparent, palette.shape)
-                                .clickable { vm.navigateTo(dest) }
-                                .padding(horizontal = 14.dp, vertical = 12.dp),
-                            contentAlignment = Alignment.Center
+                        val icon = when(dest) {
+                            NavDestination.STUDIO -> Icons.Default.Tune
+                            NavDestination.PROJECTS -> Icons.Default.FolderOpen
+                            NavDestination.AUDIO -> Icons.Default.LibraryMusic
+                            NavDestination.TEMPLATES -> Icons.Default.Dashboard
+                            NavDestination.EXPORT -> Icons.Default.FileUpload
+                            NavDestination.SETTINGS -> Icons.Default.Settings
+                        }
+                        Column(
+                            modifier = Modifier.semantics { selected = active }.clickable { vm.navigateTo(dest) }
+                                .heightIn(min = 56.dp).padding(horizontal = 8.dp, vertical = 5.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(3.dp)
                         ) {
-                            Text(
-                                text = dest.label.uppercase(),
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
-                                color = if (active) palette.accentOn else palette.textSecondary,
-                                maxLines = 1
-                            )
+                            Box(Modifier.background(if(active) palette.accent else Color.Transparent, palette.shape).padding(horizontal = 12.dp, vertical = 5.dp)) {
+                                Icon(icon, contentDescription = dest.label, tint = if(active) palette.accentOn else palette.textSecondary, modifier = Modifier.size(20.dp))
+                            }
+                            Text(dest.label, style = MaterialTheme.typography.labelSmall, color = if(active) palette.accent else palette.textSecondary, maxLines = 1)
                         }
                     }
                 }

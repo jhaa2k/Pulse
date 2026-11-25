@@ -261,12 +261,17 @@ object AveeJsonCodec {
                 providerIndices = (obj["providerIndices"] as? JsonArray)?.mapNotNull { it.primitiveInt() } ?: emptyList())
         }?.ifEmpty { listOf(CompositionNode(index = 0)) } ?: listOf(CompositionNode(index = 0))
         return VexoProject(name = name, audioProviders = providers, compositions = comps,
+            canvas = com.vexo.studio.model.CanvasConfig(aspectRatio = com.vexo.studio.model.AspectRatioPreset.entries.firstOrNull { it.name == inner["aspectRatio"]?.primitiveString() } ?: com.vexo.studio.model.AspectRatioPreset.RATIO_16_9),
             aveeRootMetadata = (inner["aveeRootMetadata"] as? JsonObject)?.mapValues { it.value.primitiveString() ?: "" } ?: emptyMap())
     }
 
     private fun decodeLayerByObjType(obj: JsonObject): LayerNode? {
         return when (obj["objType"]?.primitiveString() ?: obj["v"]?.primitiveString()) {
             "Image" -> parseImageLayer(obj)
+            "Shape" -> LayerNode(LayerType.SHAPE, parseCommon(obj, "Shape"), LayerConfig.Shape(
+                kind = com.vexo.studio.model.ShapeKind.entries.firstOrNull { it.name == obj.propString("shapeKind", "POLYGON") } ?: com.vexo.studio.model.ShapeKind.POLYGON,
+                sides = obj.propInt("sides", 6), fillColorArgb = obj.propInt("fillColor", 0x33FFFFFF), strokeColorArgb = obj.propInt("strokeColor", -1),
+                strokeWidth = obj.propFloat("strokeWidth", 3f), gradientEndArgb = obj.propInt("gradientEnd", 0x33C6F36A)))
             "Bars" -> parseBarsLayer(obj)
             "Text" -> parseTextLayer(obj)
             "AppLogo" -> parseTextLayer(obj).let { l -> l.copy(common = l.common.copy(name = "AppLogo"), config = (l.config as LayerConfig.Text).copy(text = obj.propString("text", "VEXO"), fontSize = obj.propInt("fontSize", 22))) }
@@ -361,17 +366,19 @@ object AveeJsonCodec {
             customImg.startsWith("composition:") ->
                 ImageSourceType.COMPOSITION to (customImg.substringAfter("composition:").toIntOrNull() ?: 0)
             customImg.startsWith("internalres:") -> ImageSourceType.INTERNAL to 0
+            customImg.startsWith("content://") || customImg.startsWith("file://") -> ImageSourceType.IMPORTED to 0
             else -> ImageSourceType.ALBUM_ART to 0
         }
         return LayerNode(
             type = LayerType.IMAGE,
             common = parseCommon(obj, "Image"),
             config = LayerConfig.Image(
-                sourceType = srcType,
+                sourceType = ImageSourceType.entries.firstOrNull { it.name == obj.propString("vexoSourceType", "") } ?: srcType,
+                customUri = customImg.takeIf { srcType == ImageSourceType.IMPORTED },
                 internalRes = customImg.ifEmpty { "internalres:white" },
                 sourceCompositionIndex = compIdx,
-                colorArgb = parseHsla4fToArgb(obj.propString("Color", "1 1 1 1")),
-                colorToArgb = parseHsla4fToArgb(obj.propString("ColorTo", "1 1 1 1")),
+                colorArgb = obj.propInt("vexoTint", parseHsla4fToArgb(obj.propString("Color", "1 1 1 1"))),
+                colorToArgb = obj.propInt("vexoTintTo", parseHsla4fToArgb(obj.propString("ColorTo", "1 1 1 1"))),
                 measureColorBlend = parseMeasure(obj["MeasureColorBlend"]),
                 shape = ImageShape.fromAvee(obj.propString("Shape", "None")),
                 keepAspectRatio = obj.propBool("keepAspectRatio", false),
@@ -654,6 +661,9 @@ object AveeJsonCodec {
                     else -> cfg.customUri ?: ""
                 }
                 put("customImage", propObj(imgRef))
+                put("vexoSourceType", propObj(cfg.sourceType.name))
+                put("vexoTint", propObj(cfg.colorArgb)); put("vexoTintTo", propObj(cfg.colorToArgb))
+                put("MeasureColorBlend", encodeMeasure(cfg.measureColorBlend))
                 put("Shape", propObj(cfg.shape.aveeName))
                 put("keepAspectRatio", propObj(if (cfg.keepAspectRatio) 1 else 0))
                 put("keepAspectRatioAndCropToFit", propObj(if (cfg.keepAspectRatioAndCropToFit) 1 else 0))
@@ -678,6 +688,7 @@ object AveeJsonCodec {
                 put("sides", propObj(cfg.sides))
                 put("fillColor", propObj(cfg.fillColorArgb))
                 put("strokeColor", propObj(cfg.strokeColorArgb))
+                put("strokeWidth", propObj(cfg.strokeWidth)); put("gradientEnd", propObj(cfg.gradientEndArgb))
             }
             is LayerConfig.Particles -> {
                 put("CountLimit", propObj(cfg.countLimit))

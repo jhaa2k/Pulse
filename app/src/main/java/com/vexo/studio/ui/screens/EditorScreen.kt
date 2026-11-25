@@ -173,7 +173,7 @@ fun EditorScreen(
 
     if (isLandscape) {
         Row(modifier = Modifier.fillMaxSize()) {
-            Column(modifier = Modifier.weight(0.48f).fillMaxHeight()) {
+            Column(modifier = Modifier.weight(previewShare).fillMaxHeight()) {
                 PreviewBlock(
                     vm = vm,
                     uiState = uiState,
@@ -205,7 +205,7 @@ fun EditorScreen(
                 onPickImage = onPickImage,
                 onImportPreset = onImportPreset,
                 onExportPreset = onExportPreset,
-                modifier = Modifier.weight(0.52f).fillMaxHeight()
+                modifier = Modifier.weight(1f - previewShare).fillMaxHeight()
             )
         }
     } else if (settings.portraitOverlay && uiState.project.canvas.aspectRatio.heightRatio > uiState.project.canvas.aspectRatio.widthRatio) {
@@ -434,7 +434,14 @@ private fun StudioWorkspacePanel(
     modifier: Modifier = Modifier
 ) {
     val palette = LocalVexoPalette.current
-    Column(modifier = modifier.background(palette.glassPanel, palette.shape)) {
+    Column(modifier = modifier.padding(horizontal = 6.dp, vertical = 4.dp).background(palette.glassPanel, palette.shape).border(1.dp, palette.border, palette.shape)) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("WORKSPACE", style = MaterialTheme.typography.labelSmall, color = palette.textSecondary)
+                Text(uiState.project.compositions.firstOrNull { it.index == uiState.selectedCompositionIndex }?.name ?: "Scene", style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            Text("${uiState.project.compositions.size} COMP", style = MaterialTheme.typography.labelSmall, color = palette.textSecondary)
+        }
         // Editor Tabs
         Row(
             modifier = Modifier
@@ -447,7 +454,8 @@ private fun StudioWorkspacePanel(
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .background(if (active) palette.accent else Color.Transparent)
+                        .padding(2.dp)
+                        .background(if (active) palette.accent else Color.Transparent, palette.shape)
                         .clickable { vm.selectStudioTab(tab) }
                         .padding(vertical = 10.dp),
                     contentAlignment = Alignment.Center
@@ -549,7 +557,7 @@ private fun LayersTab(
                         .fillMaxWidth()
                         .border(1.dp, if (isSelected) palette.accent else palette.border, palette.shape)
                         .background(if (isSelected) palette.panelElevated else palette.panel)
-                        .clickable { vm.selectLayer(layer.common.id) }
+                        .clickable { vm.selectLayer(layer.common.id); vm.selectStudioTab(StudioTab.PROPERTIES) }
                         .padding(horizontal = 8.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -593,7 +601,7 @@ private fun LayersTab(
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            text = "${layer.type.label.uppercase()} · ${layer.common.blendMode.label.uppercase()}",
+                            text = layer.type.label,
                             style = MaterialTheme.typography.labelSmall,
                             color = palette.textSecondary,
                             maxLines = 1
@@ -1016,6 +1024,9 @@ private fun PropertiesTab(
                     StudioSlider("Saturation", cfg.saturation, 0f, 2f, 1f, "", 0.02f, onValueChange = { v ->
                         beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(saturation = v)) }
                     }, onCommit = ::endDrag)
+                    StudioColorPickerRow("Secondary Tint", cfg.colorToArgb) { col ->
+                        vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(colorToArgb = col)) }
+                    }
                     StudioColorPickerRow("Tint Color", cfg.colorArgb) { col ->
                         vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(colorArgb = col)) }
                     }
@@ -1489,8 +1500,11 @@ private fun PresetsTab(
             }
         }
 
-        Text("STUDIO PRESETS", style = MaterialTheme.typography.labelSmall, color = palette.textSecondary)
-        VexoTemplates.allTemplates().forEach { tpl ->
+        val builtIns = remember { VexoTemplates.allTemplates() }
+        var query by rememberSaveable { mutableStateOf("") }
+        Text("BUILT-IN PRESETS · ${builtIns.size}", style = MaterialTheme.typography.labelSmall, color = palette.textSecondary)
+        OutlinedTextField(value = query, onValueChange = { query = it }, label = { Text("Find a preset") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        builtIns.filter { it.name.contains(query, ignoreCase = true) }.forEach { tpl ->
             Row(
                 modifier = Modifier
                     .fillMaxWidth()

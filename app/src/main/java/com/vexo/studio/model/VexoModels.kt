@@ -643,8 +643,25 @@ object VexoTemplates {
         monochromeStudio(),
         circularPulse(),
         neonParticleRing(),
-        rgbSplitMinimal()
+        rgbSplitMinimal(),
+        styledSpectrum("Silver Wave", BarsShapePath.HORIZONTAL_LINE, 0xFFFFFFFF.toInt(), 0xFF8794A5.toInt(), AspectRatioPreset.RATIO_16_9),
+        styledSpectrum("Crimson Orbit", BarsShapePath.CIRCLE, 0xFFFF345D.toInt(), 0xFFFFB28B.toInt(), AspectRatioPreset.RATIO_1_1),
+        styledSpectrum("Electric Violet", BarsShapePath.CIRCLE, 0xFFB18AFF.toInt(), 0xFF5CD8FF.toInt(), AspectRatioPreset.RATIO_9_16),
+        styledSpectrum("Golden Polygon", BarsShapePath.SIDED_POLYGON, 0xFFFFCE70.toInt(), 0xFFFFF0CC.toInt(), AspectRatioPreset.RATIO_1_1),
+        styledSpectrum("Vertical Signal", BarsShapePath.VERTICAL_LINE, 0xFF7CFAD2.toInt(), 0xFFFFFFFF.toInt(), AspectRatioPreset.RATIO_9_16),
+        styledSpectrum("Ocean Frequency", BarsShapePath.HORIZONTAL_LINE, 0xFF168BFF.toInt(), 0xFF5FF0FF.toInt(), AspectRatioPreset.RATIO_16_9),
+        styledSpectrum("Polar Ring", BarsShapePath.CIRCLE, 0xFFFFFFFF.toInt(), 0xFF90B5FF.toInt(), AspectRatioPreset.RATIO_4_5),
+        styledSpectrum("Rose Spectrum", BarsShapePath.HORIZONTAL_LINE, 0xFFFF7BA9.toInt(), 0xFFFFE1E9.toInt(), AspectRatioPreset.RATIO_9_16)
     )
+
+    private fun styledSpectrum(name: String, path: BarsShapePath, from: Int, to: Int, ratio: AspectRatioPreset): VexoProject {
+        val base = if(path == BarsShapePath.CIRCLE || path == BarsShapePath.SIDED_POLYGON) circularPulse() else monochromeStudio()
+        return base.copy(name = name, canvas = base.canvas.copy(aspectRatio = ratio), exportSettings = base.exportSettings.copy(aspectRatio = ratio),
+            compositions = base.compositions.map { comp -> comp.copy(layers = comp.layers.map { layer ->
+                val cfg = layer.config
+                if (cfg is LayerConfig.Bars) layer.copy(config = cfg.copy(shapePath = path, colorFromArgb = from, colorToArgb = to, segment2 = BarsSegmentType.NONE)) else layer
+            }) })
+    }
 
     fun monochromeStudio(): VexoProject {
         val comp1 = CompositionNode(
