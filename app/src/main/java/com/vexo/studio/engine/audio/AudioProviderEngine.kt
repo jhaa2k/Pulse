@@ -100,7 +100,8 @@ class AudioProviderEngine(initialConfig: AudioProviderConfig) {
         deltaMs: Float,
         streamGeneration: Int,
         isPlaying: Boolean,
-        freezeOnPause: Boolean
+        freezeOnPause: Boolean,
+        sampleLength: Int = samples?.size ?: 0
     ): AudioProviderSnapshot {
         if (streamGeneration != lastStreamGen) {
             lastStreamGen = streamGeneration
@@ -112,18 +113,19 @@ class AudioProviderEngine(initialConfig: AudioProviderConfig) {
         }
 
         val dtMs = deltaMs.coerceIn(1f, 250f)
+        val validLength = if (samples == null) 0 else sampleLength.coerceIn(0, samples.size)
 
-        if (samples == null || !isPlaying || !config.enabled) {
+        if (samples == null || validLength == 0 || !isPlaying || !config.enabled) {
             // Decay gracefully toward zero
             decayEnvelopes(dtMs)
             return snapshot()
         }
 
-        val copyCount = minOf(samples.size, rawSampleWindow.size)
+        val copyCount = minOf(validLength, rawSampleWindow.size)
         if (copyCount < rawSampleWindow.size) {
             rawSampleWindow.fill(0f)
         }
-        val offset = samples.size - copyCount
+        val offset = validLength - copyCount
         for (i in 0 until copyCount) {
             val s = samples[offset + i]
             rawSampleWindow[i] = if (s.isFinite()) s.coerceIn(-1f, 1f) else 0f

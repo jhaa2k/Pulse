@@ -23,7 +23,9 @@ class PcmTapAudioProcessor(
     var playbackClockUsProvider: () -> Long = { 0L }
 
     override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
-        if (inputAudioFormat.encoding == C.ENCODING_PCM_16BIT) {
+        if (inputAudioFormat.encoding == C.ENCODING_PCM_16BIT ||
+            inputAudioFormat.encoding == C.ENCODING_PCM_FLOAT
+        ) {
             ringBuffer.resetGeneration(inputAudioFormat.sampleRate, inputAudioFormat.channelCount)
             return inputAudioFormat
         }
@@ -34,13 +36,22 @@ class PcmTapAudioProcessor(
         val remaining = inputBuffer.remaining()
         if (remaining <= 0) return
 
-        ringBuffer.writePcm16(
-            buffer = inputBuffer,
-            channels = inputAudioFormat.channelCount,
-            sampleRateHz = inputAudioFormat.sampleRate,
-            mediaTimestampUs = playbackClockUsProvider(),
-            channelSelect = channelSelectMode
-        )
+        when (inputAudioFormat.encoding) {
+            C.ENCODING_PCM_FLOAT -> ringBuffer.writePcmFloat(
+                buffer = inputBuffer,
+                channels = inputAudioFormat.channelCount,
+                sampleRateHz = inputAudioFormat.sampleRate,
+                mediaTimestampUs = playbackClockUsProvider(),
+                channelSelect = channelSelectMode
+            )
+            else -> ringBuffer.writePcm16(
+                buffer = inputBuffer,
+                channels = inputAudioFormat.channelCount,
+                sampleRateHz = inputAudioFormat.sampleRate,
+                mediaTimestampUs = playbackClockUsProvider(),
+                channelSelect = channelSelectMode
+            )
+        }
 
         val out = replaceOutputBuffer(remaining)
         out.put(inputBuffer)

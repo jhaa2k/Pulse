@@ -4,6 +4,7 @@ import com.vexo.studio.data.AveeJsonCodec
 import com.vexo.studio.engine.audio.AudioProviderEngine
 import com.vexo.studio.engine.audio.FftProcessor
 import com.vexo.studio.engine.audio.PcmRingBuffer
+import com.vexo.studio.engine.audio.RealtimeFftEngine
 import com.vexo.studio.engine.scene.KeyframeEvaluator
 import com.vexo.studio.engine.scene.ParticleSimulator
 import com.vexo.studio.engine.scene.SceneGraph
@@ -17,10 +18,16 @@ import com.vexo.studio.model.LayerConfig
 import com.vexo.studio.model.LayerNode
 import com.vexo.studio.model.LayerType
 import com.vexo.studio.model.VexoProject
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import kotlin.math.PI
 import kotlin.math.sin
 
@@ -168,5 +175,57 @@ class VexoEngineTests {
         )
         assertEquals(0.5f, KeyframeEvaluator.evaluate(track, 500L, 0f), 0.001f)
         assertEquals(1.0f, KeyframeEvaluator.evaluate(track, 1500L, 0f), 0.001f)
+    }
+
+    @Test
+    fun realtimeFftEngine_streamsVisualizationDataFromPcmBuffers() = runBlocking {
+        val ring = PcmRingBuffer(4096)
+        val sampleRate = 48000
+        val frames = 2048
+
+        // Feed 16-bit PCM stereo buffer (180 Hz bass tone)
+        val pcm16 = ByteBuffer.allocateDirect(frames * 2 * 2).order(ByteOrder.LITTLE_ENDIAN)
+        for (i in 0 until frames) {
+            val s = (sin(2.0 * PI * 180.0 * i / sampleRate) * 24000.0).toInt().toShort()
+            pcm16.putShort(s)
+            pcm16.putShort(s)
+        }
+        pcm16.flip()
+        ring.writePcm16(pcm16, channels = 2, sampleRateHz = sampleRate, mediaTimestampUs = 0L)
+
+        val engine = RealtimeFftEngine(ring, Dispatchers.Default, frameIntervalMs = 8L)
+        val provider = AudioProviderConfig(index = 1, fftSize = 1024, sampleOutCount = 48)
+        engine.start(
+            providersProvider = { listOf(provider) },
+            isPlayingProvider = { true },
+            freezeOnPauseProvider = { false }
+        )
+
+        var snap = engine.primarySnapshotFlow.value
+        var attempts = 0
+        while ((snap == null || snap.rms <= 0.01f) && attempts < 40) {
+            delay(15L)
+            snap = engine.primarySnapshotFlow.value
+            attempts++
+        }
+
+        assertNotNull(snap)
+        val active = snap!!
+        assertEquals(48, active.bars.size)
+        assertTrue(active.rms > 0.1f)
+        assertTrue(active.bass > active.treble)
+
+        // Feed 32-bit float PCM high-frequency tone and verify generation reset + energy shift
+        val pcmFloat = ByteBuffer.allocateDirect(frames * 4).order(ByteOrder.LITTLE_ENDIAN)
+        for (i in 0 until frames) {
+            pcmFloat.putFloat((0.7 * sin(2.0 * PI * 8000.0 * i / sampleRate)).toFloat())
+        }
+        pcmFloat.flip()
+        ring.writePcmFloat(pcmFloat, channels = 1, sampleRateHz = sampleRate, mediaTimestampUs = 40_000L)
+
+        delay(80L)
+        val updated = engine.primarySnapshotFlow.value!!
+        assertTrue(updated.treble > 0.05f)
+        engine.close()
     }
 }

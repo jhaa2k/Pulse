@@ -84,6 +84,7 @@ import com.vexo.studio.model.LayerNode
 import com.vexo.studio.model.LayerType
 import com.vexo.studio.model.MeasureWhat
 import com.vexo.studio.model.MirrorMode
+import com.vexo.studio.model.PauseBehavior
 import com.vexo.studio.model.SampleProviderType
 import com.vexo.studio.model.ShapeKind
 import com.vexo.studio.model.SpawnAreaType
@@ -124,7 +125,9 @@ fun EditorScreen(
                 sceneSnapshot = sceneSnapshot,
                 onTransformGesture = vm::updatePreviewTransform,
                 modifier = Modifier.fillMaxSize(),
-                fillBounds = false
+                fillBounds = false,
+                targetFps = 60,
+                continuousRendering = playback.isPlaying || settings.pauseBehavior != PauseBehavior.FREEZE
             )
             Row(
                 modifier = Modifier
@@ -171,6 +174,8 @@ fun EditorScreen(
                     vm = vm,
                     uiState = uiState,
                     sceneSnapshot = sceneSnapshot,
+                    targetFps = 60,
+                    continuousRendering = playback.isPlaying || settings.pauseBehavior != PauseBehavior.FREEZE,
                     modifier = Modifier.weight(1f).fillMaxWidth()
                 )
                 CompactTransportBar(
@@ -205,6 +210,8 @@ fun EditorScreen(
                 vm = vm,
                 uiState = uiState,
                 sceneSnapshot = sceneSnapshot,
+                targetFps = 60,
+                continuousRendering = playback.isPlaying || settings.pauseBehavior != PauseBehavior.FREEZE,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(220.dp)
@@ -237,6 +244,8 @@ private fun PreviewBlock(
     vm: StudioViewModel,
     uiState: StudioUiState,
     sceneSnapshot: RenderSceneSnapshot?,
+    targetFps: Int,
+    continuousRendering: Boolean,
     modifier: Modifier = Modifier
 ) {
     val palette = LocalVexoPalette.current
@@ -245,7 +254,9 @@ private fun PreviewBlock(
             aspectRatio = uiState.project.canvas.aspectRatio,
             sceneSnapshot = sceneSnapshot,
             onTransformGesture = vm::updatePreviewTransform,
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.fillMaxSize(),
+            targetFps = targetFps,
+            continuousRendering = continuousRendering
         )
         // Compact aspect ratio + preview tools overlay bar
         Row(

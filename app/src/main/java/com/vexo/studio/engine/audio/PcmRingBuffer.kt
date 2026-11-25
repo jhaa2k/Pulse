@@ -101,6 +101,51 @@ class PcmRingBuffer(capacitySamples: Int = 65536) {
         writeIndex.lazySet(pos)
     }
 
+    fun writePcmFloat(
+        buffer: ByteBuffer,
+        channels: Int,
+        sampleRateHz: Int,
+        mediaTimestampUs: Long,
+        channelSelect: Int = 0
+    ) {
+        if (channels <= 0) return
+        if (sampleRateHz != sampleRate || channels != channelCount) {
+            resetGeneration(sampleRateHz, channels)
+        }
+        val dup = buffer.duplicate().order(ByteOrder.LITTLE_ENDIAN)
+        val totalFloats = dup.remaining() / 4
+        val frames = totalFloats / channels
+        if (frames <= 0) return
+
+        var pos = writeIndex.get()
+        if (frames > capacity) {
+            droppedSamples.addAndGet((frames - capacity).toLong())
+        }
+
+        val basePos = dup.position()
+        for (f in 0 until frames) {
+            val sample = when (channelSelect) {
+                1 -> dup.getFloat(basePos + (f * channels) * 4)
+                2 -> {
+                    val ch = if (channels > 1) 1 else 0
+                    dup.getFloat(basePos + (f * channels + ch) * 4)
+                }
+                else -> {
+                    var sum = 0f
+                    for (c in 0 until channels) {
+                        sum += dup.getFloat(basePos + (f * channels + c) * 4)
+                    }
+                    sum / channels
+                }
+            }
+            val safe = if (sample.isFinite()) sample.coerceIn(-1f, 1f) else 0f
+            ring[(pos and mask.toLong()).toInt()] = safe
+            pos++
+        }
+        latestMediaTimestampUs = mediaTimestampUs
+        writeIndex.lazySet(pos)
+    }
+
     fun writeFloatSamples(
         samples: FloatArray,
         sampleRateHz: Int = sampleRate,
@@ -127,27 +172,33 @@ class PcmRingBuffer(capacitySamples: Int = 65536) {
     }
 
     /**
-     * Reads the latest [dest.size] mono samples if generation matches and enough samples exist.
+     * Reads the latest [sampleCount] mono samples into [dest] if generation matches and enough samples exist.
      * Detects ring wraparound drops cleanly without blocking.
      */
-    fun readLatestWindow(dest: FloatArray, expectedGeneration: Int): Boolean {
+    fun readLatestWindow(
+        dest: FloatArray,
+        expectedGeneration: Int,
+        sampleCount: Int = dest.size
+    ): Boolean {
+        val count = sampleCount.coerceIn(0, dest.size)
+        if (count == 0) return false
         if (generation.get() != expectedGeneration) return false
         val currentWrite = writeIndex.get()
         if (currentWrite <= 0L) {
-            dest.fill(0f)
+            dest.fill(0f, 0, count)
             return false
         }
         if (currentWrite - lastReadIndex > capacity) {
             droppedSamples.addAndGet((currentWrite - lastReadIndex - capacity))
         }
         val available = minOf(currentWrite, capacity.toLong()).toInt()
-        val count = dest.size
-        val start = currentWrite - minOf(available, count)
-        val pad = count - minOf(available, count)
+        val take = minOf(available, count)
+        val start = currentWrite - take
+        val pad = count - take
         for (i in 0 until pad) {
             dest[i] = 0f
         }
-        for (i in 0 until minOf(available, count)) {
+        for (i in 0 until take) {
             dest[pad + i] = ring[((start + i) and mask.toLong()).toInt()]
         }
         lastReadIndex = currentWrite

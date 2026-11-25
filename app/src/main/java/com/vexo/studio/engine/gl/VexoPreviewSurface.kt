@@ -3,10 +3,9 @@ package com.vexo.studio.engine.gl
 import android.opengl.GLSurfaceView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTransformGestures
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -21,14 +20,21 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.vexo.studio.model.AspectRatioPreset
+import kotlin.math.min
 
+/**
+ * Jetpack Compose wrapper around [GLSurfaceView] hosting [VexoGlRenderer]
+ * as the OpenGL ES 2.0 rendering target for real-time audio visualization shaders.
+ */
 @Composable
 fun VexoPreviewSurface(
     aspectRatio: AspectRatioPreset,
     sceneSnapshot: RenderSceneSnapshot?,
     onTransformGesture: (zoomDelta: Float, panX: Float, panY: Float) -> Unit,
     modifier: Modifier = Modifier,
-    fillBounds: Boolean = false
+    fillBounds: Boolean = false,
+    targetFps: Int = 60,
+    continuousRendering: Boolean = true
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -37,19 +43,39 @@ fun VexoPreviewSurface(
     val glView = remember {
         GLSurfaceView(context).apply {
             setEGLContextClientVersion(2)
+            setEGLConfigChooser(8, 8, 8, 8, 0, 0)
             preserveEGLContextOnPause = true
             setRenderer(renderer)
-            renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
+            renderMode = if (continuousRendering) {
+                GLSurfaceView.RENDERMODE_CONTINUOUSLY
+            } else {
+                GLSurfaceView.RENDERMODE_WHEN_DIRTY
+            }
+        }
+    }
+
+    LaunchedEffect(continuousRendering, targetFps) {
+        val useContinuous = continuousRendering && targetFps >= 45
+        glView.renderMode = if (useContinuous) {
+            GLSurfaceView.RENDERMODE_CONTINUOUSLY
+        } else {
+            GLSurfaceView.RENDERMODE_WHEN_DIRTY
         }
     }
 
     LaunchedEffect(sceneSnapshot) {
         if (sceneSnapshot != null) {
             renderer.submitSnapshot(sceneSnapshot)
+            if (glView.renderMode == GLSurfaceView.RENDERMODE_WHEN_DIRTY) {
+                glView.requestRender()
+            }
         }
     }
 
     DisposableEffect(lifecycleOwner) {
+        if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+            glView.onResume()
+        }
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_RESUME -> glView.onResume()
@@ -61,12 +87,14 @@ fun VexoPreviewSurface(
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
             glView.queueEvent { renderer.releaseGlResources() }
+            glView.onPause()
         }
     }
 
-    val ratio = aspectRatio.widthRatio.toFloat() / aspectRatio.heightRatio.toFloat()
+    val ratio = (aspectRatio.widthRatio.toFloat() / aspectRatio.heightRatio.toFloat())
+        .coerceIn(0.25f, 4f)
 
-    Box(
+    BoxWithConstraints(
         modifier = modifier
             .background(Color.Black)
             .pointerInput(Unit) {
@@ -76,21 +104,30 @@ fun VexoPreviewSurface(
             },
         contentAlignment = Alignment.Center
     ) {
-        val previewModifier = if (fillBounds) {
+        val surfaceModifier = if (fillBounds) {
             Modifier.fillMaxSize()
-        } else if (ratio >= 1f) {
-            Modifier
-                .fillMaxSize()
-                .aspectRatio(ratio, matchHeightConstraintsFirst = false)
         } else {
-            Modifier
-                .fillMaxHeight()
-                .aspectRatio(ratio, matchHeightConstraintsFirst = true)
+            val availW = maxWidth
+            val availH = maxHeight
+            val fitW = min(availW.value, availH.value * ratio)
+            val fitH = fitW / ratio
+            Modifier.size(
+                width = androidx.compose.ui.unit.Dp(fitW.coerceAtLeast(16f)),
+                height = androidx.compose.ui.unit.Dp(fitH.coerceAtLeast(16f))
+            )
         }
 
         AndroidView(
             factory = { glView },
-            modifier = previewModifier
+            update = { view ->
+                if (sceneSnapshot != null) {
+                    renderer.submitSnapshot(sceneSnapshot)
+                    if (view.renderMode == GLSurfaceView.RENDERMODE_WHEN_DIRTY) {
+                        view.requestRender()
+                    }
+                }
+            },
+            modifier = surfaceModifier
         )
     }
 }

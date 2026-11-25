@@ -9,14 +9,15 @@ import com.vexo.studio.VexoApplication
 import com.vexo.studio.data.AveeJsonCodec
 import com.vexo.studio.data.ProjectHistoryStack
 import com.vexo.studio.data.ProjectSummary
-import com.vexo.studio.engine.audio.AudioProviderEngine
 import com.vexo.studio.engine.audio.AudioProviderSnapshot
+import com.vexo.studio.engine.audio.RealtimeFftEngine
 import com.vexo.studio.engine.gl.RenderSceneSnapshot
 import com.vexo.studio.export.ExportProgress
 import com.vexo.studio.export.ExportService
 import com.vexo.studio.model.AppSettings
 import com.vexo.studio.model.AspectRatioPreset
 import com.vexo.studio.model.AudioProviderConfig
+import com.vexo.studio.model.ChannelMode
 import com.vexo.studio.model.CompositionNode
 import com.vexo.studio.model.LayerCommon
 import com.vexo.studio.model.LayerConfig
@@ -76,10 +77,12 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     private val _sceneSnapshot = MutableStateFlow<RenderSceneSnapshot?>(null)
     val sceneSnapshot: StateFlow<RenderSceneSnapshot?> = _sceneSnapshot.asStateFlow()
 
-    private val providerEngines = mutableMapOf<Int, AudioProviderEngine>()
+    private val realtimeFftEngine = RealtimeFftEngine(app.pcmRingBuffer, Dispatchers.Default, 16L)
+    val audioSnapshots: StateFlow<Map<Int, AudioProviderSnapshot>> = realtimeFftEngine.snapshotsFlow
+    val primaryAudioSnapshot: StateFlow<AudioProviderSnapshot?> = realtimeFftEngine.primarySnapshotFlow
+
     private var totalTimeSec = 0f
     private var playingTimeSec = 0f
-    private var lastTickNs = System.nanoTime()
 
     init {
         val recovered = projectRepo.recoverAutosaveOrDefault()
@@ -94,50 +97,34 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun startAnalysisLoop() {
-        viewModelScope.launch(Dispatchers.Default) {
-            val sampleBuf = FloatArray(8192)
+        viewModelScope.launch(Dispatchers.Main) {
             while (isActive) {
-                val nowNs = System.nanoTime()
-                val deltaSec = ((nowNs - lastTickNs) / 1_000_000_000f).coerceIn(0.004f, 0.05f)
-                lastTickNs = nowNs
-                val deltaMs = deltaSec * 1000f
+                playbackController.pollPosition()
+                delay(32L)
+            }
+        }
 
-                withContext(Dispatchers.Main) {
-                    playbackController.pollPosition()
+        realtimeFftEngine.start(
+            providersProvider = {
+                val ui = _uiState.value
+                val primary = ui.project.audioProviders.firstOrNull { it.index == ui.selectedProviderIndex }
+                    ?: ui.project.audioProviders.firstOrNull()
+                playbackController.pcmTap.channelSelectMode = when (primary?.channelMode) {
+                    ChannelMode.LEFT -> 1
+                    ChannelMode.RIGHT -> 2
+                    else -> 0
                 }
-
+                ui.project.audioProviders
+            },
+            isPlayingProvider = { playbackState.value.isPlaying },
+            freezeOnPauseProvider = { appSettings.value.pauseBehavior == PauseBehavior.FREEZE },
+            onFrameProcessed = { snapshots, deltaSec ->
                 val pState = playbackState.value
                 val ui = _uiState.value
-                val settings = appSettings.value
-                val freeze = settings.pauseBehavior == PauseBehavior.FREEZE
-
                 totalTimeSec += deltaSec
                 if (pState.isPlaying) {
                     playingTimeSec += deltaSec
                 }
-
-                val ring = app.pcmRingBuffer
-                val gen = ring.currentGeneration()
-                val hasFreshSamples = ring.readLatestWindow(sampleBuf, gen)
-
-                val snapshots = HashMap<Int, AudioProviderSnapshot>(ui.project.audioProviders.size)
-                for (prov in ui.project.audioProviders) {
-                    val eng = providerEngines.getOrPut(prov.index) { AudioProviderEngine(prov) }
-                    eng.updateConfig(prov)
-                    val fftLen = AudioProviderEngine.sanitizeFftSize(prov.fftSize)
-                    val slice = if (hasFreshSamples) {
-                        sampleBuf.copyOfRange(sampleBuf.size - fftLen, sampleBuf.size)
-                    } else null
-                    snapshots[prov.index] = eng.process(
-                        samples = slice,
-                        sampleRate = ring.sampleRate,
-                        deltaMs = deltaMs,
-                        streamGeneration = gen,
-                        isPlaying = pState.isPlaying,
-                        freezeOnPause = freeze
-                    )
-                }
-
                 _sceneSnapshot.value = RenderSceneSnapshot(
                     project = ui.project,
                     audioSnapshots = snapshots,
@@ -150,9 +137,13 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                     panY = ui.previewPanY,
                     showSafeArea = ui.project.canvas.showSafeAreaGuides
                 )
-                delay(16L)
             }
-        }
+        )
+    }
+
+    override fun onCleared() {
+        realtimeFftEngine.close()
+        super.onCleared()
     }
 
     fun navigateTo(dest: NavDestination) {
