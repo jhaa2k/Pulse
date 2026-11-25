@@ -1,0 +1,5 @@
+{
+  "name": "VOOC",
+  "description": "Audio visualizer studio with real-time Radix-2 FFT spectrum analysis and track playback.",
+  "requestFramePermissions": []
+}
