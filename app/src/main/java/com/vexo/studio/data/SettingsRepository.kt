@@ -24,6 +24,15 @@ class SettingsRepository(private val context: Context) {
         val PREVIEW_SCALE = floatPreferencesKey("preview_scale")
         val PAUSE_BEHAVIOR = stringPreferencesKey("pause_behavior")
         val SHOW_HELP = booleanPreferencesKey("show_help_hints")
+        val GLASSENABLED = booleanPreferencesKey("glassEnabled")
+        val GLASSOPACITY = floatPreferencesKey("glassOpacity")
+        val BACKDROPBLURDP = floatPreferencesKey("backdropBlurDp")
+        val CORNERRADIUSDP = floatPreferencesKey("cornerRadiusDp")
+        val CONTROLSCALE = floatPreferencesKey("controlScale")
+        val UITEXTSCALE = floatPreferencesKey("uiTextScale")
+        val PREVIEWFPS = intPreferencesKey("previewFps")
+        val PREVIEWSHARE = floatPreferencesKey("previewShare")
+        val PORTRAITOVERLAY = booleanPreferencesKey("portraitOverlay")
     }
 
     val settingsFlow: Flow<AppSettings> = context.vexoDataStore.data.map { prefs ->
@@ -41,7 +50,16 @@ class SettingsRepository(private val context: Context) {
             defaultHopSize = prefs[Keys.DEFAULT_HOP] ?: 256,
             previewScale = prefs[Keys.PREVIEW_SCALE] ?: 1.0f,
             pauseBehavior = pause,
-            showPropertyHelpHints = prefs[Keys.SHOW_HELP] ?: true
+            showPropertyHelpHints = prefs[Keys.SHOW_HELP] ?: true,
+                glassEnabled = prefs[Keys.GLASSENABLED] ?: true,
+                glassOpacity = prefs[Keys.GLASSOPACITY] ?: 0.82f,
+                backdropBlurDp = prefs[Keys.BACKDROPBLURDP] ?: 24f,
+                cornerRadiusDp = prefs[Keys.CORNERRADIUSDP] ?: 12f,
+                controlScale = prefs[Keys.CONTROLSCALE] ?: 1f,
+                uiTextScale = prefs[Keys.UITEXTSCALE] ?: 1f,
+                previewFps = prefs[Keys.PREVIEWFPS] ?: 60,
+                previewShare = prefs[Keys.PREVIEWSHARE] ?: 0.44f,
+                portraitOverlay = prefs[Keys.PORTRAITOVERLAY] ?: true
         )
     }
 
@@ -56,7 +74,16 @@ class SettingsRepository(private val context: Context) {
                 previewScale = prefs[Keys.PREVIEW_SCALE] ?: 1.0f,
                 pauseBehavior = PauseBehavior.entries.firstOrNull { it.name == prefs[Keys.PAUSE_BEHAVIOR] }
                     ?: PauseBehavior.DECAY,
-                showPropertyHelpHints = prefs[Keys.SHOW_HELP] ?: true
+                showPropertyHelpHints = prefs[Keys.SHOW_HELP] ?: true,
+                glassEnabled = prefs[Keys.GLASSENABLED] ?: true,
+                glassOpacity = prefs[Keys.GLASSOPACITY] ?: 0.82f,
+                backdropBlurDp = prefs[Keys.BACKDROPBLURDP] ?: 24f,
+                cornerRadiusDp = prefs[Keys.CORNERRADIUSDP] ?: 12f,
+                controlScale = prefs[Keys.CONTROLSCALE] ?: 1f,
+                uiTextScale = prefs[Keys.UITEXTSCALE] ?: 1f,
+                previewFps = prefs[Keys.PREVIEWFPS] ?: 60,
+                previewShare = prefs[Keys.PREVIEWSHARE] ?: 0.44f,
+                portraitOverlay = prefs[Keys.PORTRAITOVERLAY] ?: true
             )
             val next = transform(current)
             prefs[Keys.THEME_PRESET] = next.themePreset.name
@@ -66,6 +93,15 @@ class SettingsRepository(private val context: Context) {
             prefs[Keys.PREVIEW_SCALE] = next.previewScale
             prefs[Keys.PAUSE_BEHAVIOR] = next.pauseBehavior.name
             prefs[Keys.SHOW_HELP] = next.showPropertyHelpHints
+            prefs[Keys.GLASSENABLED] = next.glassEnabled
+            prefs[Keys.GLASSOPACITY] = next.glassOpacity
+            prefs[Keys.BACKDROPBLURDP] = next.backdropBlurDp
+            prefs[Keys.CORNERRADIUSDP] = next.cornerRadiusDp
+            prefs[Keys.CONTROLSCALE] = next.controlScale
+            prefs[Keys.UITEXTSCALE] = next.uiTextScale
+            prefs[Keys.PREVIEWFPS] = next.previewFps
+            prefs[Keys.PREVIEWSHARE] = next.previewShare
+            prefs[Keys.PORTRAITOVERLAY] = next.portraitOverlay
         }
     }
 }

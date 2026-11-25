@@ -575,7 +575,16 @@ data class AppSettings(
     val defaultHopSize: Int = 256,
     val previewScale: Float = 1.0f,
     val pauseBehavior: PauseBehavior = PauseBehavior.DECAY,
-    val showPropertyHelpHints: Boolean = true
+    val showPropertyHelpHints: Boolean = true,
+    val glassEnabled: Boolean = true,
+    val glassOpacity: Float = 0.82f,
+    val backdropBlurDp: Float = 24f,
+    val cornerRadiusDp: Float = 12f,
+    val controlScale: Float = 1f,
+    val uiTextScale: Float = 1f,
+    val previewFps: Int = 60,
+    val previewShare: Float = 0.44f,
+    val portraitOverlay: Boolean = true
 )
 
 data class PropertyDescriptor(

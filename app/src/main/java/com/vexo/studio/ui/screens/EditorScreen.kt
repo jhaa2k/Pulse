@@ -118,7 +118,9 @@ fun EditorScreen(
     onExportPreset: () -> Unit
 ) {
     val palette = LocalVexoPalette.current
-    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE || configuration.screenWidthDp >= 720
+    val previewShare = settings.previewShare.coerceIn(0.30f, 0.65f)
 
     if (uiState.isFullscreenPreview) {
         Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
@@ -128,7 +130,7 @@ fun EditorScreen(
                 onTransformGesture = vm::updatePreviewTransform,
                 modifier = Modifier.fillMaxSize(),
                 fillBounds = false,
-                targetFps = 60,
+                targetFps = settings.previewFps,
                 continuousRendering = playback.isPlaying || settings.pauseBehavior != PauseBehavior.FREEZE
             )
             Row(
@@ -136,7 +138,7 @@ fun EditorScreen(
                     .align(Alignment.TopEnd)
                     .padding(12.dp)
                     .background(palette.panel.copy(alpha = 0.85f))
-                    .border(1.dp, palette.border),
+                    .border(1.dp, palette.border, palette.shape),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = vm::resetPreviewCamera) {
@@ -176,7 +178,7 @@ fun EditorScreen(
                     vm = vm,
                     uiState = uiState,
                     sceneSnapshot = sceneSnapshot,
-                    targetFps = 60,
+                    targetFps = settings.previewFps,
                     continuousRendering = playback.isPlaying || settings.pauseBehavior != PauseBehavior.FREEZE,
                     modifier = Modifier.weight(1f).fillMaxWidth()
                 )
@@ -206,17 +208,27 @@ fun EditorScreen(
                 modifier = Modifier.weight(0.52f).fillMaxHeight()
             )
         }
+    } else if (settings.portraitOverlay && uiState.project.canvas.aspectRatio.heightRatio > uiState.project.canvas.aspectRatio.widthRatio) {
+        Box(Modifier.fillMaxSize()) {
+            PreviewBlock(vm, uiState, sceneSnapshot, settings.previewFps,
+                playback.isPlaying || settings.pauseBehavior != PauseBehavior.FREEZE,
+                modifier = Modifier.fillMaxSize())
+            Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().fillMaxHeight(1f - previewShare).background(palette.glassPanel, palette.shape).border(1.dp, palette.border, palette.shape)) {
+                CompactTransportBar(playback, { vm.playbackController.togglePlayPause() }, { vm.playbackController.previous() }, { vm.playbackController.next() }, { vm.playbackController.seekTo(it) }, onPickAudio, Modifier.fillMaxWidth())
+                StudioWorkspacePanel(vm, uiState, settings, onPickImage, onImportPreset, onExportPreset, Modifier.weight(1f).fillMaxWidth())
+            }
+        }
     } else {
         Column(modifier = Modifier.fillMaxSize()) {
             PreviewBlock(
                 vm = vm,
                 uiState = uiState,
                 sceneSnapshot = sceneSnapshot,
-                targetFps = 60,
+                targetFps = settings.previewFps,
                 continuousRendering = playback.isPlaying || settings.pauseBehavior != PauseBehavior.FREEZE,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(0.42f)
+                    .weight(previewShare)
                     .heightIn(min = 120.dp)
             )
             CompactTransportBar(
@@ -235,7 +247,7 @@ fun EditorScreen(
                 onPickImage = onPickImage,
                 onImportPreset = onImportPreset,
                 onExportPreset = onExportPreset,
-                modifier = Modifier.weight(0.58f).fillMaxWidth()
+                modifier = Modifier.weight(1f - previewShare).fillMaxWidth()
             )
         }
     }
@@ -265,9 +277,10 @@ private fun PreviewBlock(
         Row(
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .padding(6.dp)
-                .background(palette.bg.copy(alpha = 0.78f))
-                .border(1.dp, palette.border),
+                .padding(start = 78.dp, top = 6.dp, end = 6.dp)
+                .horizontalScroll(rememberScrollState())
+                .background(palette.glassPanel, palette.shape)
+                .border(1.dp, palette.border, palette.shape),
             verticalAlignment = Alignment.CenterVertically
         ) {
             AspectRatioPreset.entries.forEach { ratio ->
@@ -303,8 +316,8 @@ private fun PreviewBlock(
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .padding(6.dp)
-                .background(palette.bg.copy(alpha = 0.78f))
-                .border(1.dp, palette.border)
+                .background(palette.glassPanel, palette.shape)
+                .border(1.dp, palette.border, palette.shape)
         ) {
             IconButton(onClick = vm::undo, enabled = uiState.canUndo, modifier = Modifier.size(28.dp)) {
                 Icon(
@@ -339,8 +352,8 @@ fun CompactTransportBar(
     val palette = LocalVexoPalette.current
     Column(
         modifier = modifier
-            .background(palette.panel)
-            .border(1.dp, palette.border)
+            .background(palette.glassPanel, palette.shape)
+            .border(1.dp, palette.border, palette.shape)
             .padding(horizontal = 10.dp, vertical = 4.dp)
     ) {
         Row(
@@ -372,7 +385,7 @@ fun CompactTransportBar(
                 IconButton(onClick = onPrev, enabled = playback.queue.isNotEmpty(), modifier = Modifier.size(44.dp)) {
                     Icon(Icons.Default.SkipPrevious, "Previous", tint = palette.textPrimary, modifier = Modifier.size(20.dp))
                 }
-                IconButton(onClick = onTogglePlay, enabled = playback.queue.isNotEmpty(), modifier = Modifier.size(48.dp).background(palette.accent)) {
+                IconButton(onClick = onTogglePlay, enabled = playback.queue.isNotEmpty(), modifier = Modifier.size(48.dp).background(palette.accent, palette.shape)) {
                     Icon(
                         if (playback.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                         if (playback.isPlaying) "Pause" else "Play",
@@ -421,13 +434,13 @@ private fun StudioWorkspacePanel(
     modifier: Modifier = Modifier
 ) {
     val palette = LocalVexoPalette.current
-    Column(modifier = modifier.background(palette.bg)) {
+    Column(modifier = modifier.background(palette.glassPanel, palette.shape)) {
         // Editor Tabs
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(palette.panel)
-                .border(1.dp, palette.border)
+                .background(palette.glassPanel, palette.shape)
+                .border(1.dp, palette.border, palette.shape)
         ) {
             StudioTab.entries.forEach { tab ->
                 val active = tab == uiState.studioTab
@@ -487,7 +500,7 @@ private fun LayersTab(
                 val selected = comp.index == activeComp.index
                 Box(
                     modifier = Modifier
-                        .border(1.dp, if (selected) palette.accent else palette.border)
+                        .border(1.dp, if (selected) palette.accent else palette.border, palette.shape)
                         .background(if (selected) palette.accent else palette.panel)
                         .clickable { vm.selectComposition(comp.index) }
                         .padding(horizontal = 10.dp, vertical = 6.dp)
@@ -501,7 +514,7 @@ private fun LayersTab(
             }
             Box(
                 modifier = Modifier
-                    .border(1.dp, palette.border)
+                    .border(1.dp, palette.border, palette.shape)
                     .background(palette.panelElevated)
                     .clickable { vm.addComposition() }
                     .padding(horizontal = 10.dp, vertical = 6.dp)
@@ -534,7 +547,7 @@ private fun LayersTab(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .border(1.dp, if (isSelected) palette.accent else palette.border)
+                        .border(1.dp, if (isSelected) palette.accent else palette.border, palette.shape)
                         .background(if (isSelected) palette.panelElevated else palette.panel)
                         .clickable { vm.selectLayer(layer.common.id) }
                         .padding(horizontal = 8.dp, vertical = 6.dp),
@@ -617,8 +630,8 @@ private fun LayersTab(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .border(1.dp, palette.border)
-                                .background(palette.panel)
+                                .border(1.dp, palette.border, palette.shape)
+                                .background(palette.glassPanel, palette.shape)
                                 .clickable {
                                     vm.addLayer(type)
                                     showAddLayerDialog = false
@@ -722,8 +735,8 @@ private fun PropertiesTab(
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .border(1.dp, if (active) palette.accent else palette.border)
-                        .background(if (active) palette.accent else palette.panel)
+                        .border(1.dp, if (active) palette.accent else palette.border, palette.shape)
+                        .background(if (active) palette.accent else palette.glassPanel, palette.shape)
                         .clickable { editTarget = mode }
                         .padding(vertical = 8.dp),
                     contentAlignment = Alignment.Center
@@ -765,7 +778,7 @@ private fun PropertiesTab(
                 modifier = Modifier
                     .fillMaxWidth()
                     .border(1.dp, palette.danger)
-                    .background(palette.panel)
+                    .background(palette.glassPanel, palette.shape)
                     .padding(10.dp)
             ) {
                 Text("LAYER LOCKED — Unlock in Layers tab to edit.", style = MaterialTheme.typography.labelSmall, color = palette.danger)
@@ -1106,8 +1119,8 @@ private fun AudioProviderEditorSection(
             val active = p.index == provider.index
             Box(
                 modifier = Modifier
-                    .border(1.dp, if (active) palette.accent else palette.border)
-                    .background(if (active) palette.accent else palette.panel)
+                    .border(1.dp, if (active) palette.accent else palette.border, palette.shape)
+                    .background(if (active) palette.accent else palette.glassPanel, palette.shape)
                     .clickable { vm.selectAudioProvider(p.index) }
                     .padding(horizontal = 10.dp, vertical = 6.dp)
             ) {
@@ -1116,7 +1129,7 @@ private fun AudioProviderEditorSection(
         }
         Box(
             modifier = Modifier
-                .border(1.dp, palette.border)
+                .border(1.dp, palette.border, palette.shape)
                 .background(palette.panelElevated)
                 .clickable { vm.addAudioProvider() }
                 .padding(horizontal = 10.dp, vertical = 6.dp)
@@ -1223,8 +1236,8 @@ private fun ExpandableSectionHeader(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .border(1.dp, palette.border)
-            .background(palette.panel)
+            .border(1.dp, palette.border, palette.shape)
+            .background(palette.glassPanel, palette.shape)
     ) {
         Row(
             modifier = Modifier
@@ -1291,8 +1304,8 @@ private fun AssetsTab(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .border(1.dp, if (active) palette.accent else palette.border)
-                        .background(palette.panel)
+                        .border(1.dp, if (active) palette.accent else palette.border, palette.shape)
+                        .background(palette.glassPanel, palette.shape)
                         .clickable {
                             vm.updateLayer(selected.common.id) {
                                 it.copy(config = cfg.copy(sourceType = ImageSourceType.INTERNAL, internalRes = resKey))
@@ -1339,8 +1352,8 @@ private fun PresetsTab(
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .border(1.dp, palette.accent)
-                    .background(palette.panel)
+                    .border(1.dp, palette.accent, palette.shape)
+                    .background(palette.glassPanel, palette.shape)
                     .clickable(onClick = onExportPreset)
                     .padding(vertical = 11.dp),
                 contentAlignment = Alignment.Center
@@ -1354,8 +1367,8 @@ private fun PresetsTab(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .border(1.dp, palette.border)
-                    .background(palette.panel)
+                    .border(1.dp, palette.border, palette.shape)
+                    .background(palette.glassPanel, palette.shape)
                     .clickable { vm.createNewProject(tpl.name, tpl) }
                     .padding(12.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,

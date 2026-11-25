@@ -10,6 +10,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import android.os.SystemClock
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -38,6 +40,8 @@ fun VexoPreviewSurface(
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val gestureCallback = rememberUpdatedState(onTransformGesture)
+    val lastRequest = remember { longArrayOf(0L) }
 
     val renderer = remember { VexoGlRenderer(context, isExportRenderer = false) }
     val glView = remember {
@@ -55,18 +59,18 @@ fun VexoPreviewSurface(
     }
 
     LaunchedEffect(continuousRendering, targetFps) {
-        val useContinuous = continuousRendering && targetFps >= 45
-        glView.renderMode = if (useContinuous) {
-            GLSurfaceView.RENDERMODE_CONTINUOUSLY
-        } else {
-            GLSurfaceView.RENDERMODE_WHEN_DIRTY
-        }
+        glView.renderMode = GLSurfaceView.RENDERMODE_WHEN_DIRTY
+        lastRequest[0] = 0L
+        glView.requestRender()
     }
 
     LaunchedEffect(sceneSnapshot) {
         if (sceneSnapshot != null) {
             renderer.submitSnapshot(sceneSnapshot)
-            if (glView.renderMode == GLSurfaceView.RENDERMODE_WHEN_DIRTY) {
+            val now = SystemClock.elapsedRealtimeNanos()
+            val interval = 1_000_000_000L / targetFps.coerceIn(30, 60)
+            if (now - lastRequest[0] >= interval - 2_000_000L) {
+                lastRequest[0] = now
                 glView.requestRender()
             }
         }
@@ -99,7 +103,7 @@ fun VexoPreviewSurface(
             .background(Color.Black)
             .pointerInput(Unit) {
                 detectTransformGestures { _, pan, zoom, _ ->
-                    onTransformGesture(zoom, pan.x, pan.y)
+                    gestureCallback.value(zoom, pan.x, pan.y)
                 }
             },
         contentAlignment = Alignment.Center
@@ -119,14 +123,7 @@ fun VexoPreviewSurface(
 
         AndroidView(
             factory = { glView },
-            update = { view ->
-                if (sceneSnapshot != null) {
-                    renderer.submitSnapshot(sceneSnapshot)
-                    if (view.renderMode == GLSurfaceView.RENDERMODE_WHEN_DIRTY) {
-                        view.requestRender()
-                    }
-                }
-            },
+            update = {},
             modifier = surfaceModifier
         )
     }

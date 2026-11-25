@@ -38,6 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
@@ -139,8 +140,8 @@ fun StudioSlider(
             }
             Box(
                 modifier = Modifier
-                    .border(1.dp, palette.border)
-                    .background(palette.panel)
+                    .border(1.dp, palette.border, palette.shape)
+                    .background(palette.glassPanel, palette.shape)
                     .clickable { showNumericDialog = true }
                     .padding(horizontal = 8.dp, vertical = 3.dp)
             ) {
@@ -157,7 +158,7 @@ fun StudioSlider(
         Canvas(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(36.dp)
+                .height((36f * palette.controlScale).dp)
                 .onSizeChanged { trackWidthPx = it.width.toFloat().coerceAtLeast(1f) }
                 .pointerInput(min, max, step, defaultValue) {
                     detectTapGestures(
@@ -208,10 +209,11 @@ fun StudioSlider(
             )
             // Sharp rectangular studio handle
             val thumbX = pad + usable * norm
-            val thumbW = 14.dp.toPx()
-            val thumbH = 20.dp.toPx()
-            drawRect(
+            val thumbW = (14f * palette.controlScale).dp.toPx()
+            val thumbH = (20f * palette.controlScale).dp.toPx()
+            drawRoundRect(
                 color = palette.accent,
+                cornerRadius = CornerRadius(palette.radiusDp.coerceIn(0f, 7f).dp.toPx()),
                 topLeft = Offset(thumbX - thumbW * 0.5f, midY - thumbH * 0.5f),
                 size = Size(thumbW, thumbH)
             )
@@ -350,8 +352,8 @@ fun <T> StudioChipSelector(
                 val isSelected = opt == selected
                 Box(
                     modifier = Modifier
-                        .border(1.dp, if (isSelected) palette.accent else palette.border)
-                        .background(if (isSelected) palette.accent else palette.panel)
+                        .border(1.dp, if (isSelected) palette.accent else palette.border, palette.shape)
+                        .background(if (isSelected) palette.accent else palette.glassPanel, palette.shape)
                         .clickable { onSelect(opt) }
                         .padding(horizontal = 10.dp, vertical = 7.dp)
                 ) {

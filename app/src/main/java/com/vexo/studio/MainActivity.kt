@@ -9,6 +9,11 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -139,15 +144,26 @@ private fun VexoRootApp(vm: StudioViewModel) {
         }
     }
 
+    Box(Modifier.fillMaxSize().background(palette.bg)) {
+        if (settings.glassEnabled) {
+            val artwork = playback.trackMeta.artwork
+            if (artwork != null && Build.VERSION.SDK_INT >= 31) {
+                Image(bitmap = artwork.asImageBitmap(), contentDescription = null, contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize().blur(settings.backdropBlurDp.coerceIn(0f, 48f).dp))
+                Box(Modifier.fillMaxSize().background(palette.bg.copy(alpha = 0.68f)))
+            } else {
+                Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(palette.panelElevated, palette.bg))))
+            }
+        }
     Scaffold(
-        containerColor = palette.bg,
+        containerColor = Color.Transparent,
         topBar = {
             if (!uiState.isFullscreenPreview) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(palette.bg)
-                        .border(1.dp, palette.border)
+                        .background(palette.glassPanel, palette.shape)
+                        .border(1.dp, palette.border, palette.shape)
                         .padding(horizontal = 12.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
@@ -174,7 +190,7 @@ private fun VexoRootApp(vm: StudioViewModel) {
                     }
                     Box(
                         modifier = Modifier
-                            .border(1.dp, palette.accent)
+                            .border(1.dp, palette.accent, palette.shape)
                             .clickable { audioPicker.launch(arrayOf("audio/*")) }
                             .padding(horizontal = 10.dp, vertical = 5.dp)
                     ) {
@@ -188,8 +204,8 @@ private fun VexoRootApp(vm: StudioViewModel) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(palette.panel)
-                        .border(1.dp, palette.border)
+                        .background(palette.glassPanel, palette.shape)
+                        .border(1.dp, palette.border, palette.shape)
                         .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
@@ -197,7 +213,7 @@ private fun VexoRootApp(vm: StudioViewModel) {
                         val active = dest == uiState.navDestination
                         Box(
                             modifier = Modifier
-                                .background(if (active) palette.accent else Color.Transparent)
+                                .background(if (active) palette.accent else Color.Transparent, palette.shape)
                                 .clickable { vm.navigateTo(dest) }
                                 .padding(horizontal = 14.dp, vertical = 12.dp),
                             contentAlignment = Alignment.Center
@@ -220,13 +236,13 @@ private fun VexoRootApp(vm: StudioViewModel) {
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            val banner = uiState.statusBanner ?: playback.errorMessage
+            val banner = playback.errorMessage ?: uiState.statusBanner
             if (banner != null) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(palette.panelElevated)
-                        .border(1.dp, palette.accent)
+                        .border(1.dp, palette.accent, palette.shape)
                         .padding(horizontal = 12.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
@@ -276,6 +292,8 @@ private fun VexoRootApp(vm: StudioViewModel) {
                 NavDestination.SETTINGS -> SettingsScreen(vm = vm, settings = settings)
             }
         }
+    }
+
     }
 
     if (showRenameProject) {

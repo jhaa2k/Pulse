@@ -27,8 +27,15 @@ data class VexoPalette(
     val textSecondary: Color,
     val accent: Color,
     val accentOn: Color,
-    val danger: Color
-)
+    val danger: Color,
+    val radiusDp: Float = 12f,
+    val controlScale: Float = 1f,
+    val glassEnabled: Boolean = true,
+    val glassOpacity: Float = 0.82f
+) {
+    val shape get() = RoundedCornerShape(radiusDp.coerceIn(0f, 28f).dp)
+    val glassPanel get() = panel.copy(alpha = if (glassEnabled) glassOpacity.coerceIn(0.65f, 1f) else 1f)
+}
 
 val LocalVexoPalette = staticCompositionLocalOf {
     VexoPalette(
@@ -50,7 +57,7 @@ fun VexoTheme(
     content: @Composable () -> Unit
 ) {
     val customAccent = Color(settings.customAccentArgb)
-    val palette = when (settings.themePreset) {
+    val basePalette = when (settings.themePreset) {
         ThemePreset.MONOCHROME_DARK -> VexoPalette(
             bg = Color(0xFF0B0C0E),
             panel = Color(0xFF121316),
@@ -97,6 +104,7 @@ fun VexoTheme(
         )
     }
 
+    val palette = basePalette.copy(radiusDp = settings.cornerRadiusDp, controlScale = settings.controlScale.coerceIn(0.85f, 1.25f), glassEnabled = settings.glassEnabled, glassOpacity = settings.glassOpacity)
     val isLight = settings.themePreset == ThemePreset.CLEAN_LIGHT
     val colorScheme = if (isLight) {
         lightColorScheme(
@@ -127,44 +135,44 @@ fun VexoTheme(
     }
 
     val sharpShapes = Shapes(
-        extraSmall = RoundedCornerShape(0.dp),
-        small = RoundedCornerShape(0.dp),
-        medium = RoundedCornerShape(0.dp),
-        large = RoundedCornerShape(0.dp),
-        extraLarge = RoundedCornerShape(0.dp)
+        extraSmall = palette.shape,
+        small = palette.shape,
+        medium = palette.shape,
+        large = palette.shape,
+        extraLarge = palette.shape
     )
 
     val typography = Typography(
         titleMedium = TextStyle(
             fontFamily = FontFamily.SansSerif,
             fontWeight = FontWeight.SemiBold,
-            fontSize = 15.sp,
+            fontSize = (15 * settings.uiTextScale.coerceIn(0.9f, 1.25f)).sp,
             letterSpacing = 0.2.sp
         ),
         labelMedium = TextStyle(
             fontFamily = FontFamily.SansSerif,
             fontWeight = FontWeight.SemiBold,
-            fontSize = 11.sp,
+            fontSize = (11 * settings.uiTextScale.coerceIn(0.9f, 1.25f)).sp,
             letterSpacing = 1.1.sp
         ),
         labelSmall = TextStyle(
             fontFamily = FontFamily.SansSerif,
             fontWeight = FontWeight.Medium,
-            fontSize = 11.sp,
+            fontSize = (11 * settings.uiTextScale.coerceIn(0.9f, 1.25f)).sp,
             letterSpacing = 0.45.sp,
             fontFeatureSettings = "tnum"
         ),
         bodyMedium = TextStyle(
             fontFamily = FontFamily.SansSerif,
             fontWeight = FontWeight.Normal,
-            fontSize = 14.sp,
-            lineHeight = 20.sp
+            fontSize = (14 * settings.uiTextScale.coerceIn(0.9f, 1.25f)).sp,
+            lineHeight = (20 * settings.uiTextScale.coerceIn(0.9f, 1.25f)).sp
         ),
         bodySmall = TextStyle(
             fontFamily = FontFamily.SansSerif,
             fontWeight = FontWeight.Normal,
-            fontSize = 12.sp,
-            lineHeight = 17.sp
+            fontSize = (12 * settings.uiTextScale.coerceIn(0.9f, 1.25f)).sp,
+            lineHeight = (17 * settings.uiTextScale.coerceIn(0.9f, 1.25f)).sp
         )
     )
 
