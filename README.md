@@ -24,3 +24,7 @@ A compact, modern native Android audio visualizer and layered video creation stu
 ```bash
 ./gradlew testDebugUnitTest assembleDebug
 ```
+
+### Debug APK
+
+The Android CI workflow runs on `main` and `engine/**` pushes. Open the successful run in [Actions](https://github.com/jhaa2k/Pulse/actions), then download the `vexo-debug-apk` artifact and extract `app-debug.apk`. For a local build use `./gradlew assembleDebug` (JDK 21 and Android SDK 36); the APK is generated at `app/build/outputs/apk/debug/app-debug.apk`.
