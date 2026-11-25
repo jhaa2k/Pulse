@@ -106,6 +106,8 @@ class VexoGlRenderer(
         position(0)
     }
 
+    private val quadUvHorizontalBuf = allocFloatBuffer(8).apply { put(floatArrayOf(1f, 1f, 0f, 1f, 1f, 0f, 0f, 0f)); position(0) }
+    private val quadUvBothBuf = allocFloatBuffer(8).apply { put(floatArrayOf(1f, 0f, 0f, 0f, 1f, 1f, 0f, 1f)); position(0) }
     private var vertexScratch = FloatArray(512 * 12)
     private var colorScratch = FloatArray(512 * 24)
     private var vertexBuf: FloatBuffer = allocFloatBuffer(vertexScratch.size)
@@ -516,7 +518,7 @@ class VexoGlRenderer(
         }
         val left = (w - drawW) * 0.5f
         val top = (h - drawH) * 0.5f
-        drawTexturedQuad(shader, left, top, left + drawW, top + drawH, flipV = false)
+        drawTexturedQuad(shader, left, top, left + drawW, top + drawH, flipV = cfg.flipV, flipU = cfg.flipU)
     }
 
     private fun drawTextLayer(
@@ -937,12 +939,13 @@ class VexoGlRenderer(
         top: Float,
         right: Float,
         bottom: Float,
-        flipV: Boolean
+        flipV: Boolean,
+        flipU: Boolean = false
     ) {
         quadPosBuf.position(0)
         quadPosBuf.put(floatArrayOf(left, top, right, top, left, bottom, right, bottom))
         quadPosBuf.position(0)
-        val uvs = if (flipV) quadUvFlipBuf else quadUvBuf
+        val uvs = when { flipU && flipV -> quadUvBothBuf; flipU -> quadUvHorizontalBuf; flipV -> quadUvFlipBuf; else -> quadUvBuf }
         uvs.position(0)
 
         val aPos = shader.attrib("aPos")

@@ -825,6 +825,9 @@ private fun PropertiesTab(
             RegisteredSlider("posY", layer.common.posY, settings.showPropertyHelpHints, { v ->
                 beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(common = it.common.copy(posY = v)) }
             }, ::endDrag)
+            StudioToggleRow("Uniform Scale", layer.common.scaleIsUniform) { v -> vm.updateLayer(layer.common.id) { it.copy(common = it.common.copy(scaleIsUniform = v)) } }
+            StudioSlider("Pivot X", layer.common.alignmentX, 0f, 1f, 0.5f, "", 0.01f, onValueChange = { v -> beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(common = it.common.copy(alignmentX = v)) } }, onCommit = ::endDrag)
+            StudioSlider("Pivot Y", layer.common.alignmentY, 0f, 1f, 0.5f, "", 0.01f, onValueChange = { v -> beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(common = it.common.copy(alignmentY = v)) } }, onCommit = ::endDrag)
             RegisteredSlider("scaleX", layer.common.scaleX, settings.showPropertyHelpHints, { v ->
                 beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(common = it.common.copy(scaleX = v)) }
             }, ::endDrag)
@@ -844,10 +847,7 @@ private fun PropertiesTab(
         ) {
             StudioChipSelector(
                 label = "Measure Scale",
-                options = listOf(
-                    MeasureWhat.NOTHING, MeasureWhat.BEAT, MeasureWhat.BASS, MeasureWhat.MID,
-                    MeasureWhat.TREBLE, MeasureWhat.RMS, MeasureWhat.BEAT_TRIGGER_ANIM
-                ),
+                options = MeasureWhat.entries.filter { it != MeasureWhat.KEYFRAME },
                 selected = layer.common.measureScale.measureWhat,
                 optionLabel = { it.label },
                 onSelect = { mw ->
@@ -857,23 +857,21 @@ private fun PropertiesTab(
                 }
             )
             StudioSlider(
-                label = "Scale Amount",
+                label = "Scale Amount X",
                 value = layer.common.measureScale.amountA,
                 min = -1f, max = 2f, defaultValue = 0f, step = 0.02f,
                 onValueChange = { v ->
                     beginDrag()
                     vm.updateLayer(layer.common.id, false) {
-                        it.copy(common = it.common.copy(measureScale = it.common.measureScale.copy(amountA = v, amountB = v)))
+                        it.copy(common = it.common.copy(measureScale = it.common.measureScale.copy(amountA = v)))
                     }
                 },
                 onCommit = ::endDrag
             )
+            StudioSlider("Scale Amount Y", layer.common.measureScale.amountB, -1f, 2f, 0f, "", 0.01f, onValueChange = { v -> beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(common = it.common.copy(measureScale = it.common.measureScale.copy(amountB = v))) } }, onCommit = ::endDrag)
             StudioChipSelector(
                 label = "Measure Position",
-                options = listOf(
-                    MeasureWhat.NOTHING, MeasureWhat.BEAT_CAM_SHAKE_MORE, MeasureWhat.BEAT_RANDOM_SHAKE,
-                    MeasureWhat.CONSTANT_SHAKE, MeasureWhat.BASS, MeasureWhat.TRACK_POSITION
-                ),
+                options = MeasureWhat.entries.filter { it != MeasureWhat.KEYFRAME },
                 selected = layer.common.measurePos.measureWhat,
                 optionLabel = { it.label },
                 onSelect = { mw ->
@@ -883,23 +881,21 @@ private fun PropertiesTab(
                 }
             )
             StudioSlider(
-                label = "Pos Amount",
+                label = "Position Amount X",
                 value = layer.common.measurePos.amountA,
                 min = 0f, max = 0.5f, defaultValue = 0f, step = 0.01f,
                 onValueChange = { v ->
                     beginDrag()
                     vm.updateLayer(layer.common.id, false) {
-                        it.copy(common = it.common.copy(measurePos = it.common.measurePos.copy(amountA = v, amountB = v)))
+                        it.copy(common = it.common.copy(measurePos = it.common.measurePos.copy(amountA = v)))
                     }
                 },
                 onCommit = ::endDrag
             )
+            StudioSlider("Position Amount Y", layer.common.measurePos.amountB, -0.5f, 0.5f, 0f, "", 0.01f, onValueChange = { v -> beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(common = it.common.copy(measurePos = it.common.measurePos.copy(amountB = v))) } }, onCommit = ::endDrag)
             StudioChipSelector(
                 label = "Measure Rotation",
-                options = listOf(
-                    MeasureWhat.NOTHING, MeasureWhat.TOTAL_TIME, MeasureWhat.TOTAL_TIME_WHEN_PLAYING,
-                    MeasureWhat.BEAT_CAM_SHAKE_ROT_MORE, MeasureWhat.BEAT
-                ),
+                options = MeasureWhat.entries.filter { it != MeasureWhat.KEYFRAME },
                 selected = layer.common.measureRot.measureWhat,
                 optionLabel = { it.label },
                 onSelect = { mw ->
@@ -1018,6 +1014,8 @@ private fun PropertiesTab(
                     StudioToggleRow("Crop To Fit", cfg.keepAspectRatioAndCropToFit) { k ->
                         vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(keepAspectRatioAndCropToFit = k)) }
                     }
+                    StudioToggleRow("Flip Horizontal", cfg.flipU) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(flipU = v)) } }
+                    StudioToggleRow("Flip Vertical", cfg.flipV) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(flipV = v)) } }
                     StudioToggleRow("Color Key Chroma", cfg.colorKeyEnabled) { k ->
                         vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(colorKeyEnabled = k)) }
                     }
@@ -1082,6 +1080,7 @@ private fun PropertiesTab(
                     StudioColorPickerRow("Stroke Color", cfg.strokeColorArgb) { col ->
                         vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(strokeColorArgb = col)) }
                     }
+                    StudioColorPickerRow("Gradient End", cfg.gradientEndArgb) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(gradientEndArgb = v)) } }
                     StudioColorPickerRow("Fill Color", cfg.fillColorArgb) { col ->
                         vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(fillColorArgb = col)) }
                     }

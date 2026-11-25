@@ -341,6 +341,7 @@ object AveeJsonCodec {
             aveeId = obj.propInt("_id", 0),
             name = obj["_name"]?.primitiveString() ?: defaultName,
             visible = obj.propBool("visible", true),
+            locked = obj.propBool("vexoLocked", false),
             blendMode = BlendMode.fromAvee(obj.propString("blendMode", "PreMulAlpha")),
             posX = px,
             posY = py,
@@ -383,6 +384,7 @@ object AveeJsonCodec {
                 shape = ImageShape.fromAvee(obj.propString("Shape", "None")),
                 keepAspectRatio = obj.propBool("keepAspectRatio", false),
                 keepAspectRatioAndCropToFit = obj.propBool("keepAspectRatioAndCropToFit", false),
+                flipU = obj.propBool("flipU", false), flipV = obj.propBool("flipV", false),
                 saturation = parseMvarfValue(obj.propString("saturation", "Constant 1 1"), 1f),
                 colorKeyEnabled = obj.propBool("colorKeyEnabled", false),
                 colorKeyArgb = obj.propInt("colorKey", -16711936),
@@ -612,6 +614,7 @@ object AveeJsonCodec {
         put("v", originalType)
         put("ver", "10")
         put("visible", propObj(if (c.visible) 1 else 0))
+        put("vexoLocked", propObj(if (c.locked) 1 else 0))
         put("blendMode", propObj(c.blendMode.aveeName))
         put("position", propObj("${c.posX} ${c.posY}"))
         put("alignmentPosition", propObj("${c.alignmentX} ${c.alignmentY}"))
@@ -662,6 +665,7 @@ object AveeJsonCodec {
                 }
                 put("customImage", propObj(imgRef))
                 put("vexoSourceType", propObj(cfg.sourceType.name))
+                put("flipU", propObj(if (cfg.flipU) 1 else 0)); put("flipV", propObj(if (cfg.flipV) 1 else 0))
                 put("vexoTint", propObj(cfg.colorArgb)); put("vexoTintTo", propObj(cfg.colorToArgb))
                 put("MeasureColorBlend", encodeMeasure(cfg.measureColorBlend))
                 put("Shape", propObj(cfg.shape.aveeName))
