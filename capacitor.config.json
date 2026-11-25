@@ -1,0 +1,8 @@
+{
+  "appId": "com.vooc.visualizer",
+  "appName": "VOOC",
+  "webDir": "dist",
+  "android": {
+    "backgroundColor": "#10120E"
+  }
+}
