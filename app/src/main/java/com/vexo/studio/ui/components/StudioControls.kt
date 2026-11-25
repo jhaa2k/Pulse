@@ -33,6 +33,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -74,6 +75,8 @@ fun StudioSlider(
     onCommit: () -> Unit = {}
 ) {
     val palette = LocalVexoPalette.current
+    val currentChange by rememberUpdatedState(onValueChange)
+    val currentCommit by rememberUpdatedState(onCommit)
     var trackWidthPx by remember { mutableStateOf(1f) }
     var showNumericDialog by remember { mutableStateOf(false) }
     var showHelpDialog by remember { mutableStateOf(false) }
@@ -104,8 +107,8 @@ fun StudioSlider(
                     .weight(1f)
                     .pointerInput(defaultValue) {
                         detectTapGestures(onDoubleTap = {
-                            onValueChange(defaultValue)
-                            onCommit()
+                            currentChange(defaultValue)
+                            currentCommit()
                         })
                     }
             ) {
@@ -154,29 +157,29 @@ fun StudioSlider(
         Canvas(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(26.dp)
+                .height(36.dp)
                 .onSizeChanged { trackWidthPx = it.width.toFloat().coerceAtLeast(1f) }
                 .pointerInput(min, max, step, defaultValue) {
                     detectTapGestures(
                         onDoubleTap = {
-                            onValueChange(defaultValue)
-                            onCommit()
+                            currentChange(defaultValue)
+                            currentCommit()
                         },
                         onTap = { offset ->
-                            val ratio = (offset.x / trackWidthPx).coerceIn(0f, 1f)
-                            onValueChange(quantize(min + ratio * range))
-                            onCommit()
+                            val ratio = ((offset.x - 7.dp.toPx()) / (trackWidthPx - 14.dp.toPx()).coerceAtLeast(1f)).coerceIn(0f, 1f)
+                            currentChange(quantize(min + ratio * range))
+                            currentCommit()
                         }
                     )
                 }
                 .pointerInput(min, max, step) {
                     detectDragGestures(
-                        onDragEnd = { onCommit() },
-                        onDragCancel = { onCommit() }
+                        onDragEnd = { currentCommit() },
+                        onDragCancel = { currentCommit() }
                     ) { change, _ ->
                         change.consume()
-                        val ratio = (change.position.x / trackWidthPx).coerceIn(0f, 1f)
-                        onValueChange(quantize(min + ratio * range))
+                        val ratio = ((change.position.x - 7.dp.toPx()) / (trackWidthPx - 14.dp.toPx()).coerceAtLeast(1f)).coerceIn(0f, 1f)
+                        currentChange(quantize(min + ratio * range))
                     }
                 }
         ) {
@@ -205,8 +208,8 @@ fun StudioSlider(
             )
             // Sharp rectangular studio handle
             val thumbX = pad + usable * norm
-            val thumbW = 10.dp.toPx()
-            val thumbH = 16.dp.toPx()
+            val thumbW = 14.dp.toPx()
+            val thumbH = 20.dp.toPx()
             drawRect(
                 color = palette.accent,
                 topLeft = Offset(thumbX - thumbW * 0.5f, midY - thumbH * 0.5f),

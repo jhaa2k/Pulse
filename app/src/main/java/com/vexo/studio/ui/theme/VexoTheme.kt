@@ -32,12 +32,12 @@ data class VexoPalette(
 
 val LocalVexoPalette = staticCompositionLocalOf {
     VexoPalette(
-        bg = Color(0xFF000000),
+        bg = Color(0xFF0B0C0E),
         panel = Color(0xFF121316),
         panelElevated = Color(0xFF1B1D21),
         border = Color(0xFF2B2E35),
         textPrimary = Color(0xFFF5F6F8),
-        textSecondary = Color(0xFF8E939D),
+        textSecondary = Color(0xFFA5A9B2),
         accent = Color(0xFFFFFFFF),
         accentOn = Color(0xFF000000),
         danger = Color(0xFFEF4444)
@@ -52,12 +52,12 @@ fun VexoTheme(
     val customAccent = Color(settings.customAccentArgb)
     val palette = when (settings.themePreset) {
         ThemePreset.MONOCHROME_DARK -> VexoPalette(
-            bg = Color(0xFF000000),
+            bg = Color(0xFF0B0C0E),
             panel = Color(0xFF121316),
             panelElevated = Color(0xFF1C1E22),
             border = Color(0xFF2C2F36),
             textPrimary = Color(0xFFF5F6F8),
-            textSecondary = Color(0xFF8E939D),
+            textSecondary = Color(0xFFA5A9B2),
             accent = Color(0xFFFFFFFF),
             accentOn = Color(0xFF000000),
             danger = Color(0xFFEF4444)
@@ -129,9 +129,9 @@ fun VexoTheme(
     val sharpShapes = Shapes(
         extraSmall = RoundedCornerShape(0.dp),
         small = RoundedCornerShape(0.dp),
-        medium = RoundedCornerShape(2.dp),
-        large = RoundedCornerShape(2.dp),
-        extraLarge = RoundedCornerShape(2.dp)
+        medium = RoundedCornerShape(0.dp),
+        large = RoundedCornerShape(0.dp),
+        extraLarge = RoundedCornerShape(0.dp)
     )
 
     val typography = Typography(
@@ -150,19 +150,21 @@ fun VexoTheme(
         labelSmall = TextStyle(
             fontFamily = FontFamily.SansSerif,
             fontWeight = FontWeight.Medium,
-            fontSize = 10.sp,
-            letterSpacing = 0.9.sp,
+            fontSize = 11.sp,
+            letterSpacing = 0.45.sp,
             fontFeatureSettings = "tnum"
         ),
         bodyMedium = TextStyle(
             fontFamily = FontFamily.SansSerif,
             fontWeight = FontWeight.Normal,
-            fontSize = 13.sp
+            fontSize = 14.sp,
+            lineHeight = 20.sp
         ),
         bodySmall = TextStyle(
             fontFamily = FontFamily.SansSerif,
             fontWeight = FontWeight.Normal,
-            fontSize = 11.sp
+            fontSize = 12.sp,
+            lineHeight = 17.sp
         )
     )
 

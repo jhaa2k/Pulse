@@ -61,11 +61,13 @@ class VexoPlaybackController(
     val state: StateFlow<PlaybackUiState> = _state.asStateFlow()
 
     private var artworkCounter = 0
+    // ExoPlayer access is confined to its application looper. The audio sink reads this snapshot.
+    @Volatile private var playbackPositionUs: Long = 0L
 
     val player: ExoPlayer = buildPlayer()
 
     init {
-        pcmTap.playbackClockUsProvider = { player.currentPosition * 1000L }
+        pcmTap.playbackClockUsProvider = { playbackPositionUs }
     }
 
     private fun buildPlayer(): ExoPlayer {
@@ -116,6 +118,7 @@ class VexoPlaybackController(
                         if (reason == Player.DISCONTINUITY_REASON_SEEK) {
                             ringBuffer.resetGeneration()
                         }
+                        playbackPositionUs = newPosition.positionMs.coerceAtLeast(0L) * 1000L
                         _state.value = _state.value.copy(positionMs = newPosition.positionMs.coerceAtLeast(0L))
                     }
 
@@ -200,9 +203,11 @@ class VexoPlaybackController(
 
     fun togglePlayPause() {
         if (_state.value.queue.isEmpty()) return
-        if (player.isPlaying) {
+        if (player.playWhenReady && player.playbackState != Player.STATE_ENDED && player.playbackState != Player.STATE_IDLE) {
             player.pause()
         } else {
+            clearError()
+            if (player.playbackState == Player.STATE_ENDED) player.seekToDefaultPosition()
             if (player.playbackState == Player.STATE_IDLE) player.prepare()
             player.play()
             startForegroundService()
@@ -211,8 +216,11 @@ class VexoPlaybackController(
 
     fun seekTo(positionMs: Long) {
         ringBuffer.resetGeneration()
-        player.seekTo(positionMs.coerceAtLeast(0L))
-        _state.value = _state.value.copy(positionMs = positionMs.coerceAtLeast(0L))
+        val duration = player.duration
+        val target = if (duration > 0L) positionMs.coerceIn(0L, duration) else positionMs.coerceAtLeast(0L)
+        playbackPositionUs = target * 1000L
+        player.seekTo(target)
+        _state.value = _state.value.copy(positionMs = target)
     }
 
     fun restartTrack() = seekTo(0L)
@@ -277,6 +285,7 @@ class VexoPlaybackController(
 
     fun pollPosition(): Long {
         val pos = player.currentPosition.coerceAtLeast(0L)
+        playbackPositionUs = pos * 1000L
         val dur = player.duration.coerceAtLeast(0L)
         val cur = _state.value
         if (cur.positionMs != pos || cur.durationMs != dur) {

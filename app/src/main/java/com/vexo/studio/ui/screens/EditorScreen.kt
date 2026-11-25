@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -57,6 +58,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -214,7 +216,8 @@ fun EditorScreen(
                 continuousRendering = playback.isPlaying || settings.pauseBehavior != PauseBehavior.FREEZE,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(220.dp)
+                    .weight(0.42f)
+                    .heightIn(min = 120.dp)
             )
             CompactTransportBar(
                 playback = playback,
@@ -232,7 +235,7 @@ fun EditorScreen(
                 onPickImage = onPickImage,
                 onImportPreset = onImportPreset,
                 onExportPreset = onExportPreset,
-                modifier = Modifier.weight(1f).fillMaxWidth()
+                modifier = Modifier.weight(0.58f).fillMaxWidth()
             )
         }
     }
@@ -347,7 +350,7 @@ fun CompactTransportBar(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = playback.trackMeta.title,
+                    text = if (playback.queue.isEmpty()) "Import music to begin" else playback.trackMeta.title,
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = palette.textPrimary,
@@ -355,7 +358,7 @@ fun CompactTransportBar(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = "${playback.trackMeta.artist} · ${formatDuration(playback.positionMs)} / ${formatDuration(playback.durationMs)}",
+                    text = if (playback.queue.isEmpty()) "Choose an audio file" else "${playback.trackMeta.artist} · ${formatDuration(playback.positionMs)} / ${formatDuration(playback.durationMs)}",
                     style = MaterialTheme.typography.labelSmall,
                     color = palette.textSecondary,
                     maxLines = 1,
@@ -363,29 +366,36 @@ fun CompactTransportBar(
                 )
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onPickAudio, modifier = Modifier.size(34.dp)) {
+                IconButton(onClick = onPickAudio, modifier = Modifier.size(44.dp)) {
                     Icon(Icons.Default.FolderOpen, "Import audio", tint = palette.accent, modifier = Modifier.size(18.dp))
                 }
-                IconButton(onClick = onPrev, modifier = Modifier.size(34.dp)) {
+                IconButton(onClick = onPrev, enabled = playback.queue.isNotEmpty(), modifier = Modifier.size(44.dp)) {
                     Icon(Icons.Default.SkipPrevious, "Previous", tint = palette.textPrimary, modifier = Modifier.size(20.dp))
                 }
-                IconButton(onClick = onTogglePlay, modifier = Modifier.size(36.dp)) {
+                IconButton(onClick = onTogglePlay, enabled = playback.queue.isNotEmpty(), modifier = Modifier.size(48.dp).background(palette.accent)) {
                     Icon(
                         if (playback.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                        "Play/Pause",
-                        tint = palette.accent,
+                        if (playback.isPlaying) "Pause" else "Play",
+                        tint = palette.accentOn,
                         modifier = Modifier.size(24.dp)
                     )
                 }
-                IconButton(onClick = onNext, modifier = Modifier.size(34.dp)) {
+                IconButton(onClick = onNext, enabled = playback.queue.isNotEmpty(), modifier = Modifier.size(44.dp)) {
                     Icon(Icons.Default.SkipNext, "Next", tint = palette.textPrimary, modifier = Modifier.size(20.dp))
                 }
             }
         }
         val maxDur = playback.durationMs.coerceAtLeast(1L).toFloat()
+        var scrubPosition by remember { mutableStateOf<Float?>(null) }
+        LaunchedEffect(playback.currentIndex) { scrubPosition = null }
         Slider(
-            value = playback.positionMs.toFloat().coerceIn(0f, maxDur),
-            onValueChange = { onSeek(it.toLong()) },
+            value = (scrubPosition ?: playback.positionMs.toFloat()).coerceIn(0f, maxDur),
+            enabled = playback.durationMs > 0L,
+            onValueChange = { scrubPosition = it },
+            onValueChangeFinished = {
+                scrubPosition?.let { onSeek(it.toLong()) }
+                scrubPosition = null
+            },
             valueRange = 0f..maxDur,
             colors = SliderDefaults.colors(
                 thumbColor = palette.accent,
@@ -394,7 +404,7 @@ fun CompactTransportBar(
             ),
             modifier = Modifier
                 .fillMaxWidth()
-                .height(22.dp)
+                .height(32.dp)
         )
     }
 }
