@@ -11,6 +11,7 @@ import com.vexo.studio.data.NativeVexCodec
 import com.vexo.studio.data.VexArchive
 import com.vexo.studio.data.ProjectHistoryStack
 import com.vexo.studio.data.ProjectSummary
+import kotlinx.coroutines.channels.Channel
 import com.vexo.studio.engine.audio.AudioProviderSnapshot
 import com.vexo.studio.engine.audio.RealtimeFftEngine
 import com.vexo.studio.engine.gl.RenderSceneSnapshot
@@ -67,6 +68,19 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     private val projectRepo = app.projectRepository
     private val settingsRepo = app.settingsRepository
     private val history = ProjectHistoryStack(50)
+    private val pendingSaves = Channel<VexoProject>(Channel.UNLIMITED)
+    private val saveLock = Any()
+    private val latestSave = java.util.concurrent.ConcurrentHashMap<String, VexoProject>()
+
+    private fun enqueueSave(project: VexoProject) {
+        latestSave[project.id] = project
+        pendingSaves.trySend(project)
+    }
+
+    private fun updateProjectSummary(project: VexoProject): List<ProjectSummary> {
+        val entry = ProjectSummary(project.id, project.name, System.currentTimeMillis(), project.canvas.aspectRatio, project.compositions.sumOf { it.layers.size })
+        return listOf(entry) + _uiState.value.projects.filterNot { it.id == project.id }
+    }
 
     val playbackState: StateFlow<PlaybackUiState> = playbackController.state
     val exportState: StateFlow<ExportProgress> = ExportService.exportState
@@ -96,6 +110,14 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
             projects = projectRepo.listProjects()
         )
         playbackController.loadProjectAudio(recovered.audioUri)
+        viewModelScope.launch(Dispatchers.IO) {
+            for (project in pendingSaves) {
+                if (latestSave[project.id] !== project) continue
+                runCatching { synchronized(saveLock) { if (latestSave[project.id] === project) projectRepo.saveProject(project) } }
+                    .onFailure { err -> withContext(Dispatchers.Main) { _uiState.value = _uiState.value.copy(statusBanner = "Save failed: ${err.message}") } }
+                latestSave.remove(project.id, project)
+            }
+        }
         startAnalysisLoop()
     }
 
@@ -305,11 +327,11 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         val cur = _uiState.value.project
         if (previousProject == cur || previousProject.id != cur.id) return
         history.pushState(previousProject)
-        projectRepo.saveProject(cur)
+        enqueueSave(cur)
         _uiState.value = _uiState.value.copy(
             canUndo = history.canUndo,
             canRedo = history.canRedo,
-            projects = projectRepo.listProjects()
+            projects = updateProjectSummary(cur)
         )
     }
 
@@ -334,7 +356,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
 
     fun undo() {
         val prev = history.undo(_uiState.value.project) ?: return
-        projectRepo.saveProject(prev)
+        enqueueSave(prev)
         val comp = prev.compositions.firstOrNull { it.index == _uiState.value.selectedCompositionIndex } ?: prev.compositions.first()
         _uiState.value = _uiState.value.copy(
             project = prev,
@@ -343,13 +365,13 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
             selectedProviderIndex = prev.audioProviders.firstOrNull { it.index == _uiState.value.selectedProviderIndex }?.index ?: prev.audioProviders.first().index,
             canUndo = history.canUndo,
             canRedo = history.canRedo,
-            projects = projectRepo.listProjects()
+            projects = updateProjectSummary(prev)
         )
     }
 
     fun redo() {
         val next = history.redo(_uiState.value.project) ?: return
-        projectRepo.saveProject(next)
+        enqueueSave(next)
         val comp = next.compositions.firstOrNull { it.index == _uiState.value.selectedCompositionIndex } ?: next.compositions.first()
         _uiState.value = _uiState.value.copy(
             project = next,
@@ -358,7 +380,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
             selectedProviderIndex = next.audioProviders.firstOrNull { it.index == _uiState.value.selectedProviderIndex }?.index ?: next.audioProviders.first().index,
             canUndo = history.canUndo,
             canRedo = history.canRedo,
-            projects = projectRepo.listProjects()
+            projects = updateProjectSummary(next)
         )
     }
 
@@ -369,7 +391,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
             updatedAtMs = System.currentTimeMillis()
         )
         history.clear()
-        projectRepo.saveProject(fresh)
+        synchronized(saveLock) { projectRepo.saveProject(fresh) }
         val comp = fresh.compositions.firstOrNull { it.index == 1 } ?: fresh.compositions.first()
         _uiState.value = _uiState.value.copy(
             project = fresh,
@@ -385,7 +407,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun openProject(id: String) {
-        val loaded = projectRepo.loadProject(id) ?: return
+        val loaded = latestSave[id] ?: synchronized(saveLock) { projectRepo.loadProject(id) } ?: return
         history.clear()
         val comp = loaded.compositions.firstOrNull { it.index == 1 } ?: loaded.compositions.first()
         _uiState.value = _uiState.value.copy(
@@ -410,7 +432,8 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun deleteProject(id: String) {
-        projectRepo.deleteProject(id)
+        latestSave.remove(id)
+        synchronized(saveLock) { projectRepo.deleteProject(id) }
         val remaining = projectRepo.listProjects()
         if (_uiState.value.project.id == id) {
             val fallback = remaining.firstOrNull()?.let { projectRepo.loadProject(it.id) }
@@ -554,12 +577,12 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     private fun commitProjectChange(next: VexoProject) {
         if (next == _uiState.value.project) return
         history.pushState(_uiState.value.project)
-        projectRepo.saveProject(next)
+        enqueueSave(next)
         _uiState.value = _uiState.value.copy(
             project = next,
             canUndo = history.canUndo,
             canRedo = history.canRedo,
-            projects = projectRepo.listProjects()
+            projects = updateProjectSummary(next)
         )
     }
 

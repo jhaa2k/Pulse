@@ -670,7 +670,7 @@ private fun PropertiesTab(
     settings: AppSettings
 ) {
     val palette = LocalVexoPalette.current
-    var editTarget by rememberSaveable { mutableStateOf("LAYER") } // LAYER or PROVIDER
+    var editTarget by rememberSaveable(uiState.selectedLayerId) { mutableStateOf("LAYER") } // LAYER or PROVIDER
     val expandedSections = remember(uiState.selectedLayerId, uiState.selectedProviderIndex, editTarget) { mutableStateMapOf<String, Boolean>() }
     var undoAnchor by remember { mutableStateOf<VexoProject?>(null) }
 
@@ -723,7 +723,7 @@ private fun PropertiesTab(
             return@Column
         }
 
-        val layer = vm.currentSelectedLayer()
+        val layer = uiState.project.compositions.firstOrNull { it.index == uiState.selectedCompositionIndex }?.layers?.firstOrNull { it.common.id == uiState.selectedLayerId }
         if (layer == null) {
             Text(
                 "Select or add a layer in the Layers tab to edit properties.",
@@ -890,13 +890,6 @@ private fun PropertiesTab(
                     StudioChipSelector("Path Shape", BarsShapePath.entries, cfg.shapePath, { it.label }) { path ->
                         vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(shapePath = path)) }
                     }
-                    StudioSlider("Segment 2 Width", cfg.segment2Width, 0.05f, 1.5f, 0.72f, "", 0.01f, onValueChange = { v -> beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(segment2Width = v)) } }, onCommit = ::endDrag)
-                    StudioSlider("Segment 2 Height", cfg.segment2HeightMultiplier, -2f, 2f, 1f, "", 0.05f, onValueChange = { v -> beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(segment2HeightMultiplier = v)) } }, onCommit = ::endDrag)
-                    StudioSlider("Segment 2 Fixed Height", cfg.segment2FixedHeight, -50f, 50f, 0f, "", 0.5f, onValueChange = { v -> beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(segment2FixedHeight = v)) } }, onCommit = ::endDrag)
-                        StudioToggleRow("Segment 2 Mirror", cfg.segment2Mirror) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(segment2Mirror = v)) } }
-                        StudioColorPickerRow("Segment 2 Color From", cfg.segment2ColorFrom) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(segment2ColorFrom = v)) } }
-                        StudioColorPickerRow("Segment 2 Color To", cfg.segment2ColorTo) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(segment2ColorTo = v)) } }
-                    }
                     StudioSlider("Circular Path Gap", cfg.pathGap, 0f, 0.9f, 0f, "", 0.01f, onValueChange = { v -> beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(pathGap = v)) } }, onCommit = ::endDrag)
                     if (cfg.shapePath == BarsShapePath.CIRCLE || cfg.shapePath == BarsShapePath.SIDED_POLYGON) {
                         RegisteredSlider("circleRadius", cfg.circleRadius, settings.showPropertyHelpHints, { v ->
@@ -939,6 +932,13 @@ private fun PropertiesTab(
                 ExpandableSectionHeader("Secondary segment", expandedSections["Bars_Secondarysegment"] == true, { toggleAccordion(expandedSections, "Bars_Secondarysegment") }) {
                     StudioChipSelector("Secondary Segment", BarsSegmentType.entries, cfg.segment2, { it.label }) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(segment2 = v)) } }
                     if (cfg.segment2 != BarsSegmentType.NONE) {
+                    StudioSlider("Segment 2 Width", cfg.segment2Width, 0.05f, 1.5f, 0.72f, "", 0.01f, onValueChange = { v -> beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(segment2Width = v)) } }, onCommit = ::endDrag)
+                    StudioSlider("Segment 2 Height", cfg.segment2HeightMultiplier, -2f, 2f, 1f, "", 0.05f, onValueChange = { v -> beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(segment2HeightMultiplier = v)) } }, onCommit = ::endDrag)
+                    StudioSlider("Segment 2 Fixed Height", cfg.segment2FixedHeight, -50f, 50f, 0f, "", 0.5f, onValueChange = { v -> beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(segment2FixedHeight = v)) } }, onCommit = ::endDrag)
+                        StudioToggleRow("Segment 2 Mirror", cfg.segment2Mirror) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(segment2Mirror = v)) } }
+                        StudioColorPickerRow("Segment 2 Color From", cfg.segment2ColorFrom) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(segment2ColorFrom = v)) } }
+                        StudioColorPickerRow("Segment 2 Color To", cfg.segment2ColorTo) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(segment2ColorTo = v)) } }
+                    }
                 }
                 ExpandableSectionHeader("Colors", expandedSections["Bars_Colors"] == true, { toggleAccordion(expandedSections, "Bars_Colors") }) {
                     StudioSlider("Gradient Offset", cfg.colorBlendOffset, 0f, 1f, 0f, "", 0.01f, onValueChange = { v ->
@@ -1012,13 +1012,9 @@ private fun PropertiesTab(
             }
             is LayerConfig.Text -> {
                 ExpandableSectionHeader("Content & typography", expandedSections["Text_Contenttypography"] == true, { toggleAccordion(expandedSections, "Text_Contenttypography") }) {
-                    var textVal by remember(layer.common.id) { mutableStateOf(cfg.text) }
                     OutlinedTextField(
-                        value = textVal,
-                        onValueChange = {
-                            textVal = it
-                            vm.updateLayer(layer.common.id, false) { l -> l.copy(config = cfg.copy(text = it)) }
-                        },
+                        value = cfg.text,
+                        onValueChange = { text -> vm.updateLayer(layer.common.id) { l -> l.copy(config = (l.config as LayerConfig.Text).copy(text = text)) } },
                         label = { Text("TEXT ({Title}, {Artist}, {Album}, {Time})") },
                         modifier = Modifier.fillMaxWidth()
                     )
