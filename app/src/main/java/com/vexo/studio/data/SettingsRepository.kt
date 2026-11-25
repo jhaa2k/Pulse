@@ -38,14 +38,14 @@ class SettingsRepository(private val context: Context) {
     val settingsFlow: Flow<AppSettings> = context.vexoDataStore.data.map { prefs ->
         val theme = ThemePreset.entries.firstOrNull {
             it.name == prefs[Keys.THEME_PRESET]
-        } ?: ThemePreset.MONOCHROME_DARK
+        } ?: ThemePreset.LIME_STUDIO
         val pause = PauseBehavior.entries.firstOrNull {
             it.name == prefs[Keys.PAUSE_BEHAVIOR]
         } ?: PauseBehavior.DECAY
 
         AppSettings(
             themePreset = theme,
-            customAccentArgb = prefs[Keys.CUSTOM_ACCENT] ?: 0xFFC6F36A.toInt(),
+            customAccentArgb = prefs[Keys.CUSTOM_ACCENT] ?: 0xFFC5F84A.toInt(),
             defaultFftSize = prefs[Keys.DEFAULT_FFT] ?: 1024,
             defaultHopSize = prefs[Keys.DEFAULT_HOP] ?: 256,
             previewScale = prefs[Keys.PREVIEW_SCALE] ?: 1.0f,
@@ -54,12 +54,12 @@ class SettingsRepository(private val context: Context) {
                 glassEnabled = prefs[Keys.GLASSENABLED] ?: true,
                 glassOpacity = prefs[Keys.GLASSOPACITY] ?: 0.82f,
                 backdropBlurDp = prefs[Keys.BACKDROPBLURDP] ?: 24f,
-                cornerRadiusDp = prefs[Keys.CORNERRADIUSDP] ?: 12f,
+                cornerRadiusDp = prefs[Keys.CORNERRADIUSDP] ?: 8f,
                 controlScale = prefs[Keys.CONTROLSCALE] ?: 1f,
                 uiTextScale = prefs[Keys.UITEXTSCALE] ?: 1f,
                 previewFps = prefs[Keys.PREVIEWFPS] ?: 60,
                 previewShare = prefs[Keys.PREVIEWSHARE] ?: 0.44f,
-                portraitOverlay = prefs[Keys.PORTRAITOVERLAY] ?: true
+                portraitOverlay = prefs[Keys.PORTRAITOVERLAY] ?: false
         )
     }
 
@@ -67,8 +67,8 @@ class SettingsRepository(private val context: Context) {
         context.vexoDataStore.edit { prefs ->
             val current = AppSettings(
                 themePreset = ThemePreset.entries.firstOrNull { it.name == prefs[Keys.THEME_PRESET] }
-                    ?: ThemePreset.MONOCHROME_DARK,
-                customAccentArgb = prefs[Keys.CUSTOM_ACCENT] ?: 0xFFC6F36A.toInt(),
+                    ?: ThemePreset.LIME_STUDIO,
+                customAccentArgb = prefs[Keys.CUSTOM_ACCENT] ?: 0xFFC5F84A.toInt(),
                 defaultFftSize = prefs[Keys.DEFAULT_FFT] ?: 1024,
                 defaultHopSize = prefs[Keys.DEFAULT_HOP] ?: 256,
                 previewScale = prefs[Keys.PREVIEW_SCALE] ?: 1.0f,
@@ -78,12 +78,12 @@ class SettingsRepository(private val context: Context) {
                 glassEnabled = prefs[Keys.GLASSENABLED] ?: true,
                 glassOpacity = prefs[Keys.GLASSOPACITY] ?: 0.82f,
                 backdropBlurDp = prefs[Keys.BACKDROPBLURDP] ?: 24f,
-                cornerRadiusDp = prefs[Keys.CORNERRADIUSDP] ?: 12f,
+                cornerRadiusDp = prefs[Keys.CORNERRADIUSDP] ?: 8f,
                 controlScale = prefs[Keys.CONTROLSCALE] ?: 1f,
                 uiTextScale = prefs[Keys.UITEXTSCALE] ?: 1f,
                 previewFps = prefs[Keys.PREVIEWFPS] ?: 60,
                 previewShare = prefs[Keys.PREVIEWSHARE] ?: 0.44f,
-                portraitOverlay = prefs[Keys.PORTRAITOVERLAY] ?: true
+                portraitOverlay = prefs[Keys.PORTRAITOVERLAY] ?: false
             )
             val next = transform(current)
             prefs[Keys.THEME_PRESET] = next.themePreset.name

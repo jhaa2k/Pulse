@@ -1,7 +1,9 @@
 package com.vexo.studio.model
 
 import java.util.UUID
+import kotlinx.serialization.Serializable
 
+@Serializable
 enum class NavDestination(val label: String) {
     STUDIO("Studio"),
     PROJECTS("Projects"),
@@ -11,6 +13,7 @@ enum class NavDestination(val label: String) {
     SETTINGS("Settings")
 }
 
+@Serializable
 enum class StudioTab(val label: String) {
     LAYERS("Layers"),
     PROPERTIES("Properties"),
@@ -18,6 +21,7 @@ enum class StudioTab(val label: String) {
     PRESETS("Presets")
 }
 
+@Serializable
 enum class AspectRatioPreset(
     val label: String,
     val widthRatio: Int,
@@ -29,6 +33,7 @@ enum class AspectRatioPreset(
     RATIO_4_5("4:5", 4, 5)
 }
 
+@Serializable
 enum class VideoResolution(
     val label: String,
     val shortSide: Int
@@ -39,6 +44,7 @@ enum class VideoResolution(
     UHD_4K("4K", 2160)
 }
 
+@Serializable
 enum class BlendMode(val aveeName: String, val label: String) {
     ALPHA("Alpha", "Alpha"),
     PRE_MUL_ALPHA("PreMulAlpha", "PreMul Alpha"),
@@ -54,6 +60,7 @@ enum class BlendMode(val aveeName: String, val label: String) {
     }
 }
 
+@Serializable
 enum class AnchorMode(val aveeName: String) {
     UNSET("unset"),
     START("start"),
@@ -66,6 +73,7 @@ enum class AnchorMode(val aveeName: String) {
     }
 }
 
+@Serializable
 enum class SampleProviderType(val aveeName: String) {
     SPECTRUM("Spectrum"),
     SPECTRUM2("Spectrum2"),
@@ -77,18 +85,21 @@ enum class SampleProviderType(val aveeName: String) {
     }
 }
 
+@Serializable
 enum class WindowType(val label: String) {
     HANN("Hann"),
     HAMMING("Hamming"),
     RECTANGULAR("Rectangular")
 }
 
+@Serializable
 enum class ChannelMode(val label: String) {
     MIX("Stereo Mix"),
     LEFT("Left"),
     RIGHT("Right")
 }
 
+@Serializable
 enum class MeasureWhat(val aveeName: String, val label: String) {
     NOTHING("Nothing", "Nothing"),
     BEAT("Beat", "Beat"),
@@ -120,6 +131,7 @@ enum class MeasureWhat(val aveeName: String, val label: String) {
     }
 }
 
+@Serializable
 data class MeasureConfig(
     val measureWhat: MeasureWhat = MeasureWhat.NOTHING,
     val amountA: Float = 0f,
@@ -129,6 +141,7 @@ data class MeasureConfig(
     val seed: Int = 1337
 )
 
+@Serializable
 enum class BarsShapePath(val aveeName: String, val label: String) {
     HORIZONTAL_LINE("HorizontalLine", "Horizontal Line"),
     VERTICAL_LINE("VerticalLine", "Vertical Line"),
@@ -142,6 +155,7 @@ enum class BarsShapePath(val aveeName: String, val label: String) {
     }
 }
 
+@Serializable
 enum class BarsSegmentType(val aveeName: String, val label: String) {
     NONE("None", "None"),
     BARS("Bars", "Bars"),
@@ -155,6 +169,7 @@ enum class BarsSegmentType(val aveeName: String, val label: String) {
     }
 }
 
+@Serializable
 enum class ImageShape(val aveeName: String, val label: String) {
     NONE("None", "Rectangle"),
     CIRCLE("Circle", "Circle"),
@@ -166,6 +181,7 @@ enum class ImageShape(val aveeName: String, val label: String) {
     }
 }
 
+@Serializable
 enum class MaskMode(val aveeName: String, val label: String) {
     TRANSPARENCY("Transparency", "Transparency"),
     TRANSPARENCY_AND_BLACKS("TransparencyAndBlacks", "Alpha + Blacks"),
@@ -178,6 +194,7 @@ enum class MaskMode(val aveeName: String, val label: String) {
     }
 }
 
+@Serializable
 enum class ImageSourceType(val label: String) {
     ALBUM_ART("Album Art"),
     IMPORTED("Imported Image"),
@@ -186,6 +203,7 @@ enum class ImageSourceType(val label: String) {
     SOLID_COLOR("Generated Color")
 }
 
+@Serializable
 enum class ShapeKind(val label: String) {
     RECTANGLE("Rectangle"),
     ELLIPSE("Ellipse"),
@@ -194,6 +212,7 @@ enum class ShapeKind(val label: String) {
     LINE("Line")
 }
 
+@Serializable
 enum class SpawnAreaType(val aveeName: String, val label: String) {
     HORIZONTAL_LINE("HorizontalLine", "Horizontal Line"),
     RECTANGLE("Rectangle", "Rectangle");
@@ -204,6 +223,7 @@ enum class SpawnAreaType(val aveeName: String, val label: String) {
     }
 }
 
+@Serializable
 enum class ForceFieldType(val aveeName: String, val label: String) {
     NONE("None", "None"),
     VORTEX("Vortex", "Vortex");
@@ -214,6 +234,7 @@ enum class ForceFieldType(val aveeName: String, val label: String) {
     }
 }
 
+@Serializable
 enum class MirrorMode(val aveeName: String, val label: String) {
     HORIZONTAL("Horizontal", "Horizontal"),
     VERTICAL("Vertical", "Vertical"),
@@ -225,6 +246,7 @@ enum class MirrorMode(val aveeName: String, val label: String) {
     }
 }
 
+@Serializable
 enum class MotionSource(val aveeName: String, val label: String) {
     EFFECT_TRANSFORM("EffectTransform", "Effect Transform"),
     MANUAL("Manual", "Manual");
@@ -235,20 +257,24 @@ enum class MotionSource(val aveeName: String, val label: String) {
     }
 }
 
+@Serializable
 enum class InterpolationType { HOLD, LINEAR, EASE_IN_OUT }
 
+@Serializable
 data class Keyframe(
     val timeMs: Long,
     val value: Float,
     val interpolation: InterpolationType = InterpolationType.LINEAR
 )
 
+@Serializable
 data class KeyframeTrack(
     val targetLayerId: String,
     val propertyKey: String,
     val keyframes: List<Keyframe> = emptyList()
 )
 
+@Serializable
 data class AudioProviderConfig(
     val id: String = UUID.randomUUID().toString(),
     val index: Int = 1,
@@ -286,6 +312,7 @@ data class AudioProviderConfig(
     val extraFields: Map<String, String> = emptyMap()
 )
 
+@Serializable
 enum class LayerType(val aveeObjType: String, val label: String) {
     BARS("Bars", "Bars / Spectrum"),
     IMAGE("Image", "Image"),
@@ -298,6 +325,7 @@ enum class LayerType(val aveeObjType: String, val label: String) {
     RGB_SPLIT_EFFECT("RgbSplitEffect", "RGB Split")
 }
 
+@Serializable
 data class LayerCommon(
     val id: String = UUID.randomUUID().toString(),
     val aveeId: Int = 0,
@@ -324,7 +352,9 @@ data class LayerCommon(
     val extraFields: Map<String, String> = emptyMap()
 )
 
+@Serializable
 sealed interface LayerConfig {
+    @Serializable
     data class Bars(
         val audioProviderIndex: Int = 1,
         val shapePath: BarsShapePath = BarsShapePath.HORIZONTAL_LINE,
@@ -358,6 +388,7 @@ sealed interface LayerConfig {
         val alternatingDirection: Boolean = false
     ) : LayerConfig
 
+    @Serializable
     data class Image(
         val sourceType: ImageSourceType = ImageSourceType.INTERNAL,
         val internalRes: String = "internalres:vignette80",
@@ -385,6 +416,7 @@ sealed interface LayerConfig {
         val maskMode: MaskMode = MaskMode.TRANSPARENCY
     ) : LayerConfig
 
+    @Serializable
     data class Text(
         val text: String = "{Title}\n{Artist}",
         val colorArgb: Int = 0xFFFFFFFF.toInt(),
@@ -400,6 +432,7 @@ sealed interface LayerConfig {
         val shadowRadius: Float = 4f
     ) : LayerConfig
 
+    @Serializable
     data class Shape(
         val kind: ShapeKind = ShapeKind.POLYGON,
         val sides: Int = 6,
@@ -410,6 +443,7 @@ sealed interface LayerConfig {
         val gradientEndArgb: Int = 0x33C6F36A
     ) : LayerConfig
 
+    @Serializable
     data class Particles(
         val countLimit: Int = 650,
         val spawnArea: SpawnAreaType = SpawnAreaType.RECTANGLE,
@@ -451,6 +485,7 @@ sealed interface LayerConfig {
         val seed: Int = 42
     ) : LayerConfig
 
+    @Serializable
     data class BlurEffect(
         val sourceCompositionIndex: Int = 1,
         val blurRadius: Float = 2.0f,
@@ -469,6 +504,7 @@ sealed interface LayerConfig {
         val measureBlur: MeasureConfig = MeasureConfig()
     ) : LayerConfig
 
+    @Serializable
     data class MotionBlurEffect(
         val targetCompositionIndex: Int = 1,
         val blurAmountMultiplier: Float = 0.85f,
@@ -480,6 +516,7 @@ sealed interface LayerConfig {
         val showUnblurredContentUnder: Boolean = false
     ) : LayerConfig
 
+    @Serializable
     data class MirrorEffect(
         val targetCompositionIndex: Int = 1,
         val mirrorMode: MirrorMode = MirrorMode.HORIZONTAL,
@@ -488,6 +525,7 @@ sealed interface LayerConfig {
         val repeatCount: Int = 1
     ) : LayerConfig
 
+    @Serializable
     data class RgbSplitEffect(
         val targetCompositionIndex: Int = 1,
         val splitMultiplier: Float = 3.0f,
@@ -507,12 +545,14 @@ sealed interface LayerConfig {
     ) : LayerConfig
 }
 
+@Serializable
 data class LayerNode(
     val type: LayerType,
     val common: LayerCommon,
     val config: LayerConfig
 )
 
+@Serializable
 data class CompositionNode(
     val id: String = UUID.randomUUID().toString(),
     val index: Int = 0, // 0 = Final Composition
@@ -523,6 +563,7 @@ data class CompositionNode(
     val providerIndices: List<Int> = emptyList()
 )
 
+@Serializable
 data class AudioTrackItem(
     val id: String = UUID.randomUUID().toString(),
     val uri: String,
@@ -533,12 +574,14 @@ data class AudioTrackItem(
     val artworkHash: String? = null
 )
 
+@Serializable
 data class CanvasConfig(
     val aspectRatio: AspectRatioPreset = AspectRatioPreset.RATIO_16_9,
     val backgroundColorArgb: Int = 0xFF000000.toInt(),
     val showSafeAreaGuides: Boolean = false
 )
 
+@Serializable
 data class ExportSettings(
     val aspectRatio: AspectRatioPreset = AspectRatioPreset.RATIO_16_9,
     val resolution: VideoResolution = VideoResolution.FHD_1080,
@@ -551,6 +594,7 @@ data class ExportSettings(
     val customOutputUri: String? = null
 )
 
+@Serializable
 data class VexoProject(
     val id: String = UUID.randomUUID().toString(),
     val name: String = "Untitled Studio",
@@ -567,6 +611,7 @@ data class VexoProject(
     val aveeRootMetadata: Map<String, String> = emptyMap()
 )
 
+@Serializable
 enum class ThemePreset(val label: String) {
     MONOCHROME_DARK("Monochrome Dark"),
     LIME_STUDIO("Signal Lime"),
@@ -574,14 +619,16 @@ enum class ThemePreset(val label: String) {
     CLEAN_LIGHT("Studio Light")
 }
 
+@Serializable
 enum class PauseBehavior(val label: String) {
     DECAY("Decay to zero"),
     FREEZE("Freeze frame")
 }
 
+@Serializable
 data class AppSettings(
-    val themePreset: ThemePreset = ThemePreset.MONOCHROME_DARK,
-    val customAccentArgb: Int = 0xFFC6F36A.toInt(),
+    val themePreset: ThemePreset = ThemePreset.LIME_STUDIO,
+    val customAccentArgb: Int = 0xFFC5F84A.toInt(),
     val defaultFftSize: Int = 1024,
     val defaultHopSize: Int = 256,
     val previewScale: Float = 1.0f,
@@ -590,14 +637,15 @@ data class AppSettings(
     val glassEnabled: Boolean = true,
     val glassOpacity: Float = 0.82f,
     val backdropBlurDp: Float = 24f,
-    val cornerRadiusDp: Float = 12f,
+    val cornerRadiusDp: Float = 8f,
     val controlScale: Float = 1f,
     val uiTextScale: Float = 1f,
     val previewFps: Int = 60,
     val previewShare: Float = 0.44f,
-    val portraitOverlay: Boolean = true
+    val portraitOverlay: Boolean = false
 )
 
+@Serializable
 data class PropertyDescriptor(
     val key: String,
     val label: String,

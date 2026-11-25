@@ -135,7 +135,7 @@ private fun VexoRootApp(vm: StudioViewModel) {
         ActivityResultContracts.OpenDocument()
     ) { uri ->
         if (uri != null) {
-            val name = DocumentFile.fromSingleUri(context, uri)?.name ?: "preset.json"
+            val name = DocumentFile.fromSingleUri(context, uri)?.name ?: "project.VEX"
             vm.importPresetFromUri(uri, name)
         }
     }
@@ -144,8 +144,7 @@ private fun VexoRootApp(vm: StudioViewModel) {
         ActivityResultContracts.CreateDocument("application/octet-stream")
     ) { uri ->
         if (uri != null) {
-            val name = DocumentFile.fromSingleUri(context, uri)?.name.orEmpty()
-            vm.exportPresetToUri(uri, asViz = !name.endsWith(".json", ignoreCase = true))
+            vm.exportPresetToUri(uri)
         }
     }
 
@@ -203,11 +202,11 @@ private fun VexoRootApp(vm: StudioViewModel) {
                     }
                     Box(
                         modifier = Modifier
-                            .border(1.dp, palette.accent, palette.shape)
-                            .clickable { audioPicker.launch(arrayOf("audio/*")) }
-                            .padding(horizontal = 10.dp, vertical = 5.dp)
+                            .background(palette.accent, palette.shape)
+                            .clickable { vm.navigateTo(NavDestination.EXPORT) }
+                            .padding(horizontal = 16.dp, vertical = 9.dp)
                     ) {
-                        Text("IMPORT AUDIO", style = MaterialTheme.typography.labelSmall, color = palette.accent)
+                        Text("EXPORT", style = MaterialTheme.typography.labelMedium, color = palette.accentOn)
                     }
                 }
             }
@@ -286,7 +285,7 @@ private fun VexoRootApp(vm: StudioViewModel) {
                     onPickAudio = { audioPicker.launch(arrayOf("audio/*")) },
                     onPickImage = { imagePicker.launch(arrayOf("image/*")) },
                     onImportPreset = { presetImportPicker.launch(arrayOf("application/json", "application/octet-stream", "*/*")) },
-                    onExportPreset = { presetExportPicker.launch("${uiState.project.name}.viz") }
+                    onExportPreset = { presetExportPicker.launch("${uiState.project.name}.VEX") }
                 )
                 NavDestination.PROJECTS -> ProjectsScreen(vm = vm, uiState = uiState)
                 NavDestination.AUDIO -> AudioLibraryScreen(

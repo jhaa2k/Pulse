@@ -70,14 +70,14 @@ fun VexoTheme(
             danger = Color(0xFFEF4444)
         )
         ThemePreset.LIME_STUDIO -> VexoPalette(
-            bg = Color(0xFF090B08),
-            panel = Color(0xFF131611),
-            panelElevated = Color(0xFF1C2018),
-            border = Color(0xFF2C3226),
-            textPrimary = Color(0xFFEFF2E6),
-            textSecondary = Color(0xFF939B88),
+            bg = Color(0xFF0D0E10),
+            panel = Color(0xFF17191D),
+            panelElevated = Color(0xFF22252A),
+            border = Color(0xFF33363B),
+            textPrimary = Color(0xFFF4F5F7),
+            textSecondary = Color(0xFFADB0B7),
             accent = customAccent,
-            accentOn = Color(0xFF090B08),
+            accentOn = Color(0xFF11150B),
             danger = Color(0xFFEF4444)
         )
         ThemePreset.AMBER_CONSOLE -> VexoPalette(

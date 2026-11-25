@@ -317,7 +317,7 @@ fun TemplatesScreen(
                     .clickable(onClick = onImportPreset)
                     .padding(horizontal = 10.dp, vertical = 6.dp)
             ) {
-                Text("IMPORT .JSON / .VIZ", style = MaterialTheme.typography.labelSmall, color = palette.accent)
+                Text("OPEN .VEX", style = MaterialTheme.typography.labelSmall, color = palette.accent)
             }
         }
 

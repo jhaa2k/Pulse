@@ -1477,7 +1477,7 @@ private fun PresetsTab(
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Text("AVEE JSON / VIZ PRESETS", style = MaterialTheme.typography.labelMedium, color = palette.accent)
+        Text("VEX PROJECT LIBRARY", style = MaterialTheme.typography.labelMedium, color = palette.accent)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Box(
                 modifier = Modifier
@@ -1487,7 +1487,7 @@ private fun PresetsTab(
                     .padding(vertical = 11.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text("IMPORT .JSON / .VIZ", style = MaterialTheme.typography.labelSmall, color = palette.accentOn)
+                Text("OPEN .VEX", style = MaterialTheme.typography.labelSmall, color = palette.accentOn)
             }
             Box(
                 modifier = Modifier
@@ -1498,7 +1498,7 @@ private fun PresetsTab(
                     .padding(vertical = 11.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text("EXPORT .VIZ", style = MaterialTheme.typography.labelSmall, color = palette.accent)
+                Text("SAVE .VEX", style = MaterialTheme.typography.labelSmall, color = palette.accent)
             }
         }
 

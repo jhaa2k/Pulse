@@ -108,29 +108,11 @@ class ProjectRepository(context: Context) {
         }
     }
 
-    private fun encodeEnvelope(project: VexoProject): String {
-        val aveePayload = AveeJsonCodec.exportProjectAsAveeJson(project)
-        val env = buildJsonObject {
-            put("id", project.id)
-            put("name", project.name)
-            put("schemaVersion", project.schemaVersion)
-            put("updatedAtMs", project.updatedAtMs)
-            put("audioUri", project.audioUri ?: "")
-            put("aspectRatio", project.canvas.aspectRatio.name)
-            put("backgroundColorArgb", project.canvas.backgroundColorArgb)
-            put("showSafeAreaGuides", project.canvas.showSafeAreaGuides)
-            put("exportResolution", project.exportSettings.resolution.name)
-            put("exportFps", project.exportSettings.fps)
-            put("exportBitrateMbps", project.exportSettings.videoBitrateMbps)
-            put("exportTrimStartMs", project.exportSettings.trimStartMs)
-            put("exportTrimEndMs", project.exportSettings.trimEndMs)
-            put("sceneJson", aveePayload)
-        }
-        return json.encodeToString(JsonObject.serializer(), env)
-    }
+    private fun encodeEnvelope(project: VexoProject): String = NativeVexCodec.encode(project)
 
     private fun loadFromFile(file: File): VexoProject {
         val text = file.readText(Charsets.UTF_8)
+        if (NativeVexCodec.isNative(text)) return NativeVexCodec.decode(text)
         val env = json.parseToJsonElement(text) as JsonObject
         val sceneJson = (env["sceneJson"] as? JsonPrimitive)?.content ?: text
         val base = AveeJsonCodec.importFromText(

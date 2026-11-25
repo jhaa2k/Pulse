@@ -7,6 +7,8 @@ import androidx.lifecycle.viewModelScope
 import androidx.media3.common.util.UnstableApi
 import com.vexo.studio.VexoApplication
 import com.vexo.studio.data.AveeJsonCodec
+import com.vexo.studio.data.NativeVexCodec
+import com.vexo.studio.data.VexArchive
 import com.vexo.studio.data.ProjectHistoryStack
 import com.vexo.studio.data.ProjectSummary
 import com.vexo.studio.engine.audio.AudioProviderSnapshot
@@ -406,7 +408,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch(Dispatchers.IO) {
             runCatching {
                 val stream = app.contentResolver.openInputStream(uri) ?: error("Cannot open preset file")
-                val imported = stream.use { s -> AveeJsonCodec.importAuto(s, displayName.substringBeforeLast('.')) }
+                val imported = stream.use { s -> VexArchive.read(app, s, displayName.substringBeforeLast('.')) }
                 withContext(Dispatchers.Main) {
                     createNewProject(imported.name, imported)
                     val unsupported = imported.compositions.sumOf { it.preservedElements.size }
@@ -420,16 +422,16 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun exportPresetToUri(uri: Uri, asViz: Boolean = true) {
+    fun exportPresetToUri(uri: Uri) {
+        val project = _uiState.value.project
         viewModelScope.launch(Dispatchers.IO) {
             runCatching {
-                val jsonText = AveeJsonCodec.exportProjectAsAveeJson(_uiState.value.project)
-                app.contentResolver.openOutputStream(uri)?.use { out ->
-                    if (asViz) AveeJsonCodec.exportViz(_uiState.value.project, out) else out.write(jsonText.toByteArray(Charsets.UTF_8))
+                app.contentResolver.openOutputStream(uri, "wt")?.use { out ->
+                    VexArchive.write(app, project, out)
                 } ?: error("Cannot write to target URI")
             }.onSuccess {
                 withContext(Dispatchers.Main) {
-                    _uiState.value = _uiState.value.copy(statusBanner = if (asViz) "VIZ preset exported" else "Preset exported as JSON")
+                    _uiState.value = _uiState.value.copy(statusBanner = "VEX project exported")
                 }
             }.onFailure { err ->
                 withContext(Dispatchers.Main) {
