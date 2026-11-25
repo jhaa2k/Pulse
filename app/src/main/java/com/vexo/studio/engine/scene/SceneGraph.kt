@@ -59,6 +59,7 @@ object SceneGraph {
 
     fun hasSelfReference(comp: CompositionNode): Boolean {
         return comp.layers.any { layer ->
+            if (!layer.common.visible) return@any false
             when (val cfg = layer.config) {
                 is LayerConfig.Image -> cfg.sourceType == com.vexo.studio.model.ImageSourceType.COMPOSITION &&
                     cfg.sourceCompositionIndex == comp.index || cfg.maskImage == "composition:${comp.index}"

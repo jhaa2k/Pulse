@@ -47,4 +47,21 @@ class VizImportRegressionTest {
         val result = restored.compositions.single().layers.single().config as LayerConfig.Bars
         assertEquals(cfg, result)
     }
+    @Test fun maskDependencyAndNestedTriangleArePreserved() {
+        val scene = """{"objType":"Root","compositions":[{"elements":[{"objType":"BlurEffect","sourceCompositionIndex":{"v":3}}]},{"elements":[{"objType":"Bars","ShapePath":{"v":"SidedPolygon","sides":{"v":3},"radius":{"v":1.5}},"Segment1":{"v":"Line"},"Segment2":{"v":"Line","barHeightMultiplier":{"v":-0.4}}}]},{"elements":[{"objType":"Image","customImage":{"v":"internalres:rainbow128"}}]},{"elements":[{"objType":"Image","customImage":{"v":"composition:2"},"MaskImage":{"v":"composition:1"},"maskMode":{"v":"TransparencyAndBlacks"}}]}]}"""
+        val project = AveeJsonCodec.importFromText(scene)
+        val bars = project.compositions[1].layers.single().config as LayerConfig.Bars
+        assertEquals(3, bars.polygonSides)
+        assertEquals(-0.4f, bars.segment2HeightMultiplier, 0.001f)
+        val order = com.vexo.studio.engine.scene.SceneGraph.resolve(project)
+        assertFalse(order.hasCycle)
+        val indices = order.order.map { it.index }
+        assertTrue(indices.indexOf(1) < indices.indexOf(3))
+        assertTrue(indices.indexOf(2) < indices.indexOf(3))
+        val restored = AveeJsonCodec.importFromText(AveeJsonCodec.exportAveeScene(project))
+        val image = restored.compositions[3].layers.single().config as LayerConfig.Image
+        assertEquals("composition:1", image.maskImage)
+        assertEquals(com.vexo.studio.model.MaskMode.TRANSPARENCY_AND_BLACKS, image.maskMode)
+        assertEquals(3, (restored.compositions[1].layers.single().config as LayerConfig.Bars).polygonSides)
+    }
 }

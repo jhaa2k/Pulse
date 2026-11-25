@@ -31,12 +31,21 @@ class FboPool {
         return created
     }
 
+    fun releaseByPrefix(prefix: String) {
+        val keys = allocated.keys.filter { it.startsWith(prefix) }
+        keys.forEach { key -> allocated.remove(key)?.let { deleteFbo(it) } }
+    }
+
     fun releaseAll() {
         allocated.values.forEach { deleteFbo(it) }
         allocated.clear()
     }
 
     private fun createFbo(width: Int, height: Int): GlFbo {
+        val previousFbo = IntArray(1)
+        val previousTex = IntArray(1)
+        GLES20.glGetIntegerv(GLES20.GL_FRAMEBUFFER_BINDING, previousFbo, 0)
+        GLES20.glGetIntegerv(GLES20.GL_TEXTURE_BINDING_2D, previousTex, 0)
         val texIds = IntArray(1)
         val fboIds = IntArray(1)
         GLES20.glGenTextures(1, texIds, 0)
@@ -57,7 +66,12 @@ class FboPool {
             GLES20.GL_TEXTURE_2D, texIds[0], 0
         )
         val status = GLES20.glCheckFramebufferStatus(GLES20.GL_FRAMEBUFFER)
-        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0)
+        if (status == GLES20.GL_FRAMEBUFFER_COMPLETE) {
+            GLES20.glClearColor(0f, 0f, 0f, 0f)
+            GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
+        }
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, previousFbo[0])
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, previousTex[0])
         if (status != GLES20.GL_FRAMEBUFFER_COMPLETE) {
             deleteFbo(GlFbo(fboIds[0], texIds[0], width, height))
             error("Framebuffer incomplete: status=0x${status.toString(16)}")
