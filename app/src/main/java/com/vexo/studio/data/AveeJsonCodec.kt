@@ -436,7 +436,7 @@ object AveeJsonCodec {
                 reactionAccumulatedDelay = obj.propInt("reactionAccumulatedDelay", 0),
                 colorBlendOffset = parseMvarfValue(obj.propString("colorBlendOffset", "Constant 0 0"), 0f),
                 circleRadius = obj.propFloat("circleRadius", ((obj["ShapePath"] as? JsonObject)?.propFloat("radius", 1f) ?: 1f) * 0.28f),
-                polygonSides = obj.propInt("polygonSides", 6),
+                polygonSides = obj.propInt("polygonSides", (obj["ShapePath"] as? JsonObject)?.propInt("sides", 6) ?: 6).coerceIn(3, 24),
                 pathAngleDeg = obj.propFloat("pathAngleDeg", 0f),
                 alternatingDirection = obj.propBool("alternatingDirection", false)
             )
@@ -631,7 +631,7 @@ object AveeJsonCodec {
         when (val cfg = layer.config) {
             is LayerConfig.Bars -> {
                 put("audioProviderIndex", propObj(cfg.audioProviderIndex))
-                put("ShapePath", buildJsonObject { put("v", cfg.shapePath.aveeName); put("radius", propObj(cfg.circleRadius / 0.28f)); put("gap", propObj(cfg.pathGap)) })
+                put("ShapePath", buildJsonObject { put("v", cfg.shapePath.aveeName); put("radius", propObj(cfg.circleRadius / 0.28f)); put("gap", propObj(cfg.pathGap)); put("sides", propObj(cfg.polygonSides)) })
                 put("heightScale", propObj(cfg.heightScale))
                 put("minHeightScale", propObj(cfg.minHeightScale))
                 put("maxHeightScale", propObj(cfg.maxHeightScale))
@@ -666,6 +666,7 @@ object AveeJsonCodec {
                 put("customImage", propObj(imgRef))
                 put("vexoSourceType", propObj(cfg.sourceType.name))
                 put("flipU", propObj(if (cfg.flipU) 1 else 0)); put("flipV", propObj(if (cfg.flipV) 1 else 0))
+                put("MaskImage", propObj(cfg.maskImage)); put("maskMode", propObj(cfg.maskMode.aveeName))
                 put("vexoTint", propObj(cfg.colorArgb)); put("vexoTintTo", propObj(cfg.colorToArgb))
                 put("MeasureColorBlend", encodeMeasure(cfg.measureColorBlend))
                 put("Shape", propObj(cfg.shape.aveeName))

@@ -332,6 +332,10 @@ class VexoGlRenderer(
         val delayedBars = applyReactionDelay(layerId, rawBars, cfg.reactionDelay)
         val count = delayedBars.size
         if (count == 0) return
+        if (cfg.segment1 == BarsSegmentType.LINE && count > 1) {
+            drawConnectedSpectrum(cfg, delayedBars, opacity, w, h)
+            return
+        }
         val minDim = minOf(w, h).toFloat()
 
         // Ensure vertex scratch capacity (each bar = 6 vertices = 12 floats pos + 24 floats color)
@@ -457,6 +461,54 @@ class VexoGlRenderer(
         drawColorVertices(vIdx / 2, opacity)
     }
 
+    private fun drawConnectedSpectrum(cfg: LayerConfig.Bars, bars: FloatArray, opacity: Float, w: Int, h: Int) {
+        val closed = cfg.shapePath == BarsShapePath.CIRCLE || cfg.shapePath == BarsShapePath.SIDED_POLYGON
+        val count = bars.size
+        val minDim = minOf(w, h).toFloat()
+        val segments = if (closed && cfg.pathGap <= 0f) count else count - 1
+        val needed = segments * 12
+        if (vertexScratch.size < needed || colorScratch.size < segments * 24) {
+            vertexScratch = FloatArray(needed)
+            colorScratch = FloatArray(segments * 24)
+            vertexBuf = allocFloatBuffer(vertexScratch.size)
+            colorBuf = allocFloatBuffer(colorScratch.size)
+        }
+        fun point(i: Int): Pair<Float, Float> {
+            val idx = if (cfg.flipInput) count - 1 - i else i
+            val gain = cfg.heightScale * cfg.barHeightMultiplier
+            val raw = (bars[idx] * kotlin.math.abs(gain)).coerceIn(0f, kotlin.math.abs(cfg.maxHeightScale))
+            val amp = raw * minDim * 0.42f * if (gain < 0f) -1f else 1f
+            val t = i.toFloat() / (if (closed) count else count - 1)
+            if (!closed) return if (cfg.shapePath == BarsShapePath.VERTICAL_LINE) (w * 0.5f + amp) to (h * (0.07f + t * 0.86f)) else (w * (0.07f + t * 0.86f)) to (h * 0.5f - amp)
+            val angle = Math.toRadians(cfg.pathAngleDeg.toDouble()).toFloat() + t * 2f * PI.toFloat() * (1f - cfg.pathGap.coerceIn(0f, 0.9f))
+            val base = if (cfg.shapePath == BarsShapePath.SIDED_POLYGON) {
+                val sector = 2f * PI.toFloat() / cfg.polygonSides.coerceIn(3, 24)
+                val local = ((angle % sector) + sector) % sector - sector * 0.5f
+                cfg.circleRadius * minDim * cos(sector * 0.5f) / cos(local).coerceAtLeast(0.2f)
+            } else cfg.circleRadius * minDim
+            return (w * 0.5f + cos(angle) * (base + amp)) to (h * 0.5f + sin(angle) * (base + amp))
+        }
+        var vi = 0; var ci = 0
+        val half = (kotlin.math.abs(cfg.fixedHeight).takeIf { it > 0f } ?: (minDim / count * cfg.barWidth)).coerceIn(1f, 32f) * 0.5f
+        for (i in 0 until segments) {
+            val (x0, y0) = point(i)
+            val (x1, y1) = point((i + 1) % count)
+            val dx = x1 - x0; val dy = y1 - y0
+            val len = kotlin.math.sqrt(dx * dx + dy * dy).coerceAtLeast(0.001f)
+            val nx = -dy / len * half; val ny = dx / len * half
+            val pts = floatArrayOf(x0+nx,y0+ny,x0-nx,y0-ny,x1+nx,y1+ny,x1+nx,y1+ny,x0-nx,y0-ny,x1-nx,y1-ny)
+            pts.copyInto(vertexScratch, vi); vi += 12
+            val col = MeasureEvaluator.blendArgb(cfg.colorFromArgb, cfg.colorToArgb, (i.toFloat()/count + cfg.colorBlendOffset).coerceIn(0f,1f))
+            repeat(6) {
+                colorScratch[ci++] = ((col ushr 16) and 255)/255f
+                colorScratch[ci++] = ((col ushr 8) and 255)/255f
+                colorScratch[ci++] = (col and 255)/255f
+                colorScratch[ci++] = ((col ushr 24) and 255)/255f
+            }
+        }
+        drawColorVertices(vi / 2, opacity)
+    }
+
     private fun drawImageLayer(
         cfg: LayerConfig.Image,
         scene: RenderSceneSnapshot,
@@ -518,7 +570,27 @@ class VexoGlRenderer(
         }
         val left = (w - drawW) * 0.5f
         val top = (h - drawH) * 0.5f
+        val maskIsComp = cfg.maskImage.startsWith("composition:")
+        val maskTex = when {
+            maskIsComp -> cfg.maskImage.substringAfter(':').toIntOrNull()?.let { compTextures[it] } ?: 0
+            cfg.maskImage.startsWith("internalres:") -> ensureInternalTex(cfg.maskImage)
+            cfg.maskImage.startsWith("content://") || cfg.maskImage.startsWith("file://") -> ensureUriTex(cfg.maskImage)
+            else -> 0
+        }
+        // Texture creation can change unit 0 binding; explicitly restore the source.
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texId)
+        GLES20.glUniform1i(shader.uniform("uMaskEnabled"), if (maskTex != 0) 1 else 0)
+        GLES20.glUniform1i(shader.uniform("uMaskMode"), cfg.maskMode.ordinal)
+        GLES20.glUniform1i(shader.uniform("uMaskFlipV"), if (maskIsComp != (cfg.sourceType == ImageSourceType.COMPOSITION)) 1 else 0)
+        if (maskTex != 0) {
+            GLES20.glActiveTexture(GLES20.GL_TEXTURE1)
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, maskTex)
+            GLES20.glUniform1i(shader.uniform("uMaskTex"), 1)
+            GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
+        }
         drawTexturedQuad(shader, left, top, left + drawW, top + drawH, flipV = cfg.flipV, flipU = cfg.flipU)
+        GLES20.glUniform1i(shader.uniform("uMaskEnabled"), 0)
     }
 
     private fun drawTextLayer(
@@ -714,6 +786,8 @@ class VexoGlRenderer(
         val savedFbo = IntArray(1)
         GLES20.glGetIntegerv(GLES20.GL_FRAMEBUFFER_BINDING, savedFbo, 0)
 
+        // Filter passes overwrite transparent targets; blending would attenuate alpha again.
+        GLES20.glDisable(GLES20.GL_BLEND)
         // Pass 1: Horizontal into ping
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, ping.fboId)
         GLES20.glViewport(0, 0, ping.width, ping.height)
@@ -967,7 +1041,7 @@ class VexoGlRenderer(
         GLES20.glEnable(GLES20.GL_BLEND)
         when (mode) {
             BlendMode.ALPHA, BlendMode.PRE_MUL_ALPHA ->
-                GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA)
+                GLES20.glBlendFuncSeparate(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA, GLES20.GL_ONE, GLES20.GL_ONE_MINUS_SRC_ALPHA)
             BlendMode.ADD, BlendMode.ADD_ALPHA ->
                 GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE)
             BlendMode.SCREEN ->
@@ -1019,6 +1093,10 @@ class VexoGlRenderer(
         val canvas = Canvas(bmp)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)
         when {
+            resKey.contains("rainbow") -> {
+                paint.shader = android.graphics.LinearGradient(0f, 0f, 256f, 256f, intArrayOf(0xFFFF3030.toInt(), 0xFFFFFF30.toInt(), 0xFF30FF60.toInt(), 0xFF30DFFF.toInt(), 0xFF4050FF.toInt(), 0xFFFF30DD.toInt(), 0xFFFF3030.toInt()), null, Shader.TileMode.CLAMP)
+                canvas.drawRect(0f, 0f, 256f, 256f, paint)
+            }
             resKey.contains("vignette") -> {
                 paint.shader = RadialGradient(
                     128f, 128f, 180f,

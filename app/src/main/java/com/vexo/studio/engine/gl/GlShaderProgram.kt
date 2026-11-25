@@ -99,6 +99,10 @@ object VexoShaders {
         uniform int uColorKeyEnabled;
         uniform vec3 uKeyColor;
         uniform float uOpacity;
+        uniform sampler2D uMaskTex;
+        uniform int uMaskEnabled;
+        uniform int uMaskMode;
+        uniform int uMaskFlipV;
         void main() {
             vec2 uv = vUv;
             if (uShape == 1) {
@@ -115,6 +119,16 @@ object VexoShaders {
             if (uColorKeyEnabled == 1) {
                 float dist = distance(tex.rgb, uKeyColor);
                 alpha *= smoothstep(0.12, 0.32, dist);
+            }
+            if (uMaskEnabled == 1) {
+                vec2 maskUv = vec2(uv.x, uMaskFlipV == 1 ? 1.0 - uv.y : uv.y);
+                vec4 mask = texture2D(uMaskTex, maskUv);
+                float light = dot(mask.rgb, vec3(0.299, 0.587, 0.114));
+                float coverage = mask.a;
+                if (uMaskMode == 1) coverage = min(mask.a, light);
+                else if (uMaskMode == 2) coverage = max(0.0, mask.a - light);
+                else if (uMaskMode == 3) coverage = 1.0 - mask.a;
+                alpha *= coverage;
             }
             gl_FragColor = vec4(satColor * uTint.rgb, alpha);
         }

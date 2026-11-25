@@ -27,6 +27,9 @@ object SceneGraph {
                     ) {
                         deps.add(cfg.sourceCompositionIndex)
                     }
+                    if (cfg.maskImage.startsWith("composition:")) {
+                        cfg.maskImage.substringAfter(':').toIntOrNull()?.takeIf { it != comp.index }?.let { deps.add(it) }
+                    }
                 }
                 is LayerConfig.BlurEffect -> {
                     if (cfg.sourceCompositionIndex != comp.index) {
@@ -58,7 +61,7 @@ object SceneGraph {
         return comp.layers.any { layer ->
             when (val cfg = layer.config) {
                 is LayerConfig.Image -> cfg.sourceType == com.vexo.studio.model.ImageSourceType.COMPOSITION &&
-                    cfg.sourceCompositionIndex == comp.index
+                    cfg.sourceCompositionIndex == comp.index || cfg.maskImage == "composition:${comp.index}"
                 is LayerConfig.BlurEffect -> cfg.sourceCompositionIndex == comp.index
                 is LayerConfig.MotionBlurEffect -> cfg.targetCompositionIndex == comp.index
                 is LayerConfig.MirrorEffect -> cfg.targetCompositionIndex == comp.index
