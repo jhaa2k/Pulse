@@ -1,5 +1,5 @@
 {
-  "name": "VOOC",
-  "description": "Audio visualizer studio with real-time Radix-2 FFT spectrum analysis and track playback.",
+  "name": "VEXO",
+  "description": "Compact modern Android audio visualizer & layered video creation studio with OpenGL ES shaders, Radix-2 FFT engine, Avee preset compatibility, and offline MP4 export.",
   "requestFramePermissions": []
 }

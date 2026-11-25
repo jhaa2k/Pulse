@@ -1,0 +1,298 @@
+package com.vexo.studio
+
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import androidx.documentfile.provider.DocumentFile
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.media3.common.util.UnstableApi
+import com.vexo.studio.model.NavDestination
+import com.vexo.studio.ui.StudioViewModel
+import com.vexo.studio.ui.screens.AudioLibraryScreen
+import com.vexo.studio.ui.screens.EditorScreen
+import com.vexo.studio.ui.screens.ExportScreen
+import com.vexo.studio.ui.screens.ProjectsScreen
+import com.vexo.studio.ui.screens.SettingsScreen
+import com.vexo.studio.ui.screens.TemplatesScreen
+import com.vexo.studio.ui.theme.LocalVexoPalette
+import com.vexo.studio.ui.theme.VexoTheme
+
+@UnstableApi
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContent {
+            val vm: StudioViewModel = viewModel()
+            val settings by vm.appSettings.collectAsState()
+            VexoTheme(settings = settings) {
+                VexoRootApp(vm = vm)
+            }
+        }
+    }
+}
+
+@UnstableApi
+@Composable
+private fun VexoRootApp(vm: StudioViewModel) {
+    val context = LocalContext.current
+    val palette = LocalVexoPalette.current
+    val uiState by vm.uiState.collectAsState()
+    val playback by vm.playbackState.collectAsState()
+    val sceneSnapshot by vm.sceneSnapshot.collectAsState()
+    val exportState by vm.exportState.collectAsState()
+    val settings by vm.appSettings.collectAsState()
+
+    var showRenameProject by remember { mutableStateOf(false) }
+
+    val notifPermLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { }
+
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val granted = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+            if (!granted) {
+                notifPermLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+    }
+
+    val audioPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            vm.importAudioTracks(uris)
+        }
+    }
+
+    val imagePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            vm.attachImageToSelectedLayer(uri)
+        }
+    }
+
+    val presetImportPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            val name = DocumentFile.fromSingleUri(context, uri)?.name ?: "preset.json"
+            vm.importPresetFromUri(uri, name)
+        }
+    }
+
+    val presetExportPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri != null) {
+            vm.exportPresetToUri(uri)
+        }
+    }
+
+    val exportDestPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("video/mp4")
+    ) { uri ->
+        if (uri != null) {
+            vm.updateExportSettings { it.copy(customOutputUri = uri.toString()) }
+        }
+    }
+
+    Scaffold(
+        containerColor = palette.bg,
+        topBar = {
+            if (!uiState.isFullscreenPreview) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(palette.bg)
+                        .border(1.dp, palette.border)
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(
+                            text = "VEXO",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = palette.accent
+                        )
+                        Text(
+                            text = uiState.project.name.uppercase(),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = palette.textSecondary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.clickable { showRenameProject = true }
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .border(1.dp, palette.accent)
+                            .clickable { audioPicker.launch(arrayOf("audio/*")) }
+                            .padding(horizontal = 10.dp, vertical = 5.dp)
+                    ) {
+                        Text("IMPORT AUDIO", style = MaterialTheme.typography.labelSmall, color = palette.accent)
+                    }
+                }
+            }
+        },
+        bottomBar = {
+            if (!uiState.isFullscreenPreview) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(palette.panel)
+                        .border(1.dp, palette.border)
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    NavDestination.entries.forEach { dest ->
+                        val active = dest == uiState.navDestination
+                        Box(
+                            modifier = Modifier
+                                .background(if (active) palette.accent else Color.Transparent)
+                                .clickable { vm.navigateTo(dest) }
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = dest.label.uppercase(),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
+                                color = if (active) palette.accentOn else palette.textSecondary,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+        ) {
+            val banner = uiState.statusBanner ?: playback.errorMessage
+            if (banner != null) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(palette.panelElevated)
+                        .border(1.dp, palette.accent)
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(banner, style = MaterialTheme.typography.bodySmall, color = palette.textPrimary, modifier = Modifier.weight(1f))
+                    Text(
+                        "DISMISS",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = palette.accent,
+                        modifier = Modifier.clickable {
+                            vm.clearBanner()
+                            vm.playbackController.clearError()
+                        }
+                    )
+                }
+            }
+
+            when (uiState.navDestination) {
+                NavDestination.STUDIO -> EditorScreen(
+                    vm = vm,
+                    uiState = uiState,
+                    playback = playback,
+                    sceneSnapshot = sceneSnapshot,
+                    settings = settings,
+                    onPickAudio = { audioPicker.launch(arrayOf("audio/*")) },
+                    onPickImage = { imagePicker.launch(arrayOf("image/*")) },
+                    onImportPreset = { presetImportPicker.launch(arrayOf("application/json", "application/octet-stream", "*/*")) },
+                    onExportPreset = { presetExportPicker.launch("${uiState.project.name}.json") }
+                )
+                NavDestination.PROJECTS -> ProjectsScreen(vm = vm, uiState = uiState)
+                NavDestination.AUDIO -> AudioLibraryScreen(
+                    vm = vm,
+                    playback = playback,
+                    onImportAudio = { audioPicker.launch(arrayOf("audio/*")) }
+                )
+                NavDestination.TEMPLATES -> TemplatesScreen(
+                    vm = vm,
+                    onImportPreset = { presetImportPicker.launch(arrayOf("application/json", "application/octet-stream", "*/*")) }
+                )
+                NavDestination.EXPORT -> ExportScreen(
+                    vm = vm,
+                    uiState = uiState,
+                    playback = playback,
+                    exportState = exportState,
+                    onPickExportUri = { exportDestPicker.launch("${uiState.project.name}.mp4") }
+                )
+                NavDestination.SETTINGS -> SettingsScreen(vm = vm, settings = settings)
+            }
+        }
+    }
+
+    if (showRenameProject) {
+        var text by remember { mutableStateOf(uiState.project.name) }
+        AlertDialog(
+            onDismissRequest = { showRenameProject = false },
+            title = { Text("RENAME PROJECT") },
+            text = { OutlinedTextField(value = text, onValueChange = { text = it }, singleLine = true) },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.renameCurrentProject(text)
+                    showRenameProject = false
+                }) { Text("SAVE") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRenameProject = false }) { Text("CANCEL") }
+            }
+        )
+    }
+}

@@ -1,0 +1,862 @@
+package com.vexo.studio.model
+
+import java.util.UUID
+
+enum class NavDestination(val label: String) {
+    STUDIO("Studio"),
+    PROJECTS("Projects"),
+    AUDIO("Audio"),
+    TEMPLATES("Templates"),
+    EXPORT("Export"),
+    SETTINGS("Settings")
+}
+
+enum class StudioTab(val label: String) {
+    LAYERS("Layers"),
+    PROPERTIES("Properties"),
+    ASSETS("Assets"),
+    PRESETS("Presets")
+}
+
+enum class AspectRatioPreset(
+    val label: String,
+    val widthRatio: Int,
+    val heightRatio: Int
+) {
+    RATIO_16_9("16:9", 16, 9),
+    RATIO_9_16("9:16", 9, 16),
+    RATIO_1_1("1:1", 1, 1),
+    RATIO_4_5("4:5", 4, 5)
+}
+
+enum class VideoResolution(
+    val label: String,
+    val shortSide: Int
+) {
+    HD_720("720p", 720),
+    FHD_1080("1080p", 1080),
+    QHD_1440("1440p", 1440),
+    UHD_4K("4K", 2160)
+}
+
+enum class BlendMode(val aveeName: String, val label: String) {
+    ALPHA("Alpha", "Alpha"),
+    PRE_MUL_ALPHA("PreMulAlpha", "PreMul Alpha"),
+    SCREEN("Screen", "Screen"),
+    ADD("Add", "Add"),
+    ADD_ALPHA("AddAlpha", "Add Alpha"),
+    MULTIPLY("Multiply", "Multiply"),
+    OVERWRITE("Overwrite", "Overwrite");
+
+    companion object {
+        fun fromAvee(raw: String?): BlendMode =
+            entries.firstOrNull { it.aveeName.equals(raw, ignoreCase = true) } ?: PRE_MUL_ALPHA
+    }
+}
+
+enum class AnchorMode(val aveeName: String) {
+    UNSET("unset"),
+    START("start"),
+    CENTER("center"),
+    END("end");
+
+    companion object {
+        fun fromAvee(raw: String?): AnchorMode =
+            entries.firstOrNull { it.aveeName.equals(raw, ignoreCase = true) } ?: UNSET
+    }
+}
+
+enum class SampleProviderType(val aveeName: String) {
+    SPECTRUM("Spectrum"),
+    SPECTRUM2("Spectrum2"),
+    WAVEFORM("Waveform");
+
+    companion object {
+        fun fromAvee(raw: String?): SampleProviderType =
+            entries.firstOrNull { it.aveeName.equals(raw, ignoreCase = true) } ?: SPECTRUM
+    }
+}
+
+enum class WindowType(val label: String) {
+    HANN("Hann"),
+    HAMMING("Hamming"),
+    RECTANGULAR("Rectangular")
+}
+
+enum class ChannelMode(val label: String) {
+    MIX("Stereo Mix"),
+    LEFT("Left"),
+    RIGHT("Right")
+}
+
+enum class MeasureWhat(val aveeName: String, val label: String) {
+    NOTHING("Nothing", "Nothing"),
+    BEAT("Beat", "Beat"),
+    TOTAL_TIME("TotalTime", "Total Time"),
+    TOTAL_TIME_BACKWARD("TotalTimeBackward", "Time Backward"),
+    TOTAL_TIME_WHEN_PLAYING("TotalTimeWhenPlaying", "Time Playing"),
+    TOTAL_TIME_AND_BEAT("TotalTimeAndBeat", "Time + Beat"),
+    TRACK_POSITION("TrackPosition", "Track Pos"),
+    BEAT_RANDOM_SHAKE("BeatRandomShake", "Beat Random Shake"),
+    BEAT_CAM_SHAKE_MORE("BeatCamShakeMore", "Cam Shake +"),
+    BEAT_CAM_SHAKE_LESS("BeatCamShakeLess", "Cam Shake -"),
+    BEAT_CAM_SHAKE_ROT_MORE("BeatCamShakeRotMore", "Cam Rot +"),
+    BEAT_CAM_SHAKE_ROT_LESS("BeatCamShakeRotLess", "Cam Rot -"),
+    CONSTANT_SHAKE("ConstantShake", "Constant Shake"),
+    CONSTANT_SHAKE_MORE("ConstantShakeMore", "Constant +"),
+    CONSTANT_SHAKE_ROT_MORE("ConstantShakeRotMore", "Const Rot +"),
+    CONSTANT_SHAKE_ROT_LESS("ConstantShakeRotLess", "Const Rot -"),
+    BEAT_TRIGGER_ANIM("BeatTriggerAnim", "Beat Trigger"),
+    BASS("Bass", "Bass (20-250Hz)"),
+    MID("Mid", "Mid (250-4kHz)"),
+    TREBLE("Treble", "Treble (4k-16kHz)"),
+    RMS("RMS", "RMS Level"),
+    PEAK("Peak", "Peak Level"),
+    KEYFRAME("Keyframe", "Keyframe");
+
+    companion object {
+        fun fromAvee(raw: String?): MeasureWhat =
+            entries.firstOrNull { it.aveeName.equals(raw, ignoreCase = true) } ?: NOTHING
+    }
+}
+
+data class MeasureConfig(
+    val measureWhat: MeasureWhat = MeasureWhat.NOTHING,
+    val amountA: Float = 0f,
+    val amountB: Float = 0f,
+    val providerIndex: Int = 1,
+    val smoothing: Float = 0.25f,
+    val seed: Int = 1337
+)
+
+enum class BarsShapePath(val aveeName: String, val label: String) {
+    HORIZONTAL_LINE("HorizontalLine", "Horizontal Line"),
+    VERTICAL_LINE("VerticalLine", "Vertical Line"),
+    CIRCLE("Circle", "Circle"),
+    SIDED_POLYGON("SidedPolygon", "Polygon"),
+    LETTER("Letter", "Wave Letter");
+
+    companion object {
+        fun fromAvee(raw: String?): BarsShapePath =
+            entries.firstOrNull { it.aveeName.equals(raw, ignoreCase = true) } ?: HORIZONTAL_LINE
+    }
+}
+
+enum class BarsSegmentType(val aveeName: String, val label: String) {
+    NONE("None", "None"),
+    BARS("Bars", "Bars"),
+    LINE("Line", "Line"),
+    SHARP_BARS("SharpBars", "Sharp Bars"),
+    ROUND_BARS("RoundBars", "Round Bars");
+
+    companion object {
+        fun fromAvee(raw: String?): BarsSegmentType =
+            entries.firstOrNull { it.aveeName.equals(raw, ignoreCase = true) } ?: BARS
+    }
+}
+
+enum class ImageShape(val aveeName: String, val label: String) {
+    NONE("None", "Rectangle"),
+    CIRCLE("Circle", "Circle"),
+    SIDED_POLYGON("SidedPolygon", "Polygon");
+
+    companion object {
+        fun fromAvee(raw: String?): ImageShape =
+            entries.firstOrNull { it.aveeName.equals(raw, ignoreCase = true) } ?: NONE
+    }
+}
+
+enum class MaskMode(val aveeName: String, val label: String) {
+    TRANSPARENCY("Transparency", "Transparency"),
+    TRANSPARENCY_AND_BLACKS("TransparencyAndBlacks", "Alpha + Blacks"),
+    TRANSPARENCY_AND_WHITES("TransparencyAndWhites", "Alpha + Whites"),
+    INVERTED_TRANSPARENCY("InvertedTransparency", "Inverted Alpha");
+
+    companion object {
+        fun fromAvee(raw: String?): MaskMode =
+            entries.firstOrNull { it.aveeName.equals(raw, ignoreCase = true) } ?: TRANSPARENCY
+    }
+}
+
+enum class ImageSourceType(val label: String) {
+    ALBUM_ART("Album Art"),
+    IMPORTED("Imported Image"),
+    INTERNAL("Built-in Asset"),
+    COMPOSITION("Composition"),
+    SOLID_COLOR("Generated Color")
+}
+
+enum class ShapeKind(val label: String) {
+    RECTANGLE("Rectangle"),
+    ELLIPSE("Ellipse"),
+    POLYGON("Polygon"),
+    STAR("Star"),
+    LINE("Line")
+}
+
+enum class SpawnAreaType(val aveeName: String, val label: String) {
+    HORIZONTAL_LINE("HorizontalLine", "Horizontal Line"),
+    RECTANGLE("Rectangle", "Rectangle");
+
+    companion object {
+        fun fromAvee(raw: String?): SpawnAreaType =
+            entries.firstOrNull { it.aveeName.equals(raw, ignoreCase = true) } ?: RECTANGLE
+    }
+}
+
+enum class ForceFieldType(val aveeName: String, val label: String) {
+    NONE("None", "None"),
+    VORTEX("Vortex", "Vortex");
+
+    companion object {
+        fun fromAvee(raw: String?): ForceFieldType =
+            entries.firstOrNull { it.aveeName.equals(raw, ignoreCase = true) } ?: NONE
+    }
+}
+
+enum class MirrorMode(val aveeName: String, val label: String) {
+    HORIZONTAL("Horizontal", "Horizontal"),
+    VERTICAL("Vertical", "Vertical"),
+    HORIZONTAL_AND_VERTICAL("HorizontalAndVertical", "Both");
+
+    companion object {
+        fun fromAvee(raw: String?): MirrorMode =
+            entries.firstOrNull { it.aveeName.equals(raw, ignoreCase = true) } ?: HORIZONTAL
+    }
+}
+
+enum class MotionSource(val aveeName: String, val label: String) {
+    EFFECT_TRANSFORM("EffectTransform", "Effect Transform"),
+    MANUAL("Manual", "Manual");
+
+    companion object {
+        fun fromAvee(raw: String?): MotionSource =
+            entries.firstOrNull { it.aveeName.equals(raw, ignoreCase = true) } ?: EFFECT_TRANSFORM
+    }
+}
+
+enum class InterpolationType { HOLD, LINEAR, EASE_IN_OUT }
+
+data class Keyframe(
+    val timeMs: Long,
+    val value: Float,
+    val interpolation: InterpolationType = InterpolationType.LINEAR
+)
+
+data class KeyframeTrack(
+    val targetLayerId: String,
+    val propertyKey: String,
+    val keyframes: List<Keyframe> = emptyList()
+)
+
+data class AudioProviderConfig(
+    val id: String = UUID.randomUUID().toString(),
+    val index: Int = 1,
+    val tag: String = "Audio Provider",
+    val enabled: Boolean = true,
+    val sampleProvider: SampleProviderType = SampleProviderType.SPECTRUM,
+    val fftSize: Int = 1024,
+    val hopSize: Int = 256,
+    val window: WindowType = WindowType.HANN,
+    val channelMode: ChannelMode = ChannelMode.MIX,
+    val sampleOutCount: Int = 96,
+    val mirrorSamples: Boolean = false,
+    val repeatSamples: Int = 1,
+    val startAndEndGap: Int = 0,
+    val smooth: Float = 0.75f,
+    val preSmooth: Float = 0.5f,
+    val filterRadius: Int = 1,
+    val filterStrength: Float = 0.62f,
+    val aWeight: Float = 0.2f,
+    val outputMultiplier: Float = 4.0f,
+    val lowerHz: Float = 32f,
+    val higherHz: Float = 16000f,
+    val hzLinearFactor: Float = 0.15f,
+    val freqShift: Float = 0f,
+    val attackMs: Float = 8f,
+    val releaseMs: Float = 75f,
+    val peakHoldMs: Float = 180f,
+    val peakDecay: Float = 0.85f,
+    val beatSmooth: Float = 0.4f,
+    val beatRangeBarFirst: Float = 0f,
+    val beatRangeBarLast: Float = 0.2f,
+    val beatRangeValueLower: Float = 0.7f,
+    val beatRangeValueHigher: Float = 35f,
+    val beatSensitivity: Float = 1.2f,
+    val extraFields: Map<String, String> = emptyMap()
+)
+
+enum class LayerType(val aveeObjType: String, val label: String) {
+    BARS("Bars", "Bars / Spectrum"),
+    IMAGE("Image", "Image"),
+    TEXT("Text", "Text"),
+    SHAPE("Shape", "Shape"),
+    PARTICLES("Particles", "Particles"),
+    BLUR_EFFECT("BlurEffect", "Blur Effect"),
+    MOTION_BLUR_EFFECT("MotionBlurEffect", "Motion Blur"),
+    MIRROR_EFFECT("MirrorEffect", "Mirror Effect"),
+    RGB_SPLIT_EFFECT("RgbSplitEffect", "RGB Split")
+}
+
+data class LayerCommon(
+    val id: String = UUID.randomUUID().toString(),
+    val aveeId: Int = 0,
+    val name: String = "Layer",
+    val visible: Boolean = true,
+    val locked: Boolean = false,
+    val blendMode: BlendMode = BlendMode.PRE_MUL_ALPHA,
+    val opacity: Float = 1f,
+    val posX: Float = 0.5f,
+    val posY: Float = 0.5f,
+    val anchorX: AnchorMode = AnchorMode.UNSET,
+    val anchorY: AnchorMode = AnchorMode.UNSET,
+    val alignmentX: Float = 0.5f,
+    val alignmentY: Float = 0.5f,
+    val scaleX: Float = 1f,
+    val scaleY: Float = 1f,
+    val scaleIsUniform: Boolean = false,
+    val rotationDeg: Float = 0f,
+    val measurePos: MeasureConfig = MeasureConfig(),
+    val measureScale: MeasureConfig = MeasureConfig(),
+    val measureRot: MeasureConfig = MeasureConfig(),
+    val measureOpacity: MeasureConfig = MeasureConfig(),
+    val groupName: String = "",
+    val extraFields: Map<String, String> = emptyMap()
+)
+
+sealed interface LayerConfig {
+    data class Bars(
+        val audioProviderIndex: Int = 1,
+        val shapePath: BarsShapePath = BarsShapePath.HORIZONTAL_LINE,
+        val segment1: BarsSegmentType = BarsSegmentType.BARS,
+        val segment2: BarsSegmentType = BarsSegmentType.NONE,
+        val barWidth: Float = 0.72f,
+        val barHeightMultiplier: Float = 1.0f,
+        val fixedHeight: Float = 0f,
+        val mirror: Boolean = true,
+        val colorFromArgb: Int = 0xFFFFFFFF.toInt(),
+        val colorToArgb: Int = 0xFFC6F36A.toInt(),
+        val colorBlendOffset: Float = 0f,
+        val heightScale: Float = 2.4f,
+        val minHeightScale: Float = 0.012f,
+        val maxHeightScale: Float = 1.0f,
+        val flipInput: Boolean = false,
+        val softness: Int = 2,
+        val reactionDelay: Int = 0,
+        val reactionAccumulatedDelay: Int = 0,
+        val circleRadius: Float = 0.28f,
+        val polygonSides: Int = 6,
+        val pathAngleDeg: Float = 0f,
+        val showPeaks: Boolean = true,
+        val alternatingDirection: Boolean = false
+    ) : LayerConfig
+
+    data class Image(
+        val sourceType: ImageSourceType = ImageSourceType.INTERNAL,
+        val internalRes: String = "internalres:vignette80",
+        val customUri: String? = null,
+        val sourceCompositionIndex: Int = 0,
+        val colorArgb: Int = 0xFFFFFFFF.toInt(),
+        val colorToArgb: Int = 0xFFFFFFFF.toInt(),
+        val measureColorBlend: MeasureConfig = MeasureConfig(),
+        val shape: ImageShape = ImageShape.NONE,
+        val keepAspectRatio: Boolean = true,
+        val keepAspectRatioAndCropToFit: Boolean = false,
+        val flipU: Boolean = false,
+        val flipV: Boolean = false,
+        val saturation: Float = 1f,
+        val colorKeyEnabled: Boolean = false,
+        val colorKeyArgb: Int = 0xFF00FF00.toInt(),
+        val autoDetectColorKey: Boolean = true,
+        val transparencyStrength: Float = 1f,
+        val opacityStrength: Float = 1f,
+        val blurEnabled: Boolean = false,
+        val blurRadius: Int = 7,
+        val blurDivider: Int = 5,
+        val blurredBorder: Boolean = false,
+        val maskImage: String = "",
+        val maskMode: MaskMode = MaskMode.TRANSPARENCY
+    ) : LayerConfig
+
+    data class Text(
+        val text: String = "{Title}\n{Artist}",
+        val colorArgb: Int = 0xFFFFFFFF.toInt(),
+        val fontSize: Int = 44,
+        val bold: Boolean = true,
+        val italic: Boolean = false,
+        val fontAssetUri: String? = null,
+        val alignment: Int = 0, // -1 left, 0 center, 1 right
+        val letterSpacing: Float = 0.04f,
+        val lineSpacing: Float = 1.2f,
+        val strokeWidth: Float = 0f,
+        val strokeColorArgb: Int = 0xFF000000.toInt(),
+        val shadowRadius: Float = 4f
+    ) : LayerConfig
+
+    data class Shape(
+        val kind: ShapeKind = ShapeKind.POLYGON,
+        val sides: Int = 6,
+        val fillColorArgb: Int = 0x33FFFFFF,
+        val strokeColorArgb: Int = 0xFFFFFFFF.toInt(),
+        val strokeWidth: Float = 3f,
+        val cornerRadius: Float = 0f,
+        val gradientEndArgb: Int = 0x33C6F36A
+    ) : LayerConfig
+
+    data class Particles(
+        val countLimit: Int = 650,
+        val spawnArea: SpawnAreaType = SpawnAreaType.RECTANGLE,
+        val forceField: ForceFieldType = ForceFieldType.NONE,
+        val vectorAngleDeg: Float = 270f,
+        val vectorAngleZ: Float = 0f,
+        val useRandomVectorInstead: Boolean = false,
+        val vectorRelativeToCenter: Boolean = false,
+        val speed: Float = 100f,
+        val speedRandom: Float = 80f,
+        val spawnTimeSec: Float = 0.015f,
+        val lifetimeSec: Float = 6.0f,
+        val gravityX: Float = 0f,
+        val gravityY: Float = 0f,
+        val colorArgb: Int = 0xFFFFFFFF.toInt(),
+        val colorFromArgb: Int = 0xFFFFFFFF.toInt(),
+        val colorToArgb: Int = 0x38C6F36A,
+        val startSize: Float = 2f,
+        val endSize: Float = 4f,
+        val endSizeRandom: Float = 0f,
+        val fadeInSize: Float = 3f,
+        val fadeInAndOutTime: Float = 0.15f,
+        val particleScale: Float = 0.65f,
+        val perspectiveDepth: Float = 900f,
+        val perspectiveFov: Float = 48.75f,
+        val nearCameraFadeOutDistance: Float = 75f,
+        val velocityAngle: Boolean = true,
+        val mirrorX: Boolean = false,
+        val mirrorY: Boolean = false,
+        val trailLength: Float = 0f,
+        val sideSineWaveFreq: Float = 0f,
+        val sideSineWaveMag: Float = 0f,
+        val measureOverallSpeed: MeasureConfig = MeasureConfig(
+            measureWhat = MeasureWhat.BEAT,
+            amountA = 0.4f,
+            amountB = 0.4f
+        ),
+        val customImage: String = "internalres:particle_circle_blur4",
+        val seed: Int = 42
+    ) : LayerConfig
+
+    data class BlurEffect(
+        val sourceCompositionIndex: Int = 1,
+        val blurRadius: Float = 2.0f,
+        val blurMultiplier: Float = 3.5f,
+        val layer1Scale: Float = 1.0f,
+        val layer1ColorArgb: Int = 0xFFFFFFFF.toInt(),
+        val layer2Scale: Float = 0f,
+        val layer2ColorArgb: Int = 0xFFFFFFFF.toInt(),
+        val layer3Scale: Float = 0f,
+        val layer3ColorArgb: Int = 0xFFFFFFFF.toInt(),
+        val colorArgb: Int = 0xFF000000.toInt(),
+        val blendModeContent: BlendMode = BlendMode.PRE_MUL_ALPHA,
+        val showUnblurredContent: Boolean = false,
+        val showUnblurredContentUnder: Boolean = true,
+        val maskImage: String = "internalres:transparent",
+        val measureBlur: MeasureConfig = MeasureConfig()
+    ) : LayerConfig
+
+    data class MotionBlurEffect(
+        val targetCompositionIndex: Int = 1,
+        val blurAmountMultiplier: Float = 0.85f,
+        val motionSource: MotionSource = MotionSource.EFFECT_TRANSFORM,
+        val relativeMotionMode: Boolean = true,
+        val blendModeContent: BlendMode = BlendMode.ADD,
+        val colorArgb: Int = 0xFFFFFFFF.toInt(),
+        val showUnblurredContent: Boolean = false,
+        val showUnblurredContentUnder: Boolean = false
+    ) : LayerConfig
+
+    data class MirrorEffect(
+        val targetCompositionIndex: Int = 1,
+        val mirrorMode: MirrorMode = MirrorMode.HORIZONTAL,
+        val flipMirror: Boolean = false,
+        val colorArgb: Int = 0xFFFFFFFF.toInt(),
+        val repeatCount: Int = 1
+    ) : LayerConfig
+
+    data class RgbSplitEffect(
+        val targetCompositionIndex: Int = 1,
+        val splitMultiplier: Float = 3.0f,
+        val splitAmountX: Float = 0.015f,
+        val splitAmountY: Float = 0.008f,
+        val splitMeasure: MeasureConfig = MeasureConfig(
+            measureWhat = MeasureWhat.BEAT_RANDOM_SHAKE,
+            amountA = 0.5f,
+            amountB = 0.5f
+        ),
+        val splitColor0Argb: Int = 0xFFFF0000.toInt(),
+        val splitColor1Argb: Int = 0xFF00FF00.toInt(),
+        val splitColor2Argb: Int = 0xFF0000FF.toInt(),
+        val blendModeContent: BlendMode = BlendMode.ADD,
+        val showUnblurredContent: Boolean = false,
+        val showUnblurredContentUnder: Boolean = false
+    ) : LayerConfig
+}
+
+data class LayerNode(
+    val type: LayerType,
+    val common: LayerCommon,
+    val config: LayerConfig
+)
+
+data class CompositionNode(
+    val id: String = UUID.randomUUID().toString(),
+    val index: Int = 0, // 0 = Final Composition
+    val name: String = if (index == 0) "Final Composition" else "Composition $index",
+    val layers: List<LayerNode> = emptyList()
+)
+
+data class AudioTrackItem(
+    val id: String = UUID.randomUUID().toString(),
+    val uri: String,
+    val title: String,
+    val artist: String = "Unknown Artist",
+    val album: String = "Unknown Album",
+    val durationMs: Long = 0L,
+    val artworkHash: String? = null
+)
+
+data class CanvasConfig(
+    val aspectRatio: AspectRatioPreset = AspectRatioPreset.RATIO_16_9,
+    val backgroundColorArgb: Int = 0xFF000000.toInt(),
+    val showSafeAreaGuides: Boolean = false
+)
+
+data class ExportSettings(
+    val aspectRatio: AspectRatioPreset = AspectRatioPreset.RATIO_16_9,
+    val resolution: VideoResolution = VideoResolution.FHD_1080,
+    val fps: Int = 30,
+    val videoBitrateMbps: Int = 12,
+    val audioBitrateKbps: Int = 192,
+    val trimStartMs: Long = 0L,
+    val trimEndMs: Long = 0L, // 0 = full track
+    val useHevcIfSupported: Boolean = false,
+    val customOutputUri: String? = null
+)
+
+data class VexoProject(
+    val id: String = UUID.randomUUID().toString(),
+    val name: String = "Untitled Studio",
+    val schemaVersion: Int = 2,
+    val updatedAtMs: Long = System.currentTimeMillis(),
+    val canvas: CanvasConfig = CanvasConfig(),
+    val audioUri: String? = null,
+    val audioProviders: List<AudioProviderConfig> = listOf(AudioProviderConfig()),
+    val compositions: List<CompositionNode> = listOf(
+        CompositionNode(index = 0, name = "Final Composition", layers = emptyList())
+    ),
+    val keyframes: List<KeyframeTrack> = emptyList(),
+    val exportSettings: ExportSettings = ExportSettings()
+)
+
+enum class ThemePreset(val label: String) {
+    MONOCHROME_DARK("Monochrome Dark"),
+    LIME_STUDIO("Signal Lime"),
+    AMBER_CONSOLE("Amber Console"),
+    CLEAN_LIGHT("Studio Light")
+}
+
+enum class PauseBehavior(val label: String) {
+    DECAY("Decay to zero"),
+    FREEZE("Freeze frame")
+}
+
+data class AppSettings(
+    val themePreset: ThemePreset = ThemePreset.MONOCHROME_DARK,
+    val customAccentArgb: Int = 0xFFC6F36A.toInt(),
+    val defaultFftSize: Int = 1024,
+    val defaultHopSize: Int = 256,
+    val previewScale: Float = 1.0f,
+    val pauseBehavior: PauseBehavior = PauseBehavior.DECAY,
+    val showPropertyHelpHints: Boolean = true
+)
+
+data class PropertyDescriptor(
+    val key: String,
+    val label: String,
+    val units: String,
+    val defaultValue: Float,
+    val min: Float,
+    val max: Float,
+    val step: Float,
+    val help: String
+)
+
+object PropertyRegistry {
+    val descriptors: Map<String, PropertyDescriptor> = listOf(
+        PropertyDescriptor("opacity", "OPACITY", "%", 1f, 0f, 1f, 0.01f, "Layer alpha multiplier (0 to 1)."),
+        PropertyDescriptor("posX", "POSITION X", "norm", 0.5f, -1f, 2f, 0.01f, "Normalized horizontal anchor position."),
+        PropertyDescriptor("posY", "POSITION Y", "norm", 0.5f, -1f, 2f, 0.01f, "Normalized vertical anchor position."),
+        PropertyDescriptor("scaleX", "SCALE X", "x", 1f, -2f, 4f, 0.01f, "Horizontal layer scale."),
+        PropertyDescriptor("scaleY", "SCALE Y", "x", 1f, -2f, 4f, 0.01f, "Vertical layer scale."),
+        PropertyDescriptor("rotationDeg", "ROTATION", "deg", 0f, -360f, 360f, 1f, "Layer rotation in degrees."),
+        PropertyDescriptor("barWidth", "BAR WIDTH", "ratio", 0.72f, 0.05f, 1.5f, 0.01f, "Segment width relative to slot spacing."),
+        PropertyDescriptor("heightScale", "HEIGHT GAIN", "x", 2.4f, -10f, 10f, 0.05f, "Vertical amplitude multiplier."),
+        PropertyDescriptor("minHeightScale", "MIN HEIGHT", "norm", 0.012f, -0.05f, 0.25f, 0.002f, "Minimum baseline bar height."),
+        PropertyDescriptor("maxHeightScale", "MAX HEIGHT", "norm", 1f, 0.1f, 2f, 0.01f, "Maximum bar height ceiling."),
+        PropertyDescriptor("circleRadius", "CIRCLE RADIUS", "norm", 0.28f, 0.05f, 0.9f, 0.01f, "Radius for circular or polygon paths."),
+        PropertyDescriptor("sampleOutCount", "BAR COUNT", "bars", 96f, 8f, 512f, 4f, "Number of resampled output spectrum bars."),
+        PropertyDescriptor("outputMultiplier", "GAIN", "x", 4f, 0.1f, 32f, 0.1f, "Audio provider output amplitude multiplier."),
+        PropertyDescriptor("releaseMs", "RELEASE", "ms", 75f, 0f, 2000f, 5f, "Time-based release decay independent of FPS."),
+        PropertyDescriptor("attackMs", "ATTACK", "ms", 8f, 0f, 500f, 2f, "Time-based attack rise independent of FPS."),
+        PropertyDescriptor("lowerHz", "LOWER HZ", "Hz", 32f, 10f, 500f, 1f, "Lowest mapped spectrum frequency."),
+        PropertyDescriptor("higherHz", "HIGHER HZ", "Hz", 16000f, 300f, 22050f, 50f, "Highest mapped spectrum frequency (clamped to Nyquist)."),
+        PropertyDescriptor("beatSensitivity", "BEAT SENS", "x", 1.2f, 0.1f, 4f, 0.05f, "Multiplier for beat energy detection."),
+        PropertyDescriptor("blurRadius", "BLUR RADIUS", "px", 2f, 0f, 6f, 0.1f, "Separable blur kernel radius."),
+        PropertyDescriptor("blurMultiplier", "BLUR MULT", "x", 3.5f, 0.5f, 8f, 0.1f, "Bloom/blur intensity scale."),
+        PropertyDescriptor("splitMultiplier", "SPLIT MULT", "x", 3f, 0f, 10f, 0.1f, "Chromatic aberration RGB offset multiplier."),
+        PropertyDescriptor("countLimit", "PARTICLES", "count", 650f, 10f, 3000f, 10f, "Maximum active pooled particles."),
+        PropertyDescriptor("speed", "SPEED", "px/s", 100f, -300f, 300f, 5f, "Base particle velocity."),
+        PropertyDescriptor("fontSize", "FONT SIZE", "sp", 44f, 10f, 120f, 1f, "Rendered text glyph size.")
+    ).associateBy { it.key }
+}
+
+object VexoTemplates {
+    fun allTemplates(): List<VexoProject> = listOf(
+        monochromeStudio(),
+        circularPulse(),
+        neonParticleRing(),
+        rgbSplitMinimal()
+    )
+
+    fun monochromeStudio(): VexoProject {
+        val comp1 = CompositionNode(
+            index = 1,
+            name = "Scene Layer Bus",
+            layers = listOf(
+                LayerNode(
+                    type = LayerType.IMAGE,
+                    common = LayerCommon(name = "Album Backdrop", opacity = 0.28f),
+                    config = LayerConfig.Image(
+                        sourceType = ImageSourceType.ALBUM_ART,
+                        keepAspectRatioAndCropToFit = true,
+                        saturation = 0.2f
+                    )
+                ),
+                LayerNode(
+                    type = LayerType.BARS,
+                    common = LayerCommon(name = "Studio Bars", posX = 0.5f, posY = 0.52f),
+                    config = LayerConfig.Bars(
+                        shapePath = BarsShapePath.HORIZONTAL_LINE,
+                        segment1 = BarsSegmentType.BARS,
+                        barWidth = 0.72f,
+                        mirror = true,
+                        colorFromArgb = 0xFFFFFFFF.toInt(),
+                        colorToArgb = 0xFFC6F36A.toInt(),
+                        heightScale = 2.6f
+                    )
+                ),
+                LayerNode(
+                    type = LayerType.TEXT,
+                    common = LayerCommon(name = "Track Title", posX = 0.5f, posY = 0.16f),
+                    config = LayerConfig.Text(
+                        text = "{Title}\n{Artist}",
+                        fontSize = 40,
+                        bold = true,
+                        colorArgb = 0xFFFFFFFF.toInt()
+                    )
+                )
+            )
+        )
+        val finalComp = CompositionNode(
+            index = 0,
+            name = "Final Composition",
+            layers = listOf(
+                LayerNode(
+                    type = LayerType.IMAGE,
+                    common = LayerCommon(name = "Master Bus"),
+                    config = LayerConfig.Image(
+                        sourceType = ImageSourceType.COMPOSITION,
+                        sourceCompositionIndex = 1
+                    )
+                ),
+                LayerNode(
+                    type = LayerType.IMAGE,
+                    common = LayerCommon(name = "Studio Vignette", opacity = 0.65f, blendMode = BlendMode.ALPHA),
+                    config = LayerConfig.Image(
+                        sourceType = ImageSourceType.INTERNAL,
+                        internalRes = "internalres:vignette80"
+                    )
+                )
+            )
+        )
+        return VexoProject(
+            name = "Monochrome Studio",
+            compositions = listOf(finalComp, comp1)
+        )
+    }
+
+    fun circularPulse(): VexoProject {
+        val comp1 = CompositionNode(
+            index = 1,
+            name = "Ring Bus",
+            layers = listOf(
+                LayerNode(
+                    type = LayerType.PARTICLES,
+                    common = LayerCommon(name = "Stardust", blendMode = BlendMode.ADD, opacity = 0.8f),
+                    config = LayerConfig.Particles(countLimit = 450, speed = 80f)
+                ),
+                LayerNode(
+                    type = LayerType.BARS,
+                    common = LayerCommon(
+                        name = "Radial Ring",
+                        measureScale = MeasureConfig(MeasureWhat.BEAT, 0.14f, 0.14f)
+                    ),
+                    config = LayerConfig.Bars(
+                        shapePath = BarsShapePath.CIRCLE,
+                        segment1 = BarsSegmentType.ROUND_BARS,
+                        circleRadius = 0.27f,
+                        mirror = true,
+                        colorFromArgb = 0xFFC6F36A.toInt(),
+                        colorToArgb = 0xFFFFFFFF.toInt(),
+                        heightScale = 2.0f
+                    )
+                ),
+                LayerNode(
+                    type = LayerType.IMAGE,
+                    common = LayerCommon(
+                        name = "Center Art",
+                        scaleX = 0.38f,
+                        scaleY = 0.38f,
+                        measureScale = MeasureConfig(MeasureWhat.BEAT, 0.06f, 0.06f)
+                    ),
+                    config = LayerConfig.Image(
+                        sourceType = ImageSourceType.ALBUM_ART,
+                        shape = ImageShape.CIRCLE,
+                        keepAspectRatioAndCropToFit = true
+                    )
+                ),
+                LayerNode(
+                    type = LayerType.TEXT,
+                    common = LayerCommon(name = "Track Info", posY = 0.87f),
+                    config = LayerConfig.Text(text = "{Artist} — {Title}", fontSize = 32)
+                )
+            )
+        )
+        val finalComp = CompositionNode(
+            index = 0,
+            name = "Final Composition",
+            layers = listOf(
+                LayerNode(
+                    type = LayerType.BLUR_EFFECT,
+                    common = LayerCommon(name = "Glow Bloom", blendMode = BlendMode.ADD),
+                    config = LayerConfig.BlurEffect(
+                        sourceCompositionIndex = 1,
+                        blurRadius = 2.2f,
+                        blurMultiplier = 3.2f,
+                        showUnblurredContentUnder = true
+                    )
+                )
+            )
+        )
+        return VexoProject(
+            name = "Circular Pulse",
+            canvas = CanvasConfig(aspectRatio = AspectRatioPreset.RATIO_1_1),
+            compositions = listOf(finalComp, comp1)
+        )
+    }
+
+    fun neonParticleRing(): VexoProject {
+        val base = circularPulse()
+        val comp1 = base.compositions[1].copy(
+            layers = base.compositions[1].layers.map { layer ->
+                if (layer.type == LayerType.BARS) {
+                    layer.copy(
+                        config = (layer.config as LayerConfig.Bars).copy(
+                            shapePath = BarsShapePath.SIDED_POLYGON,
+                            polygonSides = 6,
+                            segment1 = BarsSegmentType.SHARP_BARS,
+                            colorFromArgb = 0xFF38BDF8.toInt(),
+                            colorToArgb = 0xFFC6F36A.toInt()
+                        )
+                    )
+                } else if (layer.type == LayerType.PARTICLES) {
+                    layer.copy(
+                        config = (layer.config as LayerConfig.Particles).copy(
+                            forceField = ForceFieldType.VORTEX,
+                            countLimit = 700
+                        )
+                    )
+                } else layer
+            }
+        )
+        return base.copy(
+            name = "Polygon Vortex",
+            canvas = CanvasConfig(aspectRatio = AspectRatioPreset.RATIO_9_16),
+            compositions = listOf(base.compositions[0], comp1)
+        )
+    }
+
+    fun rgbSplitMinimal(): VexoProject {
+        val comp1 = CompositionNode(
+            index = 1,
+            name = "Minimal Bus",
+            layers = listOf(
+                LayerNode(
+                    type = LayerType.SHAPE,
+                    common = LayerCommon(
+                        name = "Pulse Frame",
+                        scaleX = 0.7f,
+                        scaleY = 0.7f,
+                        measureRot = MeasureConfig(MeasureWhat.TOTAL_TIME, 8f, 8f)
+                    ),
+                    config = LayerConfig.Shape(
+                        kind = ShapeKind.POLYGON,
+                        sides = 4,
+                        fillColorArgb = 0x00000000,
+                        strokeColorArgb = 0x88FFFFFF.toInt(),
+                        strokeWidth = 3f
+                    )
+                ),
+                LayerNode(
+                    type = LayerType.BARS,
+                    common = LayerCommon(name = "Sharp Spectrum"),
+                    config = LayerConfig.Bars(
+                        shapePath = BarsShapePath.HORIZONTAL_LINE,
+                        segment1 = BarsSegmentType.SHARP_BARS,
+                        mirror = false,
+                        colorFromArgb = 0xFFFFFFFF.toInt(),
+                        colorToArgb = 0xFFFFFFFF.toInt(),
+                        heightScale = 3.0f
+                    )
+                ),
+                LayerNode(
+                    type = LayerType.TEXT,
+                    common = LayerCommon(name = "Timecode", posY = 0.84f),
+                    config = LayerConfig.Text(text = "{Title} · {Time}", fontSize = 30)
+                )
+            )
+        )
+        val finalComp = CompositionNode(
+            index = 0,
+            name = "Final Composition",
+            layers = listOf(
+                LayerNode(
+                    type = LayerType.RGB_SPLIT_EFFECT,
+                    common = LayerCommon(name = "Beat RGB Split"),
+                    config = LayerConfig.RgbSplitEffect(
+                        targetCompositionIndex = 1,
+                        splitMultiplier = 2.6f,
+                        showUnblurredContentUnder = true
+                    )
+                ),
+                LayerNode(
+                    type = LayerType.MIRROR_EFFECT,
+                    common = LayerCommon(name = "Subtle Mirror", visible = false),
+                    config = LayerConfig.MirrorEffect(targetCompositionIndex = 1)
+                )
+            )
+        )
+        return VexoProject(
+            name = "RGB Split Minimal",
+            compositions = listOf(finalComp, comp1)
+        )
+    }
+}

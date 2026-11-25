@@ -1,0 +1,566 @@
+package com.vexo.studio.ui
+
+import android.app.Application
+import android.net.Uri
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import androidx.media3.common.util.UnstableApi
+import com.vexo.studio.VexoApplication
+import com.vexo.studio.data.AveeJsonCodec
+import com.vexo.studio.data.ProjectHistoryStack
+import com.vexo.studio.data.ProjectSummary
+import com.vexo.studio.engine.audio.AudioProviderEngine
+import com.vexo.studio.engine.audio.AudioProviderSnapshot
+import com.vexo.studio.engine.gl.RenderSceneSnapshot
+import com.vexo.studio.export.ExportProgress
+import com.vexo.studio.export.ExportService
+import com.vexo.studio.model.AppSettings
+import com.vexo.studio.model.AspectRatioPreset
+import com.vexo.studio.model.AudioProviderConfig
+import com.vexo.studio.model.CompositionNode
+import com.vexo.studio.model.LayerCommon
+import com.vexo.studio.model.LayerConfig
+import com.vexo.studio.model.LayerNode
+import com.vexo.studio.model.LayerType
+import com.vexo.studio.model.NavDestination
+import com.vexo.studio.model.PauseBehavior
+import com.vexo.studio.model.StudioTab
+import com.vexo.studio.model.VexoProject
+import com.vexo.studio.model.VexoTemplates
+import com.vexo.studio.playback.PlaybackUiState
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.util.UUID
+
+data class StudioUiState(
+    val navDestination: NavDestination = NavDestination.STUDIO,
+    val studioTab: StudioTab = StudioTab.LAYERS,
+    val project: VexoProject = VexoTemplates.monochromeStudio(),
+    val selectedCompositionIndex: Int = 0,
+    val selectedLayerId: String? = null,
+    val selectedProviderIndex: Int = 1,
+    val projects: List<ProjectSummary> = emptyList(),
+    val canUndo: Boolean = false,
+    val canRedo: Boolean = false,
+    val isFullscreenPreview: Boolean = false,
+    val previewZoom: Float = 1f,
+    val previewPanX: Float = 0f,
+    val previewPanY: Float = 0f,
+    val statusBanner: String? = null
+)
+
+@UnstableApi
+class StudioViewModel(application: Application) : AndroidViewModel(application) {
+    private val app = application as VexoApplication
+    val playbackController = app.playbackController
+    private val projectRepo = app.projectRepository
+    private val settingsRepo = app.settingsRepository
+    private val history = ProjectHistoryStack(50)
+
+    val playbackState: StateFlow<PlaybackUiState> = playbackController.state
+    val exportState: StateFlow<ExportProgress> = ExportService.exportState
+    val appSettings: StateFlow<AppSettings> = settingsRepo.settingsFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AppSettings())
+
+    private val _uiState = MutableStateFlow(StudioUiState())
+    val uiState: StateFlow<StudioUiState> = _uiState.asStateFlow()
+
+    private val _sceneSnapshot = MutableStateFlow<RenderSceneSnapshot?>(null)
+    val sceneSnapshot: StateFlow<RenderSceneSnapshot?> = _sceneSnapshot.asStateFlow()
+
+    private val providerEngines = mutableMapOf<Int, AudioProviderEngine>()
+    private var totalTimeSec = 0f
+    private var playingTimeSec = 0f
+    private var lastTickNs = System.nanoTime()
+
+    init {
+        val recovered = projectRepo.recoverAutosaveOrDefault()
+        val firstComp = recovered.compositions.firstOrNull { it.index == 1 } ?: recovered.compositions.first()
+        _uiState.value = _uiState.value.copy(
+            project = recovered,
+            selectedCompositionIndex = firstComp.index,
+            selectedLayerId = firstComp.layers.firstOrNull()?.common?.id,
+            projects = projectRepo.listProjects()
+        )
+        startAnalysisLoop()
+    }
+
+    private fun startAnalysisLoop() {
+        viewModelScope.launch(Dispatchers.Default) {
+            val sampleBuf = FloatArray(8192)
+            while (isActive) {
+                val nowNs = System.nanoTime()
+                val deltaSec = ((nowNs - lastTickNs) / 1_000_000_000f).coerceIn(0.004f, 0.05f)
+                lastTickNs = nowNs
+                val deltaMs = deltaSec * 1000f
+
+                withContext(Dispatchers.Main) {
+                    playbackController.pollPosition()
+                }
+
+                val pState = playbackState.value
+                val ui = _uiState.value
+                val settings = appSettings.value
+                val freeze = settings.pauseBehavior == PauseBehavior.FREEZE
+
+                totalTimeSec += deltaSec
+                if (pState.isPlaying) {
+                    playingTimeSec += deltaSec
+                }
+
+                val ring = app.pcmRingBuffer
+                val gen = ring.currentGeneration()
+                val hasFreshSamples = ring.readLatestWindow(sampleBuf, gen)
+
+                val snapshots = HashMap<Int, AudioProviderSnapshot>(ui.project.audioProviders.size)
+                for (prov in ui.project.audioProviders) {
+                    val eng = providerEngines.getOrPut(prov.index) { AudioProviderEngine(prov) }
+                    eng.updateConfig(prov)
+                    val fftLen = AudioProviderEngine.sanitizeFftSize(prov.fftSize)
+                    val slice = if (hasFreshSamples) {
+                        sampleBuf.copyOfRange(sampleBuf.size - fftLen, sampleBuf.size)
+                    } else null
+                    snapshots[prov.index] = eng.process(
+                        samples = slice,
+                        sampleRate = ring.sampleRate,
+                        deltaMs = deltaMs,
+                        streamGeneration = gen,
+                        isPlaying = pState.isPlaying,
+                        freezeOnPause = freeze
+                    )
+                }
+
+                _sceneSnapshot.value = RenderSceneSnapshot(
+                    project = ui.project,
+                    audioSnapshots = snapshots,
+                    trackMeta = pState.trackMeta,
+                    isPlaying = pState.isPlaying,
+                    totalTimeSec = totalTimeSec,
+                    playingTimeSec = playingTimeSec,
+                    zoom = ui.previewZoom,
+                    panX = ui.previewPanX,
+                    panY = ui.previewPanY,
+                    showSafeArea = ui.project.canvas.showSafeAreaGuides
+                )
+                delay(16L)
+            }
+        }
+    }
+
+    fun navigateTo(dest: NavDestination) {
+        _uiState.value = _uiState.value.copy(navDestination = dest)
+    }
+
+    fun selectStudioTab(tab: StudioTab) {
+        _uiState.value = _uiState.value.copy(studioTab = tab)
+    }
+
+    fun toggleFullscreenPreview() {
+        _uiState.value = _uiState.value.copy(isFullscreenPreview = !_uiState.value.isFullscreenPreview)
+    }
+
+    fun updatePreviewTransform(zoomDelta: Float, panX: Float, panY: Float) {
+        val cur = _uiState.value
+        val nextZoom = (cur.previewZoom * zoomDelta).coerceIn(0.5f, 3.5f)
+        _uiState.value = cur.copy(
+            previewZoom = nextZoom,
+            previewPanX = (cur.previewPanX + panX).coerceIn(-400f, 400f),
+            previewPanY = (cur.previewPanY + panY).coerceIn(-400f, 400f)
+        )
+    }
+
+    fun resetPreviewCamera() {
+        _uiState.value = _uiState.value.copy(previewZoom = 1f, previewPanX = 0f, previewPanY = 0f)
+    }
+
+    fun toggleSafeAreaGuides() {
+        commitProjectChange(_uiState.value.project.let { p ->
+            p.copy(canvas = p.canvas.copy(showSafeAreaGuides = !p.canvas.showSafeAreaGuides))
+        })
+    }
+
+    fun setAspectRatio(ratio: AspectRatioPreset) {
+        val p = _uiState.value.project
+        commitProjectChange(
+            p.copy(
+                canvas = p.canvas.copy(aspectRatio = ratio),
+                exportSettings = p.exportSettings.copy(aspectRatio = ratio)
+            )
+        )
+    }
+
+    fun selectComposition(index: Int) {
+        val comp = _uiState.value.project.compositions.firstOrNull { it.index == index } ?: return
+        _uiState.value = _uiState.value.copy(
+            selectedCompositionIndex = index,
+            selectedLayerId = comp.layers.firstOrNull()?.common?.id
+        )
+    }
+
+    fun selectLayer(layerId: String) {
+        _uiState.value = _uiState.value.copy(selectedLayerId = layerId)
+    }
+
+    fun addComposition() {
+        val p = _uiState.value.project
+        val nextIdx = (p.compositions.maxOfOrNull { it.index } ?: 0) + 1
+        val newComp = CompositionNode(index = nextIdx, name = "Composition $nextIdx")
+        commitProjectChange(p.copy(compositions = p.compositions + newComp))
+        _uiState.value = _uiState.value.copy(selectedCompositionIndex = nextIdx, selectedLayerId = null)
+    }
+
+    fun addLayer(type: LayerType) {
+        val p = _uiState.value.project
+        val compIdx = _uiState.value.selectedCompositionIndex
+        val newLayer = createDefaultLayer(type)
+        val updatedComps = p.compositions.map { comp ->
+            if (comp.index == compIdx) comp.copy(layers = comp.layers + newLayer) else comp
+        }
+        commitProjectChange(p.copy(compositions = updatedComps))
+        _uiState.value = _uiState.value.copy(selectedLayerId = newLayer.common.id)
+    }
+
+    fun duplicateLayer(layerId: String) {
+        val p = _uiState.value.project
+        val compIdx = _uiState.value.selectedCompositionIndex
+        var clonedId: String? = null
+        val updatedComps = p.compositions.map { comp ->
+            if (comp.index != compIdx) comp else {
+                val list = mutableListOf<LayerNode>()
+                for (l in comp.layers) {
+                    list.add(l)
+                    if (l.common.id == layerId) {
+                        val copy = l.copy(
+                            common = l.common.copy(
+                                id = UUID.randomUUID().toString(),
+                                name = "${l.common.name} Copy"
+                            )
+                        )
+                        clonedId = copy.common.id
+                        list.add(copy)
+                    }
+                }
+                comp.copy(layers = list)
+            }
+        }
+        commitProjectChange(p.copy(compositions = updatedComps))
+        if (clonedId != null) _uiState.value = _uiState.value.copy(selectedLayerId = clonedId)
+    }
+
+    fun deleteLayer(layerId: String) {
+        val p = _uiState.value.project
+        val compIdx = _uiState.value.selectedCompositionIndex
+        val updatedComps = p.compositions.map { comp ->
+            if (comp.index == compIdx) {
+                comp.copy(layers = comp.layers.filterNot { it.common.id == layerId })
+            } else comp
+        }
+        commitProjectChange(p.copy(compositions = updatedComps))
+        val remaining = updatedComps.firstOrNull { it.index == compIdx }?.layers
+        _uiState.value = _uiState.value.copy(selectedLayerId = remaining?.firstOrNull()?.common?.id)
+    }
+
+    fun moveLayer(layerId: String, direction: Int) {
+        val p = _uiState.value.project
+        val compIdx = _uiState.value.selectedCompositionIndex
+        val updatedComps = p.compositions.map { comp ->
+            if (comp.index != compIdx) comp else {
+                val list = comp.layers.toMutableList()
+                val idx = list.indexOfFirst { it.common.id == layerId }
+                val target = idx + direction
+                if (idx in list.indices && target in list.indices) {
+                    val item = list.removeAt(idx)
+                    list.add(target, item)
+                }
+                comp.copy(layers = list)
+            }
+        }
+        commitProjectChange(p.copy(compositions = updatedComps))
+    }
+
+    fun updateLayer(layerId: String, recordUndo: Boolean = true, transform: (LayerNode) -> LayerNode) {
+        val p = _uiState.value.project
+        val updatedComps = p.compositions.map { comp ->
+            comp.copy(layers = comp.layers.map { l -> if (l.common.id == layerId) transform(l) else l })
+        }
+        val next = p.copy(compositions = updatedComps)
+        if (recordUndo) {
+            commitProjectChange(next)
+        } else {
+            _uiState.value = _uiState.value.copy(project = next)
+        }
+    }
+
+    fun commitUndoSnapshot(previousProject: VexoProject) {
+        history.pushState(previousProject)
+        val cur = _uiState.value.project
+        projectRepo.saveProject(cur)
+        _uiState.value = _uiState.value.copy(
+            canUndo = history.canUndo,
+            canRedo = history.canRedo,
+            projects = projectRepo.listProjects()
+        )
+    }
+
+    fun updateAudioProvider(index: Int, recordUndo: Boolean = true, transform: (AudioProviderConfig) -> AudioProviderConfig) {
+        val p = _uiState.value.project
+        val updated = p.audioProviders.map { if (it.index == index) transform(it) else it }
+        val next = p.copy(audioProviders = updated)
+        if (recordUndo) commitProjectChange(next) else _uiState.value = _uiState.value.copy(project = next)
+    }
+
+    fun addAudioProvider() {
+        val p = _uiState.value.project
+        val nextIdx = (p.audioProviders.maxOfOrNull { it.index } ?: 0) + 1
+        val next = p.copy(audioProviders = p.audioProviders + AudioProviderConfig(index = nextIdx, tag = "Provider $nextIdx"))
+        commitProjectChange(next)
+        _uiState.value = _uiState.value.copy(selectedProviderIndex = nextIdx)
+    }
+
+    fun selectAudioProvider(index: Int) {
+        _uiState.value = _uiState.value.copy(selectedProviderIndex = index)
+    }
+
+    fun undo() {
+        val prev = history.undo(_uiState.value.project) ?: return
+        projectRepo.saveProject(prev)
+        _uiState.value = _uiState.value.copy(
+            project = prev,
+            canUndo = history.canUndo,
+            canRedo = history.canRedo,
+            projects = projectRepo.listProjects()
+        )
+    }
+
+    fun redo() {
+        val next = history.redo(_uiState.value.project) ?: return
+        projectRepo.saveProject(next)
+        _uiState.value = _uiState.value.copy(
+            project = next,
+            canUndo = history.canUndo,
+            canRedo = history.canRedo,
+            projects = projectRepo.listProjects()
+        )
+    }
+
+    fun createNewProject(name: String, template: VexoProject = VexoTemplates.monochromeStudio()) {
+        val fresh = template.copy(
+            id = UUID.randomUUID().toString(),
+            name = name.ifBlank { "Untitled Studio" },
+            updatedAtMs = System.currentTimeMillis()
+        )
+        history.clear()
+        projectRepo.saveProject(fresh)
+        val comp = fresh.compositions.firstOrNull { it.index == 1 } ?: fresh.compositions.first()
+        _uiState.value = _uiState.value.copy(
+            project = fresh,
+            selectedCompositionIndex = comp.index,
+            selectedLayerId = comp.layers.firstOrNull()?.common?.id,
+            projects = projectRepo.listProjects(),
+            canUndo = false,
+            canRedo = false,
+            navDestination = NavDestination.STUDIO,
+            statusBanner = "Loaded ${fresh.name}"
+        )
+    }
+
+    fun openProject(id: String) {
+        val loaded = projectRepo.loadProject(id) ?: return
+        history.clear()
+        val comp = loaded.compositions.firstOrNull { it.index == 1 } ?: loaded.compositions.first()
+        _uiState.value = _uiState.value.copy(
+            project = loaded,
+            selectedCompositionIndex = comp.index,
+            selectedLayerId = comp.layers.firstOrNull()?.common?.id,
+            canUndo = false,
+            canRedo = false,
+            navDestination = NavDestination.STUDIO
+        )
+    }
+
+    fun duplicateProject(id: String) {
+        projectRepo.duplicateProject(id)
+        _uiState.value = _uiState.value.copy(projects = projectRepo.listProjects())
+    }
+
+    fun renameCurrentProject(newName: String) {
+        val clean = newName.trim().ifBlank { return }
+        commitProjectChange(_uiState.value.project.copy(name = clean))
+    }
+
+    fun deleteProject(id: String) {
+        projectRepo.deleteProject(id)
+        val remaining = projectRepo.listProjects()
+        if (_uiState.value.project.id == id) {
+            val fallback = remaining.firstOrNull()?.let { projectRepo.loadProject(it.id) }
+                ?: VexoTemplates.monochromeStudio().also { projectRepo.saveProject(it) }
+            _uiState.value = _uiState.value.copy(
+                project = fallback,
+                projects = projectRepo.listProjects()
+            )
+        } else {
+            _uiState.value = _uiState.value.copy(projects = remaining)
+        }
+    }
+
+    fun importPresetFromUri(uri: Uri, displayName: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                val stream = app.contentResolver.openInputStream(uri) ?: error("Cannot open preset file")
+                val imported = stream.use { s ->
+                    if (displayName.endsWith(".viz", ignoreCase = true) || displayName.endsWith(".zip", ignoreCase = true)) {
+                        AveeJsonCodec.importFromVizZip(s, displayName.substringBeforeLast('.'))
+                    } else {
+                        AveeJsonCodec.importFromText(s.readBytes().toString(Charsets.UTF_8), displayName.substringBeforeLast('.'))
+                    }
+                }
+                withContext(Dispatchers.Main) {
+                    createNewProject(imported.name, imported)
+                }
+            }.onFailure { err ->
+                withContext(Dispatchers.Main) {
+                    _uiState.value = _uiState.value.copy(statusBanner = "Preset import failed: ${err.message}")
+                }
+            }
+        }
+    }
+
+    fun exportPresetToUri(uri: Uri) {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                val jsonText = AveeJsonCodec.exportProjectAsAveeJson(_uiState.value.project)
+                app.contentResolver.openOutputStream(uri)?.use { out ->
+                    out.write(jsonText.toByteArray(Charsets.UTF_8))
+                } ?: error("Cannot write to target URI")
+            }.onSuccess {
+                withContext(Dispatchers.Main) {
+                    _uiState.value = _uiState.value.copy(statusBanner = "Preset exported as JSON")
+                }
+            }.onFailure { err ->
+                withContext(Dispatchers.Main) {
+                    _uiState.value = _uiState.value.copy(statusBanner = "Preset export failed: ${err.message}")
+                }
+            }
+        }
+    }
+
+    fun importAudioTracks(uris: List<Uri>) {
+        playbackController.importTracks(uris, playFirstImmediately = true)
+        val first = uris.firstOrNull()?.toString()
+        if (first != null) {
+            val p = _uiState.value.project
+            commitProjectChange(p.copy(audioUri = first))
+        }
+    }
+
+    fun attachImageToSelectedLayer(uri: Uri) {
+        runCatching {
+            app.contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        val selected = currentSelectedLayer()
+        if (selected != null && selected.type == LayerType.IMAGE) {
+            val cfg = selected.config as LayerConfig.Image
+            updateLayer(selected.common.id) {
+                it.copy(
+                    config = cfg.copy(
+                        sourceType = com.vexo.studio.model.ImageSourceType.IMPORTED,
+                        customUri = uri.toString()
+                    )
+                )
+            }
+            _uiState.value = _uiState.value.copy(statusBanner = "Image applied to ${selected.common.name}")
+        } else {
+            val p = _uiState.value.project
+            val compIdx = _uiState.value.selectedCompositionIndex
+            val newLayer = LayerNode(
+                type = LayerType.IMAGE,
+                common = LayerCommon(name = "Imported Image"),
+                config = LayerConfig.Image(
+                    sourceType = com.vexo.studio.model.ImageSourceType.IMPORTED,
+                    customUri = uri.toString()
+                )
+            )
+            val updated = p.compositions.map {
+                if (it.index == compIdx) it.copy(layers = it.layers + newLayer) else it
+            }
+            commitProjectChange(p.copy(compositions = updated))
+            _uiState.value = _uiState.value.copy(selectedLayerId = newLayer.common.id)
+        }
+    }
+
+    fun updateExportSettings(transform: (com.vexo.studio.model.ExportSettings) -> com.vexo.studio.model.ExportSettings) {
+        val p = _uiState.value.project
+        commitProjectChange(p.copy(exportSettings = transform(p.exportSettings)))
+    }
+
+    fun startVideoExport() {
+        val audioUri = playbackController.currentAudioUri() ?: _uiState.value.project.audioUri
+        if (audioUri.isNullOrBlank()) {
+            _uiState.value = _uiState.value.copy(statusBanner = "Import an audio track before exporting video")
+            return
+        }
+        if (playbackState.value.isPlaying) {
+            playbackController.togglePlayPause()
+        }
+        ExportService.startExport(
+            app,
+            ExportService.ExportRequest(
+                project = _uiState.value.project,
+                audioUri = audioUri,
+                trackMeta = playbackState.value.trackMeta
+            )
+        )
+    }
+
+    fun cancelVideoExport() {
+        ExportService.cancelExport(app)
+    }
+
+    fun updateSettings(transform: (AppSettings) -> AppSettings) {
+        viewModelScope.launch {
+            settingsRepo.update(transform)
+        }
+    }
+
+    fun clearBanner() {
+        _uiState.value = _uiState.value.copy(statusBanner = null)
+    }
+
+    fun currentSelectedLayer(): LayerNode? {
+        val comp = _uiState.value.project.compositions.firstOrNull {
+            it.index == _uiState.value.selectedCompositionIndex
+        } ?: return null
+        return comp.layers.firstOrNull { it.common.id == _uiState.value.selectedLayerId }
+    }
+
+    private fun commitProjectChange(next: VexoProject) {
+        history.pushState(_uiState.value.project)
+        projectRepo.saveProject(next)
+        _uiState.value = _uiState.value.copy(
+            project = next,
+            canUndo = history.canUndo,
+            canRedo = history.canRedo,
+            projects = projectRepo.listProjects()
+        )
+    }
+
+    private fun createDefaultLayer(type: LayerType): LayerNode = when (type) {
+        LayerType.BARS -> LayerNode(type, LayerCommon(name = "Spectrum Bars"), LayerConfig.Bars())
+        LayerType.IMAGE -> LayerNode(type, LayerCommon(name = "Image"), LayerConfig.Image())
+        LayerType.TEXT -> LayerNode(type, LayerCommon(name = "Text Label"), LayerConfig.Text())
+        LayerType.SHAPE -> LayerNode(type, LayerCommon(name = "Polygon Shape"), LayerConfig.Shape())
+        LayerType.PARTICLES -> LayerNode(type, LayerCommon(name = "Particles"), LayerConfig.Particles())
+        LayerType.BLUR_EFFECT -> LayerNode(type, LayerCommon(name = "Blur Effect"), LayerConfig.BlurEffect())
+        LayerType.MOTION_BLUR_EFFECT -> LayerNode(type, LayerCommon(name = "Motion Blur"), LayerConfig.MotionBlurEffect())
+        LayerType.MIRROR_EFFECT -> LayerNode(type, LayerCommon(name = "Mirror Effect"), LayerConfig.MirrorEffect())
+        LayerType.RGB_SPLIT_EFFECT -> LayerNode(type, LayerCommon(name = "RGB Split"), LayerConfig.RgbSplitEffect())
+    }
+}

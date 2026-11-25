@@ -1,0 +1,1356 @@
+package com.vexo.studio.ui.screens
+
+import android.content.res.Configuration
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.CropFree
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.FullscreenExit
+import androidx.compose.material.icons.filled.GridOn
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Redo
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.filled.Undo
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.media3.common.util.UnstableApi
+import com.vexo.studio.engine.gl.RenderSceneSnapshot
+import com.vexo.studio.engine.gl.VexoPreviewSurface
+import com.vexo.studio.model.AppSettings
+import com.vexo.studio.model.AspectRatioPreset
+import com.vexo.studio.model.AudioProviderConfig
+import com.vexo.studio.model.BarsSegmentType
+import com.vexo.studio.model.BarsShapePath
+import com.vexo.studio.model.BlendMode
+import com.vexo.studio.model.ChannelMode
+import com.vexo.studio.model.ForceFieldType
+import com.vexo.studio.model.ImageShape
+import com.vexo.studio.model.ImageSourceType
+import com.vexo.studio.model.LayerConfig
+import com.vexo.studio.model.LayerNode
+import com.vexo.studio.model.LayerType
+import com.vexo.studio.model.MeasureWhat
+import com.vexo.studio.model.MirrorMode
+import com.vexo.studio.model.SampleProviderType
+import com.vexo.studio.model.ShapeKind
+import com.vexo.studio.model.SpawnAreaType
+import com.vexo.studio.model.StudioTab
+import com.vexo.studio.model.VexoProject
+import com.vexo.studio.model.VexoTemplates
+import com.vexo.studio.model.WindowType
+import com.vexo.studio.playback.PlaybackUiState
+import com.vexo.studio.ui.StudioUiState
+import com.vexo.studio.ui.StudioViewModel
+import com.vexo.studio.ui.components.RegisteredSlider
+import com.vexo.studio.ui.components.StudioChipSelector
+import com.vexo.studio.ui.components.StudioColorPickerRow
+import com.vexo.studio.ui.components.StudioSlider
+import com.vexo.studio.ui.components.StudioToggleRow
+import com.vexo.studio.ui.theme.LocalVexoPalette
+
+@UnstableApi
+@Composable
+fun EditorScreen(
+    vm: StudioViewModel,
+    uiState: StudioUiState,
+    playback: PlaybackUiState,
+    sceneSnapshot: RenderSceneSnapshot?,
+    settings: AppSettings,
+    onPickAudio: () -> Unit,
+    onPickImage: () -> Unit,
+    onImportPreset: () -> Unit,
+    onExportPreset: () -> Unit
+) {
+    val palette = LocalVexoPalette.current
+    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+
+    if (uiState.isFullscreenPreview) {
+        Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+            VexoPreviewSurface(
+                aspectRatio = uiState.project.canvas.aspectRatio,
+                sceneSnapshot = sceneSnapshot,
+                onTransformGesture = vm::updatePreviewTransform,
+                modifier = Modifier.fillMaxSize(),
+                fillBounds = false
+            )
+            Row(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(12.dp)
+                    .background(palette.panel.copy(alpha = 0.85f))
+                    .border(1.dp, palette.border),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = vm::resetPreviewCamera) {
+                    Icon(Icons.Default.CropFree, "Reset camera", tint = palette.textPrimary)
+                }
+                IconButton(onClick = vm::toggleSafeAreaGuides) {
+                    Icon(
+                        Icons.Default.GridOn,
+                        "Safe area",
+                        tint = if (uiState.project.canvas.showSafeAreaGuides) palette.accent else palette.textSecondary
+                    )
+                }
+                IconButton(onClick = vm::toggleFullscreenPreview) {
+                    Icon(Icons.Default.FullscreenExit, "Exit fullscreen", tint = palette.accent)
+                }
+            }
+            CompactTransportBar(
+                playback = playback,
+                onTogglePlay = { vm.playbackController.togglePlayPause() },
+                onPrev = { vm.playbackController.previous() },
+                onNext = { vm.playbackController.next() },
+                onSeek = { vm.playbackController.seekTo(it) },
+                onPickAudio = onPickAudio,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .background(palette.bg.copy(alpha = 0.86f))
+            )
+        }
+        return
+    }
+
+    if (isLandscape) {
+        Row(modifier = Modifier.fillMaxSize()) {
+            Column(modifier = Modifier.weight(0.48f).fillMaxHeight()) {
+                PreviewBlock(
+                    vm = vm,
+                    uiState = uiState,
+                    sceneSnapshot = sceneSnapshot,
+                    modifier = Modifier.weight(1f).fillMaxWidth()
+                )
+                CompactTransportBar(
+                    playback = playback,
+                    onTogglePlay = { vm.playbackController.togglePlayPause() },
+                    onPrev = { vm.playbackController.previous() },
+                    onNext = { vm.playbackController.next() },
+                    onSeek = { vm.playbackController.seekTo(it) },
+                    onPickAudio = onPickAudio,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .width(1.dp)
+                    .fillMaxHeight()
+                    .background(palette.border)
+            )
+            StudioWorkspacePanel(
+                vm = vm,
+                uiState = uiState,
+                settings = settings,
+                onPickImage = onPickImage,
+                onImportPreset = onImportPreset,
+                onExportPreset = onExportPreset,
+                modifier = Modifier.weight(0.52f).fillMaxHeight()
+            )
+        }
+    } else {
+        Column(modifier = Modifier.fillMaxSize()) {
+            PreviewBlock(
+                vm = vm,
+                uiState = uiState,
+                sceneSnapshot = sceneSnapshot,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(220.dp)
+            )
+            CompactTransportBar(
+                playback = playback,
+                onTogglePlay = { vm.playbackController.togglePlayPause() },
+                onPrev = { vm.playbackController.previous() },
+                onNext = { vm.playbackController.next() },
+                onSeek = { vm.playbackController.seekTo(it) },
+                onPickAudio = onPickAudio,
+                modifier = Modifier.fillMaxWidth()
+            )
+            StudioWorkspacePanel(
+                vm = vm,
+                uiState = uiState,
+                settings = settings,
+                onPickImage = onPickImage,
+                onImportPreset = onImportPreset,
+                onExportPreset = onExportPreset,
+                modifier = Modifier.weight(1f).fillMaxWidth()
+            )
+        }
+    }
+}
+
+@UnstableApi
+@Composable
+private fun PreviewBlock(
+    vm: StudioViewModel,
+    uiState: StudioUiState,
+    sceneSnapshot: RenderSceneSnapshot?,
+    modifier: Modifier = Modifier
+) {
+    val palette = LocalVexoPalette.current
+    Box(modifier = modifier.background(Color.Black)) {
+        VexoPreviewSurface(
+            aspectRatio = uiState.project.canvas.aspectRatio,
+            sceneSnapshot = sceneSnapshot,
+            onTransformGesture = vm::updatePreviewTransform,
+            modifier = Modifier.fillMaxSize()
+        )
+        // Compact aspect ratio + preview tools overlay bar
+        Row(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(6.dp)
+                .background(palette.bg.copy(alpha = 0.78f))
+                .border(1.dp, palette.border),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            AspectRatioPreset.entries.forEach { ratio ->
+                val active = ratio == uiState.project.canvas.aspectRatio
+                Text(
+                    text = ratio.label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (active) palette.accentOn else palette.textSecondary,
+                    modifier = Modifier
+                        .background(if (active) palette.accent else Color.Transparent)
+                        .clickable { vm.setAspectRatio(ratio) }
+                        .padding(horizontal = 6.dp, vertical = 4.dp)
+                )
+            }
+            IconButton(onClick = vm::toggleSafeAreaGuides, modifier = Modifier.size(28.dp)) {
+                Icon(
+                    Icons.Default.GridOn,
+                    "Safe area",
+                    tint = if (uiState.project.canvas.showSafeAreaGuides) palette.accent else palette.textSecondary,
+                    modifier = Modifier.size(15.dp)
+                )
+            }
+            IconButton(onClick = vm::resetPreviewCamera, modifier = Modifier.size(28.dp)) {
+                Icon(Icons.Default.CropFree, "Reset zoom", tint = palette.textSecondary, modifier = Modifier.size(15.dp))
+            }
+            IconButton(onClick = vm::toggleFullscreenPreview, modifier = Modifier.size(28.dp)) {
+                Icon(Icons.Default.Fullscreen, "Fullscreen", tint = palette.textPrimary, modifier = Modifier.size(16.dp))
+            }
+        }
+
+        // Undo / Redo mini strip
+        Row(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(6.dp)
+                .background(palette.bg.copy(alpha = 0.78f))
+                .border(1.dp, palette.border)
+        ) {
+            IconButton(onClick = vm::undo, enabled = uiState.canUndo, modifier = Modifier.size(28.dp)) {
+                Icon(
+                    Icons.Default.Undo,
+                    "Undo",
+                    tint = if (uiState.canUndo) palette.textPrimary else palette.textSecondary.copy(alpha = 0.35f),
+                    modifier = Modifier.size(15.dp)
+                )
+            }
+            IconButton(onClick = vm::redo, enabled = uiState.canRedo, modifier = Modifier.size(28.dp)) {
+                Icon(
+                    Icons.Default.Redo,
+                    "Redo",
+                    tint = if (uiState.canRedo) palette.textPrimary else palette.textSecondary.copy(alpha = 0.35f),
+                    modifier = Modifier.size(15.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun CompactTransportBar(
+    playback: PlaybackUiState,
+    onTogglePlay: () -> Unit,
+    onPrev: () -> Unit,
+    onNext: () -> Unit,
+    onSeek: (Long) -> Unit,
+    onPickAudio: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val palette = LocalVexoPalette.current
+    Column(
+        modifier = modifier
+            .background(palette.panel)
+            .border(1.dp, palette.border)
+            .padding(horizontal = 10.dp, vertical = 4.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = playback.trackMeta.title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = palette.textPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = "${playback.trackMeta.artist} · ${formatDuration(playback.positionMs)} / ${formatDuration(playback.durationMs)}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = palette.textSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onPickAudio, modifier = Modifier.size(34.dp)) {
+                    Icon(Icons.Default.FolderOpen, "Import audio", tint = palette.accent, modifier = Modifier.size(18.dp))
+                }
+                IconButton(onClick = onPrev, modifier = Modifier.size(34.dp)) {
+                    Icon(Icons.Default.SkipPrevious, "Previous", tint = palette.textPrimary, modifier = Modifier.size(20.dp))
+                }
+                IconButton(onClick = onTogglePlay, modifier = Modifier.size(36.dp)) {
+                    Icon(
+                        if (playback.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        "Play/Pause",
+                        tint = palette.accent,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+                IconButton(onClick = onNext, modifier = Modifier.size(34.dp)) {
+                    Icon(Icons.Default.SkipNext, "Next", tint = palette.textPrimary, modifier = Modifier.size(20.dp))
+                }
+            }
+        }
+        val maxDur = playback.durationMs.coerceAtLeast(1L).toFloat()
+        Slider(
+            value = playback.positionMs.toFloat().coerceIn(0f, maxDur),
+            onValueChange = { onSeek(it.toLong()) },
+            valueRange = 0f..maxDur,
+            colors = SliderDefaults.colors(
+                thumbColor = palette.accent,
+                activeTrackColor = palette.accent,
+                inactiveTrackColor = palette.border
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(22.dp)
+        )
+    }
+}
+
+@UnstableApi
+@Composable
+private fun StudioWorkspacePanel(
+    vm: StudioViewModel,
+    uiState: StudioUiState,
+    settings: AppSettings,
+    onPickImage: () -> Unit,
+    onImportPreset: () -> Unit,
+    onExportPreset: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val palette = LocalVexoPalette.current
+    Column(modifier = modifier.background(palette.bg)) {
+        // Editor Tabs
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(palette.panel)
+                .border(1.dp, palette.border)
+        ) {
+            StudioTab.entries.forEach { tab ->
+                val active = tab == uiState.studioTab
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .background(if (active) palette.accent else Color.Transparent)
+                        .clickable { vm.selectStudioTab(tab) }
+                        .padding(vertical = 10.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = tab.label.uppercase(),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
+                        color = if (active) palette.accentOn else palette.textSecondary,
+                        maxLines = 1
+                    )
+                }
+            }
+        }
+
+        when (uiState.studioTab) {
+            StudioTab.LAYERS -> LayersTab(vm = vm, uiState = uiState)
+            StudioTab.PROPERTIES -> PropertiesTab(vm = vm, uiState = uiState, settings = settings)
+            StudioTab.ASSETS -> AssetsTab(vm = vm, uiState = uiState, onPickImage = onPickImage)
+            StudioTab.PRESETS -> PresetsTab(vm = vm, onImportPreset = onImportPreset, onExportPreset = onExportPreset)
+        }
+    }
+}
+
+@UnstableApi
+@Composable
+private fun LayersTab(
+    vm: StudioViewModel,
+    uiState: StudioUiState
+) {
+    val palette = LocalVexoPalette.current
+    var showAddLayerDialog by remember { mutableStateOf(false) }
+    var renameLayerTarget by remember { mutableStateOf<LayerNode?>(null) }
+    var deleteLayerTarget by remember { mutableStateOf<LayerNode?>(null) }
+
+    val activeComp = uiState.project.compositions.firstOrNull { it.index == uiState.selectedCompositionIndex }
+        ?: uiState.project.compositions.first()
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        // Composition selector strip
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            uiState.project.compositions.forEach { comp ->
+                val selected = comp.index == activeComp.index
+                Box(
+                    modifier = Modifier
+                        .border(1.dp, if (selected) palette.accent else palette.border)
+                        .background(if (selected) palette.accent else palette.panel)
+                        .clickable { vm.selectComposition(comp.index) }
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        text = comp.name.uppercase(),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (selected) palette.accentOn else palette.textPrimary
+                    )
+                }
+            }
+            Box(
+                modifier = Modifier
+                    .border(1.dp, palette.border)
+                    .background(palette.panelElevated)
+                    .clickable { vm.addComposition() }
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
+            ) {
+                Text("+ COMP", style = MaterialTheme.typography.labelSmall, color = palette.accent)
+            }
+            Spacer(Modifier.width(8.dp))
+            Box(
+                modifier = Modifier
+                    .background(palette.accent)
+                    .clickable { showAddLayerDialog = true }
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Add, null, tint = palette.accentOn, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("ADD LAYER", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = palette.accentOn)
+                }
+            }
+        }
+
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            items(activeComp.layers, key = { it.common.id }) { layer ->
+                val isSelected = layer.common.id == uiState.selectedLayerId
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, if (isSelected) palette.accent else palette.border)
+                        .background(if (isSelected) palette.panelElevated else palette.panel)
+                        .clickable { vm.selectLayer(layer.common.id) }
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(
+                        onClick = {
+                            vm.updateLayer(layer.common.id) {
+                                it.copy(common = it.common.copy(visible = !it.common.visible))
+                            }
+                        },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            if (layer.common.visible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                            "Toggle visibility",
+                            tint = if (layer.common.visible) palette.accent else palette.textSecondary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    IconButton(
+                        onClick = {
+                            vm.updateLayer(layer.common.id) {
+                                it.copy(common = it.common.copy(locked = !it.common.locked))
+                            }
+                        },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            if (layer.common.locked) Icons.Default.Lock else Icons.Default.LockOpen,
+                            "Toggle lock",
+                            tint = if (layer.common.locked) palette.danger else palette.textSecondary,
+                            modifier = Modifier.size(15.dp)
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f).padding(horizontal = 6.dp)) {
+                        Text(
+                            text = layer.common.name,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = palette.textPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = "${layer.type.label.uppercase()} · ${layer.common.blendMode.label.uppercase()}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = palette.textSecondary,
+                            maxLines = 1
+                        )
+                    }
+                    IconButton(onClick = { vm.moveLayer(layer.common.id, -1) }, modifier = Modifier.size(26.dp)) {
+                        Icon(Icons.Default.ArrowUpward, "Move up", tint = palette.textSecondary, modifier = Modifier.size(15.dp))
+                    }
+                    IconButton(onClick = { vm.moveLayer(layer.common.id, 1) }, modifier = Modifier.size(26.dp)) {
+                        Icon(Icons.Default.ArrowDownward, "Move down", tint = palette.textSecondary, modifier = Modifier.size(15.dp))
+                    }
+                    IconButton(onClick = { renameLayerTarget = layer }, modifier = Modifier.size(26.dp)) {
+                        Icon(Icons.Default.Edit, "Rename", tint = palette.textSecondary, modifier = Modifier.size(15.dp))
+                    }
+                    IconButton(onClick = { vm.duplicateLayer(layer.common.id) }, modifier = Modifier.size(26.dp)) {
+                        Icon(Icons.Default.ContentCopy, "Duplicate", tint = palette.textSecondary, modifier = Modifier.size(15.dp))
+                    }
+                    IconButton(onClick = { deleteLayerTarget = layer }, modifier = Modifier.size(26.dp)) {
+                        Icon(Icons.Default.Delete, "Delete", tint = palette.danger, modifier = Modifier.size(15.dp))
+                    }
+                }
+            }
+            item { Spacer(Modifier.height(16.dp)) }
+        }
+    }
+
+    if (showAddLayerDialog) {
+        AlertDialog(
+            onDismissRequest = { showAddLayerDialog = false },
+            title = { Text("ADD LAYER OR EFFECT", style = MaterialTheme.typography.titleMedium) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    LayerType.entries.forEach { type ->
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .border(1.dp, palette.border)
+                                .background(palette.panel)
+                                .clickable {
+                                    vm.addLayer(type)
+                                    showAddLayerDialog = false
+                                }
+                                .padding(horizontal = 12.dp, vertical = 10.dp)
+                        ) {
+                            Text(type.label.uppercase(), style = MaterialTheme.typography.labelMedium)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showAddLayerDialog = false }) { Text("CLOSE") }
+            }
+        )
+    }
+
+    renameLayerTarget?.let { target ->
+        var text by remember { mutableStateOf(target.common.name) }
+        AlertDialog(
+            onDismissRequest = { renameLayerTarget = null },
+            title = { Text("RENAME LAYER") },
+            text = {
+                OutlinedTextField(value = text, onValueChange = { text = it }, singleLine = true)
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (text.isNotBlank()) {
+                        vm.updateLayer(target.common.id) {
+                            it.copy(common = it.common.copy(name = text.trim()))
+                        }
+                    }
+                    renameLayerTarget = null
+                }) { Text("SAVE") }
+            },
+            dismissButton = {
+                TextButton(onClick = { renameLayerTarget = null }) { Text("CANCEL") }
+            }
+        )
+    }
+
+    deleteLayerTarget?.let { target ->
+        AlertDialog(
+            onDismissRequest = { deleteLayerTarget = null },
+            title = { Text("DELETE LAYER?") },
+            text = { Text("Remove \"${target.common.name}\" from ${activeComp.name}?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.deleteLayer(target.common.id)
+                    deleteLayerTarget = null
+                }) { Text("DELETE", color = palette.danger) }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteLayerTarget = null }) { Text("CANCEL") }
+            }
+        )
+    }
+}
+
+@UnstableApi
+@Composable
+private fun PropertiesTab(
+    vm: StudioViewModel,
+    uiState: StudioUiState,
+    settings: AppSettings
+) {
+    val palette = LocalVexoPalette.current
+    var editTarget by rememberSaveable { mutableStateOf("LAYER") } // LAYER or PROVIDER
+    val expandedSections = remember {
+        mutableStateMapOf(
+            "transform" to true,
+            "specific" to true,
+            "measures" to false,
+            "provider_general" to true,
+            "provider_hz" to true,
+            "provider_response" to true,
+            "provider_beat" to false
+        )
+    }
+    var undoAnchor by remember { mutableStateOf<VexoProject?>(null) }
+
+    fun beginDrag() {
+        if (undoAnchor == null) undoAnchor = uiState.project
+    }
+
+    fun endDrag() {
+        undoAnchor?.let { vm.commitUndoSnapshot(it) }
+        undoAnchor = null
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf("LAYER", "PROVIDER").forEach { mode ->
+                val active = editTarget == mode
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .border(1.dp, if (active) palette.accent else palette.border)
+                        .background(if (active) palette.accent else palette.panel)
+                        .clickable { editTarget = mode }
+                        .padding(vertical = 8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = if (mode == "LAYER") "SELECTED LAYER" else "AUDIO PROVIDER",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (active) palette.accentOn else palette.textPrimary
+                    )
+                }
+            }
+        }
+
+        if (editTarget == "PROVIDER") {
+            AudioProviderEditorSection(
+                vm = vm,
+                uiState = uiState,
+                settings = settings,
+                expandedSections = expandedSections,
+                onBeginDrag = ::beginDrag,
+                onEndDrag = ::endDrag
+            )
+            return@Column
+        }
+
+        val layer = vm.currentSelectedLayer()
+        if (layer == null) {
+            Text(
+                "Select or add a layer in the Layers tab to edit properties.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = palette.textSecondary,
+                modifier = Modifier.padding(16.dp)
+            )
+            return@Column
+        }
+
+        if (layer.common.locked) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, palette.danger)
+                    .background(palette.panel)
+                    .padding(10.dp)
+            ) {
+                Text("LAYER LOCKED — Unlock in Layers tab to edit.", style = MaterialTheme.typography.labelSmall, color = palette.danger)
+            }
+            return@Column
+        }
+
+        // Section 1: Transform & Blend
+        ExpandableSectionHeader(
+            title = "COMMON & TRANSFORM · ${layer.common.name.uppercase()}",
+            expanded = expandedSections["transform"] ?: true,
+            onToggle = { expandedSections["transform"] = !(expandedSections["transform"] ?: true) }
+        ) {
+            StudioToggleRow(
+                label = "Visible",
+                checked = layer.common.visible,
+                onCheckedChange = { vis ->
+                    vm.updateLayer(layer.common.id) { it.copy(common = it.common.copy(visible = vis)) }
+                }
+            )
+            StudioChipSelector(
+                label = "Blend Mode",
+                options = BlendMode.entries,
+                selected = layer.common.blendMode,
+                optionLabel = { it.label },
+                onSelect = { bm ->
+                    vm.updateLayer(layer.common.id) { it.copy(common = it.common.copy(blendMode = bm)) }
+                }
+            )
+            RegisteredSlider("opacity", layer.common.opacity, settings.showPropertyHelpHints, { v ->
+                beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(common = it.common.copy(opacity = v)) }
+            }, ::endDrag)
+            RegisteredSlider("posX", layer.common.posX, settings.showPropertyHelpHints, { v ->
+                beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(common = it.common.copy(posX = v)) }
+            }, ::endDrag)
+            RegisteredSlider("posY", layer.common.posY, settings.showPropertyHelpHints, { v ->
+                beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(common = it.common.copy(posY = v)) }
+            }, ::endDrag)
+            RegisteredSlider("scaleX", layer.common.scaleX, settings.showPropertyHelpHints, { v ->
+                beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(common = it.common.copy(scaleX = v)) }
+            }, ::endDrag)
+            RegisteredSlider("scaleY", layer.common.scaleY, settings.showPropertyHelpHints, { v ->
+                beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(common = it.common.copy(scaleY = v)) }
+            }, ::endDrag)
+            RegisteredSlider("rotationDeg", layer.common.rotationDeg, settings.showPropertyHelpHints, { v ->
+                beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(common = it.common.copy(rotationDeg = v)) }
+            }, ::endDrag)
+        }
+
+        // Section 2: Audio-Reactive Measures
+        ExpandableSectionHeader(
+            title = "AUDIO-REACTIVE MEASURES",
+            expanded = expandedSections["measures"] ?: false,
+            onToggle = { expandedSections["measures"] = !(expandedSections["measures"] ?: false) }
+        ) {
+            StudioChipSelector(
+                label = "Measure Scale",
+                options = listOf(
+                    MeasureWhat.NOTHING, MeasureWhat.BEAT, MeasureWhat.BASS, MeasureWhat.MID,
+                    MeasureWhat.TREBLE, MeasureWhat.RMS, MeasureWhat.BEAT_TRIGGER_ANIM
+                ),
+                selected = layer.common.measureScale.measureWhat,
+                optionLabel = { it.label },
+                onSelect = { mw ->
+                    vm.updateLayer(layer.common.id) {
+                        it.copy(common = it.common.copy(measureScale = it.common.measureScale.copy(measureWhat = mw)))
+                    }
+                }
+            )
+            StudioSlider(
+                label = "Scale Amount",
+                value = layer.common.measureScale.amountA,
+                min = -1f, max = 2f, defaultValue = 0f, step = 0.02f,
+                onValueChange = { v ->
+                    beginDrag()
+                    vm.updateLayer(layer.common.id, false) {
+                        it.copy(common = it.common.copy(measureScale = it.common.measureScale.copy(amountA = v, amountB = v)))
+                    }
+                },
+                onCommit = ::endDrag
+            )
+            StudioChipSelector(
+                label = "Measure Position",
+                options = listOf(
+                    MeasureWhat.NOTHING, MeasureWhat.BEAT_CAM_SHAKE_MORE, MeasureWhat.BEAT_RANDOM_SHAKE,
+                    MeasureWhat.CONSTANT_SHAKE, MeasureWhat.BASS, MeasureWhat.TRACK_POSITION
+                ),
+                selected = layer.common.measurePos.measureWhat,
+                optionLabel = { it.label },
+                onSelect = { mw ->
+                    vm.updateLayer(layer.common.id) {
+                        it.copy(common = it.common.copy(measurePos = it.common.measurePos.copy(measureWhat = mw)))
+                    }
+                }
+            )
+            StudioSlider(
+                label = "Pos Amount",
+                value = layer.common.measurePos.amountA,
+                min = 0f, max = 0.5f, defaultValue = 0f, step = 0.01f,
+                onValueChange = { v ->
+                    beginDrag()
+                    vm.updateLayer(layer.common.id, false) {
+                        it.copy(common = it.common.copy(measurePos = it.common.measurePos.copy(amountA = v, amountB = v)))
+                    }
+                },
+                onCommit = ::endDrag
+            )
+            StudioChipSelector(
+                label = "Measure Rotation",
+                options = listOf(
+                    MeasureWhat.NOTHING, MeasureWhat.TOTAL_TIME, MeasureWhat.TOTAL_TIME_WHEN_PLAYING,
+                    MeasureWhat.BEAT_CAM_SHAKE_ROT_MORE, MeasureWhat.BEAT
+                ),
+                selected = layer.common.measureRot.measureWhat,
+                optionLabel = { it.label },
+                onSelect = { mw ->
+                    vm.updateLayer(layer.common.id) {
+                        it.copy(common = it.common.copy(measureRot = it.common.measureRot.copy(measureWhat = mw)))
+                    }
+                }
+            )
+            StudioSlider(
+                label = "Rot Amount",
+                value = layer.common.measureRot.amountA,
+                min = -5f, max = 5f, defaultValue = 0f, step = 0.05f,
+                onValueChange = { v ->
+                    beginDrag()
+                    vm.updateLayer(layer.common.id, false) {
+                        it.copy(common = it.common.copy(measureRot = it.common.measureRot.copy(amountA = v, amountB = v)))
+                    }
+                },
+                onCommit = ::endDrag
+            )
+        }
+
+        // Section 3: Layer-specific properties
+        ExpandableSectionHeader(
+            title = "${layer.type.label.uppercase()} PROPERTIES",
+            expanded = expandedSections["specific"] ?: true,
+            onToggle = { expandedSections["specific"] = !(expandedSections["specific"] ?: true) }
+        ) {
+            when (val cfg = layer.config) {
+                is LayerConfig.Bars -> {
+                    StudioChipSelector("Path Shape", BarsShapePath.entries, cfg.shapePath, { it.label }) { path ->
+                        vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(shapePath = path)) }
+                    }
+                    StudioChipSelector("Segment Style", BarsSegmentType.entries, cfg.segment1, { it.label }) { seg ->
+                        vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(segment1 = seg)) }
+                    }
+                    StudioToggleRow("Mirror Symmetry", cfg.mirror) { m ->
+                        vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(mirror = m)) }
+                    }
+                    StudioToggleRow("Flip Input", cfg.flipInput) { f ->
+                        vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(flipInput = f)) }
+                    }
+                    StudioToggleRow("Alternating Dir", cfg.alternatingDirection) { a ->
+                        vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(alternatingDirection = a)) }
+                    }
+                    RegisteredSlider("barWidth", cfg.barWidth, settings.showPropertyHelpHints, { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(barWidth = v)) }
+                    }, ::endDrag)
+                    RegisteredSlider("heightScale", cfg.heightScale, settings.showPropertyHelpHints, { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(heightScale = v)) }
+                    }, ::endDrag)
+                    RegisteredSlider("minHeightScale", cfg.minHeightScale, settings.showPropertyHelpHints, { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(minHeightScale = v)) }
+                    }, ::endDrag)
+                    RegisteredSlider("maxHeightScale", cfg.maxHeightScale, settings.showPropertyHelpHints, { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(maxHeightScale = v)) }
+                    }, ::endDrag)
+                    if (cfg.shapePath == BarsShapePath.CIRCLE || cfg.shapePath == BarsShapePath.SIDED_POLYGON) {
+                        RegisteredSlider("circleRadius", cfg.circleRadius, settings.showPropertyHelpHints, { v ->
+                            beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(circleRadius = v)) }
+                        }, ::endDrag)
+                    }
+                    StudioSlider("Reaction Delay", cfg.reactionDelay.toFloat(), 0f, 9f, 0f, "frames", 1f, onValueChange = { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(reactionDelay = v.toInt())) }
+                    }, onCommit = ::endDrag)
+                    StudioColorPickerRow("Color From", cfg.colorFromArgb) { col ->
+                        vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(colorFromArgb = col)) }
+                    }
+                    StudioColorPickerRow("Color To", cfg.colorToArgb) { col ->
+                        vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(colorToArgb = col)) }
+                    }
+                }
+                is LayerConfig.Image -> {
+                    StudioChipSelector("Source", ImageSourceType.entries, cfg.sourceType, { it.label }) { src ->
+                        vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(sourceType = src)) }
+                    }
+                    StudioChipSelector("Shape Mask", ImageShape.entries, cfg.shape, { it.label }) { sh ->
+                        vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(shape = sh)) }
+                    }
+                    StudioToggleRow("Keep Aspect Ratio", cfg.keepAspectRatio) { k ->
+                        vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(keepAspectRatio = k)) }
+                    }
+                    StudioToggleRow("Crop To Fit", cfg.keepAspectRatioAndCropToFit) { k ->
+                        vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(keepAspectRatioAndCropToFit = k)) }
+                    }
+                    StudioToggleRow("Color Key Chroma", cfg.colorKeyEnabled) { k ->
+                        vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(colorKeyEnabled = k)) }
+                    }
+                    StudioSlider("Saturation", cfg.saturation, 0f, 2f, 1f, "", 0.02f, onValueChange = { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(saturation = v)) }
+                    }, onCommit = ::endDrag)
+                    StudioColorPickerRow("Tint Color", cfg.colorArgb) { col ->
+                        vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(colorArgb = col)) }
+                    }
+                }
+                is LayerConfig.Text -> {
+                    var textVal by remember(layer.common.id) { mutableStateOf(cfg.text) }
+                    OutlinedTextField(
+                        value = textVal,
+                        onValueChange = {
+                            textVal = it
+                            vm.updateLayer(layer.common.id, false) { l -> l.copy(config = cfg.copy(text = it)) }
+                        },
+                        label = { Text("TEXT ({Title}, {Artist}, {Album}, {Time})") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    RegisteredSlider("fontSize", cfg.fontSize.toFloat(), settings.showPropertyHelpHints, { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(fontSize = v.toInt())) }
+                    }, ::endDrag)
+                    StudioToggleRow("Bold", cfg.bold) { b ->
+                        vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(bold = b)) }
+                    }
+                    StudioToggleRow("Italic", cfg.italic) { i ->
+                        vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(italic = i)) }
+                    }
+                    StudioColorPickerRow("Text Color", cfg.colorArgb) { col ->
+                        vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(colorArgb = col)) }
+                    }
+                }
+                is LayerConfig.Shape -> {
+                    StudioChipSelector("Shape Kind", ShapeKind.entries, cfg.kind, { it.label }) { k ->
+                        vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(kind = k)) }
+                    }
+                    StudioSlider("Sides", cfg.sides.toFloat(), 3f, 16f, 6f, "", 1f, onValueChange = { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(sides = v.toInt())) }
+                    }, onCommit = ::endDrag)
+                    StudioSlider("Stroke Width", cfg.strokeWidth, 1f, 24f, 3f, "px", 0.5f, onValueChange = { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(strokeWidth = v)) }
+                    }, onCommit = ::endDrag)
+                    StudioColorPickerRow("Stroke Color", cfg.strokeColorArgb) { col ->
+                        vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(strokeColorArgb = col)) }
+                    }
+                    StudioColorPickerRow("Fill Color", cfg.fillColorArgb) { col ->
+                        vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(fillColorArgb = col)) }
+                    }
+                }
+                is LayerConfig.Particles -> {
+                    StudioChipSelector("Spawn Area", SpawnAreaType.entries, cfg.spawnArea, { it.label }) { s ->
+                        vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(spawnArea = s)) }
+                    }
+                    StudioChipSelector("Force Field", ForceFieldType.entries, cfg.forceField, { it.label }) { f ->
+                        vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(forceField = f)) }
+                    }
+                    RegisteredSlider("countLimit", cfg.countLimit.toFloat(), settings.showPropertyHelpHints, { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(countLimit = v.toInt())) }
+                    }, ::endDrag)
+                    RegisteredSlider("speed", cfg.speed, settings.showPropertyHelpHints, { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(speed = v)) }
+                    }, ::endDrag)
+                    StudioSlider("Vector Angle", cfg.vectorAngleDeg, 0f, 360f, 270f, "deg", 5f, onValueChange = { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(vectorAngleDeg = v)) }
+                    }, onCommit = ::endDrag)
+                    StudioSlider("Particle Scale", cfg.particleScale, 0.1f, 3f, 0.65f, "x", 0.05f, onValueChange = { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(particleScale = v)) }
+                    }, onCommit = ::endDrag)
+                    StudioColorPickerRow("Color From", cfg.colorFromArgb) { col ->
+                        vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(colorFromArgb = col)) }
+                    }
+                    StudioColorPickerRow("Color To", cfg.colorToArgb) { col ->
+                        vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(colorToArgb = col)) }
+                    }
+                }
+                is LayerConfig.BlurEffect -> {
+                    RegisteredSlider("blurRadius", cfg.blurRadius, settings.showPropertyHelpHints, { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(blurRadius = v)) }
+                    }, ::endDrag)
+                    RegisteredSlider("blurMultiplier", cfg.blurMultiplier, settings.showPropertyHelpHints, { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(blurMultiplier = v)) }
+                    }, ::endDrag)
+                    StudioToggleRow("Show Unblurred Under", cfg.showUnblurredContentUnder) { s ->
+                        vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(showUnblurredContentUnder = s)) }
+                    }
+                }
+                is LayerConfig.RgbSplitEffect -> {
+                    RegisteredSlider("splitMultiplier", cfg.splitMultiplier, settings.showPropertyHelpHints, { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(splitMultiplier = v)) }
+                    }, ::endDrag)
+                    StudioSlider("Split X", cfg.splitAmountX, -0.1f, 0.1f, 0.015f, "", 0.002f, onValueChange = { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(splitAmountX = v)) }
+                    }, onCommit = ::endDrag)
+                    StudioColorPickerRow("Channel 0", cfg.splitColor0Argb) { col ->
+                        vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(splitColor0Argb = col)) }
+                    }
+                }
+                is LayerConfig.MotionBlurEffect -> {
+                    StudioSlider("Blur Amount", cfg.blurAmountMultiplier, 0.4f, 3f, 0.85f, "x", 0.05f, onValueChange = { v ->
+                        beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(blurAmountMultiplier = v)) }
+                    }, onCommit = ::endDrag)
+                }
+                is LayerConfig.MirrorEffect -> {
+                    StudioChipSelector("Mirror Mode", MirrorMode.entries, cfg.mirrorMode, { it.label }) { m ->
+                        vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(mirrorMode = m)) }
+                    }
+                    StudioToggleRow("Flip Mirror", cfg.flipMirror) { f ->
+                        vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(flipMirror = f)) }
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(16.dp))
+    }
+}
+
+@UnstableApi
+@Composable
+private fun AudioProviderEditorSection(
+    vm: StudioViewModel,
+    uiState: StudioUiState,
+    settings: AppSettings,
+    expandedSections: MutableMap<String, Boolean>,
+    onBeginDrag: () -> Unit,
+    onEndDrag: () -> Unit
+) {
+    val palette = LocalVexoPalette.current
+    val provider = uiState.project.audioProviders.firstOrNull { it.index == uiState.selectedProviderIndex }
+        ?: uiState.project.audioProviders.first()
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        uiState.project.audioProviders.forEach { p ->
+            val active = p.index == provider.index
+            Box(
+                modifier = Modifier
+                    .border(1.dp, if (active) palette.accent else palette.border)
+                    .background(if (active) palette.accent else palette.panel)
+                    .clickable { vm.selectAudioProvider(p.index) }
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
+            ) {
+                Text("PROVIDER ${p.index}", style = MaterialTheme.typography.labelSmall, color = if (active) palette.accentOn else palette.textPrimary)
+            }
+        }
+        Box(
+            modifier = Modifier
+                .border(1.dp, palette.border)
+                .background(palette.panelElevated)
+                .clickable { vm.addAudioProvider() }
+                .padding(horizontal = 10.dp, vertical = 6.dp)
+        ) {
+            Text("+ PROVIDER", style = MaterialTheme.typography.labelSmall, color = palette.accent)
+        }
+    }
+
+    ExpandableSectionHeader(
+        title = "GENERAL & SPECTRUM",
+        expanded = expandedSections["provider_general"] ?: true,
+        onToggle = { expandedSections["provider_general"] = !(expandedSections["provider_general"] ?: true) }
+    ) {
+        StudioChipSelector("Sample Mode", SampleProviderType.entries, provider.sampleProvider, { it.aveeName }) { mode ->
+            vm.updateAudioProvider(provider.index) { it.copy(sampleProvider = mode) }
+        }
+        StudioChipSelector("FFT Size", listOf(256, 512, 1024, 2048, 4096), provider.fftSize, { "$it" }) { sz ->
+            vm.updateAudioProvider(provider.index) { it.copy(fftSize = sz) }
+        }
+        StudioChipSelector("Window", WindowType.entries, provider.window, { it.label }) { win ->
+            vm.updateAudioProvider(provider.index) { it.copy(window = win) }
+        }
+        StudioChipSelector("Channel Mode", ChannelMode.entries, provider.channelMode, { it.label }) { ch ->
+            vm.playbackController.pcmTap.channelSelectMode = when (ch) {
+                ChannelMode.MIX -> 0
+                ChannelMode.LEFT -> 1
+                ChannelMode.RIGHT -> 2
+            }
+            vm.updateAudioProvider(provider.index) { it.copy(channelMode = ch) }
+        }
+        RegisteredSlider("sampleOutCount", provider.sampleOutCount.toFloat(), settings.showPropertyHelpHints, { v ->
+            onBeginDrag(); vm.updateAudioProvider(provider.index, false) { it.copy(sampleOutCount = v.toInt()) }
+        }, onEndDrag)
+        RegisteredSlider("outputMultiplier", provider.outputMultiplier, settings.showPropertyHelpHints, { v ->
+            onBeginDrag(); vm.updateAudioProvider(provider.index, false) { it.copy(outputMultiplier = v) }
+        }, onEndDrag)
+        StudioToggleRow("Mirror Samples", provider.mirrorSamples) { m ->
+            vm.updateAudioProvider(provider.index) { it.copy(mirrorSamples = m) }
+        }
+        StudioSlider("Repeat Samples", provider.repeatSamples.toFloat(), 1f, 6f, 1f, "x", 1f, onValueChange = { v ->
+            onBeginDrag(); vm.updateAudioProvider(provider.index, false) { it.copy(repeatSamples = v.toInt()) }
+        }, onCommit = onEndDrag)
+        StudioSlider("Edge Gap", provider.startAndEndGap.toFloat(), 0f, 30f, 0f, "bars", 1f, onValueChange = { v ->
+            onBeginDrag(); vm.updateAudioProvider(provider.index, false) { it.copy(startAndEndGap = v.toInt()) }
+        }, onCommit = onEndDrag)
+    }
+
+    ExpandableSectionHeader(
+        title = "HZ RANGE & FILTERING",
+        expanded = expandedSections["provider_hz"] ?: true,
+        onToggle = { expandedSections["provider_hz"] = !(expandedSections["provider_hz"] ?: true) }
+    ) {
+        RegisteredSlider("lowerHz", provider.lowerHz, settings.showPropertyHelpHints, { v ->
+            onBeginDrag(); vm.updateAudioProvider(provider.index, false) { it.copy(lowerHz = v) }
+        }, onEndDrag)
+        RegisteredSlider("higherHz", provider.higherHz, settings.showPropertyHelpHints, { v ->
+            onBeginDrag(); vm.updateAudioProvider(provider.index, false) { it.copy(higherHz = v) }
+        }, onEndDrag)
+        StudioSlider("Hz Linear Factor", provider.hzLinearFactor, 0f, 1f, 0.15f, "", 0.02f, onValueChange = { v ->
+            onBeginDrag(); vm.updateAudioProvider(provider.index, false) { it.copy(hzLinearFactor = v) }
+        }, onCommit = onEndDrag)
+        StudioSlider("A-Weighting", provider.aWeight, 0f, 1f, 0.2f, "", 0.02f, onValueChange = { v ->
+            onBeginDrag(); vm.updateAudioProvider(provider.index, false) { it.copy(aWeight = v) }
+        }, onCommit = onEndDrag)
+        StudioSlider("Filter Radius", provider.filterRadius.toFloat(), 0f, 12f, 1f, "bins", 1f, onValueChange = { v ->
+            onBeginDrag(); vm.updateAudioProvider(provider.index, false) { it.copy(filterRadius = v.toInt()) }
+        }, onCommit = onEndDrag)
+        StudioSlider("Filter Strength", provider.filterStrength, 0f, 1f, 0.62f, "", 0.02f, onValueChange = { v ->
+            onBeginDrag(); vm.updateAudioProvider(provider.index, false) { it.copy(filterStrength = v) }
+        }, onCommit = onEndDrag)
+    }
+
+    ExpandableSectionHeader(
+        title = "RESPONSE & BEAT ENVELOPE",
+        expanded = expandedSections["provider_response"] ?: true,
+        onToggle = { expandedSections["provider_response"] = !(expandedSections["provider_response"] ?: true) }
+    ) {
+        RegisteredSlider("attackMs", provider.attackMs, settings.showPropertyHelpHints, { v ->
+            onBeginDrag(); vm.updateAudioProvider(provider.index, false) { it.copy(attackMs = v) }
+        }, onEndDrag)
+        RegisteredSlider("releaseMs", provider.releaseMs, settings.showPropertyHelpHints, { v ->
+            onBeginDrag(); vm.updateAudioProvider(provider.index, false) { it.copy(releaseMs = v) }
+        }, onEndDrag)
+        RegisteredSlider("beatSensitivity", provider.beatSensitivity, settings.showPropertyHelpHints, { v ->
+            onBeginDrag(); vm.updateAudioProvider(provider.index, false) { it.copy(beatSensitivity = v) }
+        }, onEndDrag)
+        StudioSlider("Beat Range First", provider.beatRangeBarFirst, 0f, 1f, 0f, "", 0.02f, onValueChange = { v ->
+            onBeginDrag(); vm.updateAudioProvider(provider.index, false) { it.copy(beatRangeBarFirst = v) }
+        }, onCommit = onEndDrag)
+        StudioSlider("Beat Range Last", provider.beatRangeBarLast, 0f, 1f, 0.2f, "", 0.02f, onValueChange = { v ->
+            onBeginDrag(); vm.updateAudioProvider(provider.index, false) { it.copy(beatRangeBarLast = v) }
+        }, onCommit = onEndDrag)
+    }
+}
+
+@Composable
+private fun ExpandableSectionHeader(
+    title: String,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    content: @Composable () -> Unit
+) {
+    val palette = LocalVexoPalette.current
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, palette.border)
+            .background(palette.panel)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onToggle)
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(title, style = MaterialTheme.typography.labelSmall, color = palette.accent)
+            Text(if (expanded) "−" else "+", style = MaterialTheme.typography.titleMedium, color = palette.textSecondary)
+        }
+        if (expanded) {
+            Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
+                content()
+            }
+        }
+    }
+}
+
+@UnstableApi
+@Composable
+private fun AssetsTab(
+    vm: StudioViewModel,
+    uiState: StudioUiState,
+    onPickImage: () -> Unit
+) {
+    val palette = LocalVexoPalette.current
+    val selected = vm.currentSelectedLayer()
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Text("IMAGE & TEXTURE ASSETS", style = MaterialTheme.typography.labelMedium, color = palette.accent)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(palette.accent)
+                .clickable(onClick = onPickImage)
+                .padding(vertical = 12.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                if (selected?.type == LayerType.IMAGE) "IMPORT IMAGE TO SELECTED LAYER"
+                else "IMPORT IMAGE AS NEW LAYER",
+                style = MaterialTheme.typography.labelMedium,
+                color = palette.accentOn
+            )
+        }
+
+        if (selected?.type == LayerType.IMAGE) {
+            val cfg = selected.config as LayerConfig.Image
+            Text("BUILT-IN TEXTURES", style = MaterialTheme.typography.labelSmall, color = palette.textSecondary)
+            listOf(
+                "internalres:vignette80" to "Studio Vignette 80",
+                "internalres:particle_circle_blur4" to "Soft Radial Glow",
+                "internalres:white" to "Pure White",
+                "internalres:black" to "Solid Black"
+            ).forEach { (resKey, label) ->
+                val active = cfg.sourceType == ImageSourceType.INTERNAL && cfg.internalRes == resKey
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, if (active) palette.accent else palette.border)
+                        .background(palette.panel)
+                        .clickable {
+                            vm.updateLayer(selected.common.id) {
+                                it.copy(config = cfg.copy(sourceType = ImageSourceType.INTERNAL, internalRes = resKey))
+                            }
+                        }
+                        .padding(10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(label, style = MaterialTheme.typography.bodyMedium)
+                    Text(if (active) "ACTIVE" else "USE", style = MaterialTheme.typography.labelSmall, color = palette.accent)
+                }
+            }
+        }
+    }
+}
+
+@UnstableApi
+@Composable
+private fun PresetsTab(
+    vm: StudioViewModel,
+    onImportPreset: () -> Unit,
+    onExportPreset: () -> Unit
+) {
+    val palette = LocalVexoPalette.current
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Text("AVEE JSON / VIZ PRESETS", style = MaterialTheme.typography.labelMedium, color = palette.accent)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .background(palette.accent)
+                    .clickable(onClick = onImportPreset)
+                    .padding(vertical = 11.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("IMPORT .JSON / .VIZ", style = MaterialTheme.typography.labelSmall, color = palette.accentOn)
+            }
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .border(1.dp, palette.accent)
+                    .background(palette.panel)
+                    .clickable(onClick = onExportPreset)
+                    .padding(vertical = 11.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("EXPORT .JSON", style = MaterialTheme.typography.labelSmall, color = palette.accent)
+            }
+        }
+
+        Text("STUDIO PRESETS", style = MaterialTheme.typography.labelSmall, color = palette.textSecondary)
+        VexoTemplates.allTemplates().forEach { tpl ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, palette.border)
+                    .background(palette.panel)
+                    .clickable { vm.createNewProject(tpl.name, tpl) }
+                    .padding(12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(tpl.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                    Text("${tpl.canvas.aspectRatio.label} · ${tpl.compositions.sumOf { it.layers.size }} layers", style = MaterialTheme.typography.labelSmall, color = palette.textSecondary)
+                }
+                Text("APPLY", style = MaterialTheme.typography.labelSmall, color = palette.accent)
+            }
+        }
+    }
+}
+
+fun formatDuration(ms: Long): String {
+    val sec = (ms / 1000L).coerceAtLeast(0L)
+    return "%d:%02d".format(sec / 60, sec % 60)
+}
