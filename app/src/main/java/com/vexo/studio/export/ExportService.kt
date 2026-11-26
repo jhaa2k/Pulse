@@ -15,6 +15,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -24,7 +25,8 @@ import kotlinx.coroutines.launch
  * Foreground export service displaying live progress notification and cancel control.
  */
 class ExportService : Service() {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val renderDispatcher = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "vexo-encoder") }.asCoroutineDispatcher()
+    private val scope = CoroutineScope(SupervisorJob() + renderDispatcher)
     private var activeJob: Job? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -45,7 +47,7 @@ class ExportService : Service() {
         pendingRequest = null
 
         startForeground(NOTIF_ID, buildNotification(0, "Starting export...", 0L))
-        activeJob?.cancel()
+        if (activeJob?.isActive == true) return START_NOT_STICKY
         activeJob = scope.launch {
             val exporter = VexoVideoExporter(applicationContext)
             runCatching {
@@ -69,6 +71,7 @@ class ExportService : Service() {
 
     override fun onDestroy() {
         scope.cancel()
+        renderDispatcher.close()
         super.onDestroy()
     }
 

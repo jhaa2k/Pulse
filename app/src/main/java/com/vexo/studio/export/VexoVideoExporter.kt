@@ -27,6 +27,11 @@ import com.vexo.studio.engine.gl.VexoGlRenderer
 import com.vexo.studio.model.VexoProject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.yield
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import android.media.MediaCodecList
+import java.io.RandomAccessFile
+import java.io.BufferedOutputStream
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -60,7 +65,7 @@ class VexoVideoExporter(private val context: Context) {
         val settings = project.exportSettings
         val (width, height) = computeDimensions(settings.aspectRatio.widthRatio, settings.aspectRatio.heightRatio, settings.resolution.shortSide)
         val fps = settings.fps.coerceIn(24, 60)
-        val bitrate = settings.videoBitrateMbps.coerceIn(2, 40) * 1_000_000
+        val bitrate = settings.videoBitrateMbps.coerceIn(2, 80) * 1_000_000
 
         val tempFile = File(context.cacheDir, "vexo_export_${System.currentTimeMillis()}.mp4")
 
@@ -73,11 +78,17 @@ class VexoVideoExporter(private val context: Context) {
         var audioDecoder: MediaCodec? = null
         var muxer: MediaMuxer? = null
         var muxerStarted = false
+        val pcmFile = File(context.cacheDir, tempFile.nameWithoutExtension + ".pcm")
+        var pcmReader: RandomAccessFile? = null
+        var inputExtractor: MediaExtractor? = null
+        var glRenderer: VexoGlRenderer? = null
+        val exportContext = currentCoroutineContext()
 
         try {
             onProgress(ExportProgress(isRunning = true, progress = 0.01f, statusText = "Preparing audio & encoder"))
 
             val extractor = MediaExtractor()
+            inputExtractor = extractor
             extractor.setDataSource(context, audioUri, null)
             val audioTrackIndex = (0 until extractor.trackCount).firstOrNull { idx ->
                 extractor.getTrackFormat(idx).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true
@@ -98,8 +109,10 @@ class VexoVideoExporter(private val context: Context) {
             } else {
                 durationUsRaw
             }
-            val totalDurationUs = (endUs - startUs).coerceAtLeast(1_000_000L)
-            val totalFrames = ((totalDurationUs / 1_000_000.0) * fps).roundToInt().coerceAtLeast(1)
+            require(startUs < endUs && endUs <= durationUsRaw) { "Invalid audio trim range" }
+            require(channels in 1..2) { "Export currently supports mono or stereo audio" }
+            val totalDurationUs = endUs - startUs
+            val totalFrames = kotlin.math.ceil(totalDurationUs / 1_000_000.0 * fps).toInt().coerceAtLeast(1)
 
             // Decode entire trimmed PCM window into short chunks or stream sequentially
             extractor.selectTrack(audioTrackIndex)
@@ -116,9 +129,12 @@ class VexoVideoExporter(private val context: Context) {
                 decoder = audioDecoder,
                 startUs = startUs,
                 endUs = endUs,
-                channels = channels
+                channels = channels,
+                sampleRate = sampleRate,
+                target = pcmFile
             )
-            extractor.release()
+            pcmReader = RandomAccessFile(pcmFile, "r")
+            extractor.release(); inputExtractor = null
             audioDecoder.stop(); audioDecoder.release(); audioDecoder = null
 
             // Configure H.264 Video Encoder + EGL Surface
@@ -129,7 +145,9 @@ class VexoVideoExporter(private val context: Context) {
                 setInteger(MediaFormat.KEY_FRAME_RATE, fps)
                 setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
             }
-            videoEncoder = MediaCodec.createEncoderByType(videoMime).apply {
+            val encoderName = MediaCodecList(MediaCodecList.REGULAR_CODECS).findEncoderForFormat(videoFormat)
+                ?: error("No H.264 encoder supports ${width}x${height} at $fps fps and selected bitrate")
+            videoEncoder = MediaCodec.createByCodecName(encoderName).apply {
                 configure(videoFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
             }
             encoderSurface = videoEncoder.createInputSurface()
@@ -153,7 +171,7 @@ class VexoVideoExporter(private val context: Context) {
             // Initialize EGL14 Context on encoderSurface
             eglDisplay = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY)
             val vers = IntArray(2)
-            EGL14.eglInitialize(eglDisplay, vers, 0, vers, 1)
+            check(EGL14.eglInitialize(eglDisplay, vers, 0, vers, 1)) { "EGL initialization failed" }
             val attribList = intArrayOf(
                 EGL14.EGL_RED_SIZE, 8,
                 EGL14.EGL_GREEN_SIZE, 8,
@@ -165,7 +183,7 @@ class VexoVideoExporter(private val context: Context) {
             )
             val configs = arrayOfNulls<EGLConfig>(1)
             val numConfigs = IntArray(1)
-            EGL14.eglChooseConfig(eglDisplay, attribList, 0, configs, 0, 1, numConfigs, 0)
+            check(EGL14.eglChooseConfig(eglDisplay, attribList, 0, configs, 0, 1, numConfigs, 0) && numConfigs[0]>0) { "No recordable EGL configuration" }
             eglContext = EGL14.eglCreateContext(
                 eglDisplay,
                 configs[0],
@@ -180,9 +198,10 @@ class VexoVideoExporter(private val context: Context) {
                 intArrayOf(EGL14.EGL_NONE),
                 0
             )
-            EGL14.eglMakeCurrent(eglDisplay, eglSurface, eglSurface, eglContext)
+            check(eglContext != EGL14.EGL_NO_CONTEXT && eglSurface != EGL14.EGL_NO_SURFACE && EGL14.eglMakeCurrent(eglDisplay, eglSurface, eglSurface, eglContext)) { "Cannot bind encoder EGL surface" }
 
             val renderer = VexoGlRenderer(context, isExportRenderer = true).apply { initGlResources() }
+            glRenderer = renderer
             val engines = project.audioProviders.associate { it.index to AudioProviderEngine(it) }
 
             val activeMuxer = MediaMuxer(tempFile.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
@@ -197,26 +216,55 @@ class VexoVideoExporter(private val context: Context) {
             val monoWindow = FloatArray(8192)
             val exportStartMs = System.currentTimeMillis()
 
-            var audioSampleCursor = 0
-            val totalMonoSamples = pcmDecoded.monoSamples.size
+            var audioSampleCursor = 0L
+            val frameBytes = 2 * channels
+            val totalPcmBytes = pcmDecoded
+            val totalMonoSamples = (totalPcmBytes / frameBytes).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+            val pcmWindowBytes = ByteArray(monoWindow.size * frameBytes)
+            val pcmWindowView = ByteBuffer.wrap(pcmWindowBytes).order(ByteOrder.LITTLE_ENDIAN)
+            val audioScratch = ByteArray(65536)
+            val reader = checkNotNull(pcmReader)
             var audioEosSent = false
             var audioDone = false
             var videoDone = false
 
+            data class Pending(val track: Int, val bytes: ByteArray, val pts: Long, val flags: Int)
+            val pending = ArrayList<Pending>()
+            var pendingBytes = 0L
+            fun writeEncoded(track: Int, buf: ByteBuffer, info: MediaCodec.BufferInfo) {
+                if ((info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0 || info.size <= 0) return
+                check(track >= 0) { "Encoder emitted data before track format" }
+                buf.position(info.offset); buf.limit(info.offset+info.size)
+                if (muxerStarted) activeMuxer.writeSampleData(track, buf, info)
+                else {
+                    pendingBytes += info.size
+                    require(pendingBytes <= 32L*1024*1024) { "Encoder track format did not arrive" }
+                    val bytes = ByteArray(info.size); buf.get(bytes)
+                    pending.add(Pending(track, bytes, info.presentationTimeUs, info.flags))
+                }
+            }
             fun tryStartMuxer() {
                 if (!muxerStarted && videoTrackMuxer >= 0 && audioTrackMuxer >= 0) {
                     activeMuxer.start()
                     muxerStarted = true
+                    for (p in pending) {
+                        val info=MediaCodec.BufferInfo().apply { set(0,p.bytes.size,p.pts,p.flags) }
+                        activeMuxer.writeSampleData(p.track, ByteBuffer.wrap(p.bytes), info)
+                    }
+                    pending.clear(); pendingBytes=0L
                 }
             }
 
             fun drainVideo(endOfStream: Boolean) {
                 if (endOfStream) videoEncoder.signalEndOfInputStream()
+                val deadline = android.os.SystemClock.elapsedRealtime()+30_000L
                 while (true) {
-                    val outIdx = videoEncoder.dequeueOutputBuffer(videoBufferInfo, 0)
+                    exportContext.ensureActive()
+                    val outIdx = videoEncoder.dequeueOutputBuffer(videoBufferInfo, if(endOfStream) 10_000 else 0)
                     when {
                         outIdx == MediaCodec.INFO_TRY_AGAIN_LATER -> {
                             if (!endOfStream) break
+                            check(android.os.SystemClock.elapsedRealtime()<deadline) { "Video encoder stalled" }
                         }
                         outIdx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
                             videoTrackMuxer = activeMuxer.addTrack(videoEncoder.outputFormat)
@@ -224,11 +272,7 @@ class VexoVideoExporter(private val context: Context) {
                         }
                         outIdx >= 0 -> {
                             val buf = videoEncoder.getOutputBuffer(outIdx)
-                            if (buf != null && (videoBufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG) == 0 && videoBufferInfo.size > 0 && muxerStarted) {
-                                buf.position(videoBufferInfo.offset)
-                                buf.limit(videoBufferInfo.offset + videoBufferInfo.size)
-                                activeMuxer.writeSampleData(videoTrackMuxer, buf, videoBufferInfo)
-                            }
+                            if (buf != null) writeEncoded(videoTrackMuxer,buf,videoBufferInfo)
                             val eos = (videoBufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0
                             videoEncoder.releaseOutputBuffer(outIdx, false)
                             if (eos) {
@@ -247,15 +291,18 @@ class VexoVideoExporter(private val context: Context) {
                     if (inIdx < 0) break
                     val inBuf = audioEncoder.getInputBuffer(inIdx) ?: break
                     inBuf.clear()
-                    val remainingBytes = pcmDecoded.pcm16Bytes.size - audioSampleCursor
+                    val remainingBytes = totalPcmBytes - audioSampleCursor
                     if (remainingBytes <= 0) {
-                        val ptsUs = (pcmDecoded.pcm16Bytes.size / (2.0 * channels * sampleRate) * 1_000_000.0).toLong()
+                        val ptsUs = (totalPcmBytes / (2.0 * channels * sampleRate) * 1_000_000.0).toLong()
                         audioEncoder.queueInputBuffer(inIdx, 0, 0, ptsUs, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
                         audioEosSent = true
                     } else {
-                        val toCopy = minOf(inBuf.remaining(), remainingBytes)
+                        val toCopy = (minOf(inBuf.remaining().toLong(), remainingBytes, audioScratch.size.toLong()).toInt() / frameBytes) * frameBytes
+                        check(toCopy>0) { "AAC input buffer is too small" }
                         val ptsUs = (audioSampleCursor / (2.0 * channels * sampleRate) * 1_000_000.0).toLong()
-                        inBuf.put(pcmDecoded.pcm16Bytes, audioSampleCursor, toCopy)
+                        reader.seek(audioSampleCursor)
+                        reader.readFully(audioScratch,0,toCopy)
+                        inBuf.put(audioScratch,0,toCopy)
                         audioSampleCursor += toCopy
                         audioEncoder.queueInputBuffer(inIdx, 0, toCopy, ptsUs, 0)
                     }
@@ -270,11 +317,7 @@ class VexoVideoExporter(private val context: Context) {
                         }
                         outIdx >= 0 -> {
                             val buf = audioEncoder.getOutputBuffer(outIdx)
-                            if (buf != null && (audioBufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG) == 0 && audioBufferInfo.size > 0 && muxerStarted) {
-                                buf.position(audioBufferInfo.offset)
-                                buf.limit(audioBufferInfo.offset + audioBufferInfo.size)
-                                activeMuxer.writeSampleData(audioTrackMuxer, buf, audioBufferInfo)
-                            }
+                            if (buf != null) writeEncoded(audioTrackMuxer,buf,audioBufferInfo)
                             val eos = (audioBufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0
                             audioEncoder.releaseOutputBuffer(outIdx, false)
                             if (eos) {
@@ -296,7 +339,14 @@ class VexoVideoExporter(private val context: Context) {
                 val copyLen = sampleEnd - winStart
                 monoWindow.fill(0f)
                 if (copyLen > 0) {
-                    System.arraycopy(pcmDecoded.monoSamples, winStart, monoWindow, monoWindow.size - copyLen, copyLen)
+                    reader.seek(winStart.toLong()*frameBytes)
+                    reader.readFully(pcmWindowBytes,0,copyLen*frameBytes)
+                    pcmWindowView.position(0)
+                    for(i in 0 until copyLen) {
+                        var sum=0f
+                        repeat(channels){sum+=pcmWindowView.short/32768f}
+                        monoWindow[monoWindow.size-copyLen+i]=sum/channels
+                    }
                 }
 
                 val audioSnapshots = mutableMapOf<Int, AudioProviderSnapshot>()
@@ -325,7 +375,7 @@ class VexoVideoExporter(private val context: Context) {
 
                 renderer.renderScene(scene, 1f / fps, width, height)
                 EGLExt.eglPresentationTimeANDROID(eglDisplay, eglSurface, frameIdx * frameDurationNs)
-                EGL14.eglSwapBuffers(eglDisplay, eglSurface)
+                check(EGL14.eglSwapBuffers(eglDisplay, eglSurface)) { "Encoder surface swap failed" }
 
                 pumpAudio()
                 drainVideo(endOfStream = false)
@@ -347,13 +397,16 @@ class VexoVideoExporter(private val context: Context) {
 
             // Finish encoders
             drainVideo(endOfStream = true)
+            val drainDeadline=android.os.SystemClock.elapsedRealtime()+60_000L
             while (!audioDone || !videoDone) {
                 yield()
+                check(android.os.SystemClock.elapsedRealtime()<drainDeadline) { "Encoder drain timed out" }
                 if (!audioDone) pumpAudio()
                 if (!videoDone) drainVideo(endOfStream = false)
             }
 
-            renderer.releaseGlResources()
+            renderer.releaseGlResources(); glRenderer=null
+            check(muxerStarted) { "Encoder did not produce both MP4 tracks" }
             if (muxerStarted) {
                 muxer.stop()
                 muxerStarted = false
@@ -391,6 +444,10 @@ class VexoVideoExporter(private val context: Context) {
             )
             throw e
         } finally {
+            runCatching { glRenderer?.releaseGlResources() }
+            runCatching { inputExtractor?.release() }
+            runCatching { pcmReader?.close() }
+            pcmFile.delete()
             runCatching { audioDecoder?.stop(); audioDecoder?.release() }
             runCatching { videoEncoder?.stop(); videoEncoder?.release() }
             runCatching { audioEncoder?.stop(); audioEncoder?.release() }
@@ -408,62 +465,57 @@ class VexoVideoExporter(private val context: Context) {
         }
     }
 
-    private data class DecodedPcm(val monoSamples: FloatArray, val pcm16Bytes: ByteArray)
-
-    private fun decodeTrimmedPcm(
-        extractor: MediaExtractor,
-        decoder: MediaCodec,
-        startUs: Long,
-        endUs: Long,
-        channels: Int
-    ): DecodedPcm {
-        val info = MediaCodec.BufferInfo()
-        val byteStream = java.io.ByteArrayOutputStream()
-        val monoList = ArrayList<Float>(44100 * 10)
-        var inputDone = false
-        var outputDone = false
-
-        while (!outputDone) {
-            if (!inputDone) {
-                val inIdx = decoder.dequeueInputBuffer(5000)
-                if (inIdx >= 0) {
-                    val buf = decoder.getInputBuffer(inIdx)!!
-                    val size = extractor.readSampleData(buf, 0)
-                    val pts = extractor.sampleTime
-                    if (size < 0 || pts > endUs) {
-                        decoder.queueInputBuffer(inIdx, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
-                        inputDone = true
-                    } else {
-                        decoder.queueInputBuffer(inIdx, 0, size, pts, 0)
-                        extractor.advance()
+    private suspend fun decodeTrimmedPcm(
+        extractor: MediaExtractor, decoder: MediaCodec, startUs: Long, endUs: Long,
+        channels: Int, sampleRate: Int, target: File
+    ): Long {
+        val info=MediaCodec.BufferInfo()
+        val frameBytes=channels*2
+        var inputDone=false
+        var outputDone=false
+        var bytesWritten=0L
+        var lastProgress=android.os.SystemClock.elapsedRealtime()
+        BufferedOutputStream(target.outputStream()).use { output ->
+            while(!outputDone) {
+                currentCoroutineContext().ensureActive()
+                check(android.os.SystemClock.elapsedRealtime()-lastProgress<30_000L) { "Audio decoder stalled" }
+                if(!inputDone) {
+                    val i=decoder.dequeueInputBuffer(5000)
+                    if(i>=0) {
+                        val buf=checkNotNull(decoder.getInputBuffer(i));buf.clear()
+                        val size=extractor.readSampleData(buf,0);val pts=extractor.sampleTime
+                        if(size<0||pts>=endUs){decoder.queueInputBuffer(i,0,0,0,MediaCodec.BUFFER_FLAG_END_OF_STREAM);inputDone=true}
+                        else {decoder.queueInputBuffer(i,0,size,pts,0);extractor.advance()}
+                        lastProgress=android.os.SystemClock.elapsedRealtime()
                     }
                 }
-            }
-            val outIdx = decoder.dequeueOutputBuffer(info, 5000)
-            if (outIdx >= 0) {
-                val outBuf = decoder.getOutputBuffer(outIdx)
-                if (outBuf != null && info.size > 0 && info.presentationTimeUs >= startUs) {
-                    val chunk = ByteArray(info.size)
-                    outBuf.position(info.offset)
-                    outBuf.get(chunk)
-                    byteStream.write(chunk)
-
-                    val bb = ByteBuffer.wrap(chunk).order(ByteOrder.LITTLE_ENDIAN)
-                    val frames = chunk.size / (2 * channels.coerceAtLeast(1))
-                    for (f in 0 until frames) {
-                        var sum = 0f
-                        for (c in 0 until channels) {
-                            sum += bb.short / 32768f
+                val i=decoder.dequeueOutputBuffer(info,5000)
+                if(i==MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                    val fmt=decoder.outputFormat
+                    require(fmt.getInteger(MediaFormat.KEY_SAMPLE_RATE)==sampleRate && fmt.getInteger(MediaFormat.KEY_CHANNEL_COUNT)==channels) {"Decoder changed PCM format"}
+                    if(fmt.containsKey(MediaFormat.KEY_PCM_ENCODING)) require(fmt.getInteger(MediaFormat.KEY_PCM_ENCODING)==android.media.AudioFormat.ENCODING_PCM_16BIT) {"Decoder output is not PCM16"}
+                } else if(i>=0) {
+                    try {
+                        val buf=decoder.getOutputBuffer(i)
+                        if(buf!=null&&info.size>=frameBytes) {
+                            val frames=info.size/frameBytes
+                            val startFrame=kotlin.math.ceil((startUs-info.presentationTimeUs)*sampleRate/1_000_000.0).toInt().coerceIn(0,frames)
+                            val endFrame=kotlin.math.ceil((endUs-info.presentationTimeUs)*sampleRate/1_000_000.0).toInt().coerceIn(startFrame,frames)
+                            val size=(endFrame-startFrame)*frameBytes
+                            if(size>0) {
+                                val chunk=ByteArray(size)
+                                buf.limit(info.offset+endFrame*frameBytes);buf.position(info.offset+startFrame*frameBytes)
+                                buf.get(chunk);output.write(chunk);bytesWritten+=size
+                            }
                         }
-                        monoList.add((sum / channels).coerceIn(-1f, 1f))
-                    }
+                        outputDone=info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM !=0
+                    } finally { decoder.releaseOutputBuffer(i,false) }
+                    lastProgress=android.os.SystemClock.elapsedRealtime()
                 }
-                val eos = (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0
-                decoder.releaseOutputBuffer(outIdx, false)
-                if (eos) outputDone = true
             }
         }
-        return DecodedPcm(monoList.toFloatArray(), byteStream.toByteArray())
+        require(bytesWritten>0) {"No decoded audio in selected trim range"}
+        return bytesWritten
     }
 
     private fun verifyMp4File(file: File) {
@@ -506,15 +558,19 @@ class VexoVideoExporter(private val context: Context) {
         val uri = context.contentResolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values)
             ?: error("MediaStore insert failed")
 
-        context.contentResolver.openOutputStream(uri)?.use { out ->
-            tempFile.inputStream().use { it.copyTo(out) }
-        } ?: error("Failed writing video stream to MediaStore")
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val done = ContentValues().apply { put(MediaStore.Video.Media.IS_PENDING, 0) }
-            context.contentResolver.update(uri, done, null, null)
+        try {
+            context.contentResolver.openOutputStream(uri)?.use { out ->
+                tempFile.inputStream().use { it.copyTo(out) }
+            } ?: error("Failed writing video stream to MediaStore")
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val done = ContentValues().apply { put(MediaStore.Video.Media.IS_PENDING, 0) }
+                context.contentResolver.update(uri, done, null, null)
+            }
+            return uri.toString()
+        } catch (e: Exception) {
+            runCatching { context.contentResolver.delete(uri,null,null) }
+            throw e
         }
-        return uri.toString()
     }
 
     private fun computeDimensions(wRatio: Int, hRatio: Int, shortSide: Int): Pair<Int, Int> {
@@ -527,9 +583,9 @@ class VexoVideoExporter(private val context: Context) {
             rawH = shortSide
             rawW = (shortSide.toFloat() * wRatio / hRatio).roundToInt()
         }
-        // Align to 16px macroblock boundary for broad hardware H.264 compatibility
-        val alignedW = (rawW / 16) * 16
-        val alignedH = (rawH / 16) * 16
+        // Preserve requested resolution; H.264 requires even dimensions. Device capability is checked separately.
+        val alignedW = (rawW / 2) * 2
+        val alignedH = (rawH / 2) * 2
         return alignedW.coerceAtLeast(320) to alignedH.coerceAtLeast(320)
     }
 }

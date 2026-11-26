@@ -297,8 +297,14 @@ class VexoGlRenderer(
             c.measureOpacity, scene.audioSnapshots[c.measureOpacity.providerIndex] ?: audioSnap, scene.totalTimeSec, scene.playingTimeSec, trackNorm, scene.isPlaying
         )
 
-        val tx = (c.posX + dPos.x) * w
-        val ty = (c.posY + dPos.y) * h
+        fun anchored(value: Float, anchor: com.vexo.studio.model.AnchorMode): Float = when(anchor) {
+            com.vexo.studio.model.AnchorMode.UNSET -> value
+            com.vexo.studio.model.AnchorMode.START -> value-.5f
+            com.vexo.studio.model.AnchorMode.CENTER -> value
+            com.vexo.studio.model.AnchorMode.END -> value+.5f
+        }
+        val tx = (anchored(c.posX,c.anchorX) + dPos.x) * w
+        val ty = (anchored(c.posY,c.anchorY) + dPos.y) * h
         val sx = c.scaleX + dScale.x
         val sy = if (c.scaleIsUniform) sx else (c.scaleY + dScale.y)
         val rot = c.rotationDeg + dRot * 20f
