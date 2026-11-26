@@ -285,6 +285,20 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         commitProjectChange(p.copy(keyframes=tracks))
     }
 
+    fun addCreativeLayer(name:String){
+        val p=_uiState.value.project
+        if(p.compositions.sumOf{it.layers.size}>=2048)return
+        val idx=_uiState.value.selectedCompositionIndex
+        val source=p.compositions.firstOrNull{it.index!=0&&it.index!=idx&&idx !in com.vexo.studio.engine.scene.SceneGraph.dependenciesOf(it)}?.index
+        val layer=LayerNode(LayerType.IMAGE,LayerCommon(name=name),com.vexo.studio.model.CreativeRecipes.config(name,source))
+        val next=p.copy(compositions=p.compositions.map{if(it.index==idx)it.copy(layers=it.layers+layer) else it})
+        if(com.vexo.studio.engine.scene.SceneGraph.resolve(next).hasCycle){
+            val fallback=layer.copy(config=com.vexo.studio.model.CreativeRecipes.config(name,null))
+            commitProjectChange(p.copy(compositions=p.compositions.map{if(it.index==idx)it.copy(layers=it.layers+fallback) else it}))
+        }else commitProjectChange(next)
+        _uiState.value=_uiState.value.copy(selectedLayerId=layer.common.id,studioTab=StudioTab.PROPERTIES)
+    }
+
     fun addLayer(type: LayerType) {
         val p = _uiState.value.project
         val compIdx = _uiState.value.selectedCompositionIndex

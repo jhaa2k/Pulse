@@ -110,6 +110,23 @@ object VexoShaders {
         uniform vec2 uUvScale;
         uniform vec2 uImageBlurStep;
         uniform float uKeyStrength;
+        uniform int uCreativeGradient;
+        uniform int uCreativeDistortion;
+        uniform vec4 uGradientFrom;
+        uniform vec4 uGradientTo;
+        uniform vec4 uGradientGeometry;
+        uniform float uGradientMix;
+        uniform vec4 uDistort;
+        uniform vec4 uGrade;
+        uniform vec3 uFinishing;
+        uniform vec2 uCreativeResolution;
+        vec3 hueShift(vec3 c,float a){
+            vec3 axis=normalize(vec3(1.0,1.0,1.0));
+            return c*cos(a)+cross(axis,c)*sin(a)+axis*dot(axis,c)*(1.0-cos(a));
+        }
+        float noise(vec2 p){
+            return fract(sin(dot(p,vec2(12.9898,78.233)))*437.58545);
+        }
         void main() {
             vec2 uv = vUv;
             if (uShape == 1) {
@@ -120,6 +137,24 @@ object VexoShaders {
                 if (d.x * 0.866 + d.y * 0.5 > 0.866 || d.y > 0.866) discard;
             }
             vec2 sampleUv = uImageFxEnabled == 1 ? (uv - 0.5) * uUvScale + 0.5 : uv;
+            if(uCreativeDistortion==1){
+                sampleUv.x+=sin(sampleUv.y*uDistort.y*6.2831853+uDistort.z)*uDistort.x*0.15;
+                sampleUv.y+=cos(sampleUv.x*uDistort.y*6.2831853-uDistort.z)*uDistort.x*0.08;
+            }else if(uCreativeDistortion==2){
+                vec2 p=sampleUv-0.5;
+                float sector=6.2831853/max(2.0,floor(uDistort.y+0.5));
+                float a=mod(atan(p.y,p.x)+uDistort.z,sector);
+                a=abs(a-sector*0.5);
+                vec2 folded=vec2(cos(a),sin(a))*length(p)+0.5;
+                sampleUv=mix(sampleUv,folded,clamp(uDistort.x,0.0,1.0));
+            }else if(uCreativeDistortion==3){
+                float blocks=max(2.0,mix(256.0,4.0,clamp(uDistort.x,0.0,1.0)));
+                vec2 dims=vec2(blocks,max(2.0,blocks*uCreativeResolution.y/max(1.0,uCreativeResolution.x)));
+                sampleUv=(floor(sampleUv*dims)+0.5)/dims;
+            }else if(uCreativeDistortion==4){
+                sampleUv=(sampleUv-0.5)/max(0.25,1.0+uDistort.x*(0.5+0.5*sin(uDistort.z)))+0.5;
+            }
+            sampleUv=clamp(sampleUv,0.0,1.0);
             vec4 tex = texture2D(uTex, sampleUv);
             if (uImageFxEnabled == 1 && (uImageBlurStep.x > 0.0 || uImageBlurStep.y > 0.0)) {
                 tex *= 0.25;
@@ -132,9 +167,28 @@ object VexoShaders {
                 tex += texture2D(uTex, sampleUv + vec2(uImageBlurStep.x, -uImageBlurStep.y)) * 0.0625;
                 tex += texture2D(uTex, sampleUv + vec2(-uImageBlurStep.x, uImageBlurStep.y)) * 0.0625;
             }
+            if(uCreativeGradient!=0){
+                vec2 p=(uv-uGradientGeometry.xy)/max(0.01,uGradientGeometry.w);
+                float a=uGradientGeometry.z;
+                float t=0.0;
+                if(uCreativeGradient==1)t=dot(p,vec2(cos(a),sin(a)))+0.5;
+                else if(uCreativeGradient==2)t=length(p)*2.0;
+                else t=fract((atan(p.y,p.x)+a)/6.2831853+0.5);
+                vec4 grad=mix(uGradientFrom,uGradientTo,clamp(t,0.0,1.0));
+                grad.rgb*=grad.a;
+                tex=mix(tex,grad,clamp(uGradientMix,0.0,1.0));
+            }
             vec3 straightColor = tex.a > 0.0001 ? tex.rgb / tex.a : vec3(0.0);
             float luma = dot(straightColor, vec3(0.299, 0.587, 0.114));
             vec3 satColor = mix(vec3(luma), straightColor, uSaturation);
+            satColor=hueShift(satColor,uGrade.w);
+            satColor=(satColor-0.5)*uGrade.y+0.5+uGrade.x;
+            satColor+=vec3(uGrade.z*0.15,0.0,-uGrade.z*0.15);
+            float vignette=1.0-uFinishing.x*smoothstep(0.2,0.72,length(uv-0.5));
+            float scan=1.0-uFinishing.y*(0.5+0.5*sin(uv.y*uCreativeResolution.y*1.5707963));
+            satColor=satColor*vignette*scan;
+            satColor+=(noise(floor(uv*uCreativeResolution)+floor(uDistort.z*24.0))-0.5)*uFinishing.z*0.25;
+            satColor=clamp(satColor,0.0,1.0);
             float alpha = tex.a * uTint.a * uOpacity;
             if (uColorKeyEnabled == 1) {
                 float dist = distance(straightColor, uKeyColor);

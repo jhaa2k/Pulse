@@ -513,6 +513,7 @@ private fun LayersTab(
             title = { Text("ADD LAYER OR EFFECT", style = MaterialTheme.typography.titleMedium) },
             text = {
                 Column(Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("LAYERS",style=MaterialTheme.typography.labelMedium,color=palette.accent)
                     LayerType.entries.forEach { type ->
                         Box(
                             modifier = Modifier
@@ -528,6 +529,10 @@ private fun LayersTab(
                         ) {
                             Text(type.label.uppercase(), style = MaterialTheme.typography.labelMedium)
                         }
+                    }
+                    Text("CREATIVE RECIPES",style=MaterialTheme.typography.labelMedium,color=palette.accent)
+                    com.vexo.studio.model.CreativeRecipes.names.forEach{name->
+                        Box(Modifier.fillMaxWidth().background(palette.panelElevated).border(1.dp,palette.border).clickable{vm.addCreativeLayer(name);showAddLayerDialog=false}.padding(12.dp)){Text(name.uppercase(),style=MaterialTheme.typography.labelMedium)}
                     }
                 }
             },
@@ -901,6 +906,41 @@ private fun PropertiesTab(
                 }
             }
             is LayerConfig.Image -> {
+                val c=cfg.creative
+                fun change(undo:Boolean=true,edit:(com.vexo.studio.model.CreativeImageConfig)->com.vexo.studio.model.CreativeImageConfig){
+                    vm.updateLayer(layer.common.id,undo){l->val image=l.config as LayerConfig.Image;l.copy(config=image.copy(creative=edit(image.creative)))}
+                }
+                ExpandableSectionHeader("Creative gradients",expandedSections["Image_gradient"]==true,{toggleAccordion(expandedSections,"Image_gradient")}){
+                    StudioChipSelector("Gradient",com.vexo.studio.model.CreativeGradient.entries,c.gradient,{it.name}){v->change{it.copy(gradient=v)}}
+                    if(c.gradient!=com.vexo.studio.model.CreativeGradient.NONE){
+                        StudioColorPickerRow("Gradient Start",c.gradientFrom){v->change{it.copy(gradientFrom=v)}}
+                        StudioColorPickerRow("Gradient End",c.gradientTo){v->change{it.copy(gradientTo=v)}}
+                        StudioSlider("Gradient Angle",c.gradientAngle,-360.0f,360.0f,0.0f,"°",1.0f,onValueChange={v->beginDrag();change(false){it.copy(gradientAngle=v)}},onCommit=::endDrag)
+                        StudioSlider("Center X",c.gradientCenterX,0.0f,1.0f,0.5f,"",0.01f,onValueChange={v->beginDrag();change(false){it.copy(gradientCenterX=v)}},onCommit=::endDrag)
+                        StudioSlider("Center Y",c.gradientCenterY,0.0f,1.0f,0.5f,"",0.01f,onValueChange={v->beginDrag();change(false){it.copy(gradientCenterY=v)}},onCommit=::endDrag)
+                        StudioSlider("Gradient Scale",c.gradientScale,0.05f,4.0f,1.0f,"x",0.01f,onValueChange={v->beginDrag();change(false){it.copy(gradientScale=v)}},onCommit=::endDrag)
+                        StudioSlider("Gradient Mix",c.gradientMix,0.0f,1.0f,1.0f,"",0.01f,onValueChange={v->beginDrag();change(false){it.copy(gradientMix=v)}},onCommit=::endDrag)
+                    }
+                }
+                ExpandableSectionHeader("Creative distortion",expandedSections["Image_distortion"]==true,{toggleAccordion(expandedSections,"Image_distortion")}){
+                    StudioChipSelector("Effect",com.vexo.studio.model.CreativeDistortion.entries,c.distortion,{it.name.replace('_',' ')}){v->change{it.copy(distortion=v)}}
+                    if(c.distortion!=com.vexo.studio.model.CreativeDistortion.NONE){
+                        StudioSlider("Intensity",c.amount,0.0f,1.0f,0.15f,"",0.01f,onValueChange={v->beginDrag();change(false){it.copy(amount=v)}},onCommit=::endDrag)
+                        StudioSlider("Frequency / Sectors",c.frequency,2.0f,24.0f,6.0f,"",1.0f,onValueChange={v->beginDrag();change(false){it.copy(frequency=v)}},onCommit=::endDrag)
+                        StudioSlider("Animation Speed",c.speed,-4.0f,4.0f,1.0f,"x",0.05f,onValueChange={v->beginDrag();change(false){it.copy(speed=v)}},onCommit=::endDrag)
+                        MeasureBindingControls("Effect audio reactivity",c.audio,uiState.project.audioProviders.map{it.index},::beginDrag,::endDrag){v,undo->change(undo){it.copy(audio=v)}}
+                    }
+                }
+                ExpandableSectionHeader("Color grading & film",expandedSections["Image_grade"]==true,{toggleAccordion(expandedSections,"Image_grade")}){
+                    StudioSlider("Brightness",c.brightness,-1.0f,1.0f,0.0f,"",0.01f,onValueChange={v->beginDrag();change(false){it.copy(brightness=v)}},onCommit=::endDrag)
+                    StudioSlider("Contrast",c.contrast,0.0f,3.0f,1.0f,"x",0.01f,onValueChange={v->beginDrag();change(false){it.copy(contrast=v)}},onCommit=::endDrag)
+                    StudioSlider("Temperature",c.temperature,-1.0f,1.0f,0.0f,"",0.01f,onValueChange={v->beginDrag();change(false){it.copy(temperature=v)}},onCommit=::endDrag)
+                    StudioSlider("Hue",c.hue,-180.0f,180.0f,0.0f,"°",1.0f,onValueChange={v->beginDrag();change(false){it.copy(hue=v)}},onCommit=::endDrag)
+                    StudioSlider("Vignette",c.vignette,0.0f,1.0f,0.0f,"",0.01f,onValueChange={v->beginDrag();change(false){it.copy(vignette=v)}},onCommit=::endDrag)
+                    StudioSlider("Scanlines",c.scanlines,0.0f,1.0f,0.0f,"",0.01f,onValueChange={v->beginDrag();change(false){it.copy(scanlines=v)}},onCommit=::endDrag)
+                    StudioSlider("Film Grain",c.grain,0.0f,1.0f,0.0f,"",0.01f,onValueChange={v->beginDrag();change(false){it.copy(grain=v)}},onCommit=::endDrag)
+                    TextButton(onClick={change{it.copy(brightness=0f,contrast=1f,temperature=0f,hue=0f,vignette=0f,scanlines=0f,grain=0f)}}){Text("RESET GRADING")}
+                }
                 ExpandableSectionHeader("Source & fitting", expandedSections["Image_Sourcefitting"] == true, { toggleAccordion(expandedSections, "Image_Sourcefitting") }) {
                     StudioChipSelector("Source", ImageSourceType.entries, cfg.sourceType, { it.label }) { src ->
                         vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(sourceType = src)) }

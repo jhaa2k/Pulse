@@ -616,6 +616,7 @@ class VexoGlRenderer(
             ((tint ushr 24) and 0xFF) / 255f
         )
         GLES20.glUniform1f(shader.uniform("uSaturation"), cfg.saturation)
+        bindCreativeImage(shader,cfg.creative,scene,trackNorm,w,h)
         val shapeCode = when (cfg.shape) {
             ImageShape.NONE -> 0
             ImageShape.CIRCLE -> 1
@@ -639,7 +640,7 @@ class VexoGlRenderer(
         val frameH = if (shapeSquare) minOf(w,h).toFloat() else h.toFloat()
         val frameRatio = frameW / frameH.coerceAtLeast(1f)
         val crop = cfg.keepAspectRatioAndCropToFit
-        val (drawW, drawH) = if (cfg.keepAspectRatio && !crop && !shapeSquare) {
+        val (drawW, drawH) = if (cfg.keepAspectRatio && !crop && !shapeSquare && cfg.sourceType!=ImageSourceType.SOLID_COLOR && cfg.creative.gradient==com.vexo.studio.model.CreativeGradient.NONE) {
             if(imageRatio > frameRatio) frameW to frameW / imageRatio else frameH * imageRatio to frameH
         } else frameW to frameH
         if(cfg.blurredBorder && cfg.keepAspectRatio && !crop && !shapeSquare && (drawW<frameW-.5f || drawH<frameH-.5f)){
@@ -1409,6 +1410,23 @@ class VexoGlRenderer(
         return result
     }
 
+    private fun bindCreativeImage(shader:GlShaderProgram,cfg:com.vexo.studio.model.CreativeImageConfig,scene:RenderSceneSnapshot,trackNorm:Float,w:Int,h:Int){
+        val reactive=MeasureEvaluator.evaluateScalar(cfg.audio,scene.audioSnapshots[cfg.audio.providerIndex],scene.totalTimeSec,scene.playingTimeSec,trackNorm,scene.isPlaying)
+        val amount=(cfg.amount+reactive).coerceIn(0f,1f)
+        GLES20.glUniform1i(shader.uniform("uCreativeGradient"),cfg.gradient.ordinal)
+        GLES20.glUniform1i(shader.uniform("uCreativeDistortion"),cfg.distortion.ordinal)
+        fun color(name:String,argb:Int){GLES20.glUniform4f(shader.uniform(name),((argb ushr 16)and 255)/255f,((argb ushr 8)and 255)/255f,(argb and 255)/255f,((argb ushr 24)and 255)/255f)}
+        color("uGradientFrom",cfg.gradientFrom);color("uGradientTo",cfg.gradientTo)
+        GLES20.glUniform4f(shader.uniform("uGradientGeometry"),cfg.gradientCenterX,cfg.gradientCenterY,cfg.gradientAngle*PI.toFloat()/180f,cfg.gradientScale.coerceIn(.05f,4f))
+        GLES20.glUniform1f(shader.uniform("uGradientMix"),cfg.gradientMix.coerceIn(0f,1f))
+        // Track time keeps preview and offline export phase aligned.
+        val phase=(scene.trackMeta.positionMs/1000.0*cfg.speed*6.283185307).rem(6283.185307).toFloat()
+        GLES20.glUniform4f(shader.uniform("uDistort"),amount,cfg.frequency.coerceIn(2f,24f),phase,0f)
+        GLES20.glUniform4f(shader.uniform("uGrade"),cfg.brightness.coerceIn(-1f,1f),cfg.contrast.coerceIn(0f,3f),cfg.temperature.coerceIn(-1f,1f),cfg.hue*PI.toFloat()/180f)
+        GLES20.glUniform3f(shader.uniform("uFinishing"),cfg.vignette.coerceIn(0f,1f),cfg.scanlines.coerceIn(0f,1f),cfg.grain.coerceIn(0f,1f))
+        GLES20.glUniform2f(shader.uniform("uCreativeResolution"),w.toFloat(),h.toFloat())
+    }
+
     private fun resetImageState(shader: GlShaderProgram) {
         shader.use()
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
@@ -1417,6 +1435,12 @@ class VexoGlRenderer(
         GLES20.glUniform1i(shader.uniform("uImageFxEnabled"),0)
         GLES20.glUniform1i(shader.uniform("uShape"),0)
         GLES20.glUniform1i(shader.uniform("uColorKeyEnabled"),0)
+        GLES20.glUniform1i(shader.uniform("uCreativeGradient"),0)
+        GLES20.glUniform1i(shader.uniform("uCreativeDistortion"),0)
+        GLES20.glUniform4f(shader.uniform("uGrade"),0f,1f,0f,0f)
+        GLES20.glUniform4f(shader.uniform("uDistort"),0f,2f,0f,0f)
+        GLES20.glUniform3f(shader.uniform("uFinishing"),0f,0f,0f)
+        GLES20.glUniform2f(shader.uniform("uCreativeResolution"),1f,1f)
         GLES20.glUniform1f(shader.uniform("uSaturation"),1f)
         GLES20.glUniform4f(shader.uniform("uTint"),1f,1f,1f,1f)
         GLES20.glUniform1f(shader.uniform("uOpacity"),1f)

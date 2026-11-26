@@ -422,7 +422,8 @@ sealed interface LayerConfig {
         val videoLoop: Boolean = true,
         val videoSpeed: Float = 1f,
         val videoOffsetMs: Long = 0L,
-        val videoSampleFps: Int = 12
+        val videoSampleFps: Int = 12,
+        val creative: CreativeImageConfig = CreativeImageConfig()
     ) : LayerConfig
 
     @Serializable
@@ -957,3 +958,33 @@ object VexoTemplates {
         )
     }
 }
+
+@Serializable
+enum class CreativeGradient { NONE, LINEAR, RADIAL, CONIC }
+
+@Serializable
+enum class CreativeDistortion { NONE, WAVE, KALEIDOSCOPE, PIXELATE, ZOOM_PULSE }
+
+@Serializable
+data class CreativeImageConfig(
+    val gradient: CreativeGradient = CreativeGradient.NONE,
+    val gradientFrom: Int = 0xFF121229.toInt(),
+    val gradientTo: Int = 0xFFBFFF00.toInt(),
+    val gradientAngle: Float = 0f,
+    val gradientCenterX: Float = .5f,
+    val gradientCenterY: Float = .5f,
+    val gradientScale: Float = 1f,
+    val gradientMix: Float = 1f,
+    val distortion: CreativeDistortion = CreativeDistortion.NONE,
+    val amount: Float = .15f,
+    val frequency: Float = 6f,
+    val speed: Float = 1f,
+    val brightness: Float = 0f,
+    val contrast: Float = 1f,
+    val temperature: Float = 0f,
+    val hue: Float = 0f,
+    val vignette: Float = 0f,
+    val scanlines: Float = 0f,
+    val grain: Float = 0f,
+    val audio: MeasureConfig = MeasureConfig()
+)
