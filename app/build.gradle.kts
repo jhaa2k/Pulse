@@ -12,8 +12,8 @@ plugins {
 
 android {
     namespace = "com.vexo.studio"
-    sourceSets.getByName("main").res.srcDir(layout.buildDirectory.dir("generated/studioFonts/res"))
-    sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/studioFonts/assets"))
+    sourceSets.getByName("main").res.srcDir(layout.buildDirectory.dir("generated/studioFonts/res").get().asFile)
+    sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/studioFonts/assets").get().asFile)
     compileSdk = 36
 
     defaultConfig {
