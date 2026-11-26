@@ -37,6 +37,10 @@ fun DeviceLibraryPanel(vm: StudioViewModel, onBack: () -> Unit) {
     var mode by remember { mutableStateOf("Tracks") }
     var group by remember { mutableStateOf<String?>(null) }
     var query by remember { mutableStateOf("") }
+    val store=remember{com.vexo.studio.playback.PlaylistStore(context)}
+    var playlists by remember{mutableStateOf(store.read())}
+    var saveDialog by remember{mutableStateOf(false)}
+    var playlistName by remember{mutableStateOf("")}
     LaunchedEffect(granted) {
         if(granted) {
             loading=true
@@ -44,21 +48,26 @@ fun DeviceLibraryPanel(vm: StudioViewModel, onBack: () -> Unit) {
             loading=false
         }
     }
-    fun key(t:LibraryTrack)=when(mode) { "Album"->t.album; "Artist"->t.artist; "Folder"->t.folder; else->t.title }.ifBlank{"Unknown"}
-    val filtered=tracks.filter { (group==null||key(it)==group) && (it.title.contains(query,true)||it.artist.contains(query,true)||it.album.contains(query,true)) }
+    fun key(t:LibraryTrack)=when(mode) { "Album"->t.album; "Artist"->t.artist; "Folder"->t.folder; "Genre"->t.genre; else->t.title }.ifBlank{"Unknown"}
+    val filtered=tracks.filter { (group==null||if(mode=="Playlist") it.uri in playlists[group].orEmpty() else key(it)==group) && (it.title.contains(query,true)||it.artist.contains(query,true)||it.album.contains(query,true)) }
     Column(Modifier.fillMaxSize().padding(12.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.SpaceBetween) {
             TextButton(onClick={if(group!=null)group=null else onBack()}){Text("BACK")}
-            if(filtered.isNotEmpty()) TextButton(onClick={vm.importAudioTracks(filtered.map{Uri.parse(it.uri)});onBack()}){Text("PLAY ALL")}
+            if(filtered.isNotEmpty() && (mode!="Playlist" || group!=null)) TextButton(onClick={vm.importAudioTracks(filtered.map{Uri.parse(it.uri)});onBack()}){Text("PLAY ALL")}
         }
         Text("DEVICE MUSIC",color=palette.accent,style=MaterialTheme.typography.titleMedium)
         if(!granted){Text("Allow audio access to browse local tracks. File import also works without this permission.");Button(onClick={launcher.launch(permission)}){Text("ALLOW AUDIO ACCESS")};return@Column}
         if(loading){LinearProgressIndicator(Modifier.fillMaxWidth());return@Column}
         error?.let { Text(it,color=palette.danger) }
-        StudioChipSelector("Browse",listOf("Tracks","Album","Artist","Folder"),mode,{it}){mode=it;group=null}
+        StudioChipSelector("Browse",listOf("Tracks","Album","Artist","Folder","Genre","Playlist"),mode,{it}){mode=it;group=null}
         OutlinedTextField(query,{query=it},label={Text("Search music")},singleLine=true,modifier=Modifier.fillMaxWidth())
         group?.let{Text(it,style=MaterialTheme.typography.titleSmall)}
-        if(mode!="Tracks"&&group==null){
+        if(filtered.isNotEmpty() && (mode!="Playlist" || group!=null)) TextButton(onClick={playlistName="";saveDialog=true}){Text("SAVE SHOWN TRACKS AS PLAYLIST")}
+        if(mode=="Playlist"&&group!=null) TextButton(onClick={store.delete(group!!);playlists=store.read();group=null}){Text("DELETE PLAYLIST")}
+        if(saveDialog) AlertDialog(onDismissRequest={saveDialog=false},title={Text("Save playlist")},text={OutlinedTextField(playlistName,{playlistName=it},label={Text("Playlist name")})},confirmButton={TextButton(enabled=playlistName.isNotBlank(),onClick={store.save(playlistName,filtered.map{it.uri});playlists=store.read();saveDialog=false}){Text("SAVE")}},dismissButton={TextButton(onClick={saveDialog=false}){Text("CANCEL")}})
+        if(mode=="Playlist"&&group==null){
+            LazyColumn(Modifier.weight(1f)){items(playlists.keys.sorted()){name->ListItem(headlineContent={Text(name)},supportingContent={Text(playlists[name].orEmpty().size.toString()+" tracks")},modifier=Modifier.clickable{group=name})}}
+        }else if(mode!="Tracks"&&group==null){
             LazyColumn(Modifier.weight(1f)){items(filtered.groupBy{key(it)}.entries.sortedBy{it.key.lowercase()}){entry ->
                 ListItem(headlineContent={Text(entry.key)},supportingContent={Text(entry.value.size.toString()+" tracks")},modifier=Modifier.clickable{group=entry.key})
             }}

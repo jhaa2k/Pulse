@@ -58,6 +58,7 @@ class VexoPlaybackController(
     val pcmTap = PcmTapAudioProcessor(ringBuffer)
     val sessionVisualizer = com.vexo.studio.engine.audio.SessionVisualizer(context)
     private var visualizerRequested = false
+    val soundEffects = SoundEffects(context)
 
     fun setSessionVisualizerEnabled(enabled: Boolean): Boolean {
         visualizerRequested = enabled
@@ -76,6 +77,7 @@ class VexoPlaybackController(
 
     init {
         pcmTap.playbackClockUsProvider = { playbackPositionUs }
+        soundEffects.attach(player.audioSessionId)
     }
 
     private fun buildPlayer(): ExoPlayer {
@@ -105,6 +107,7 @@ class VexoPlaybackController(
                 addListener(object : Player.Listener {
                     override fun onAudioSessionIdChanged(audioSessionId: Int) {
                         if (visualizerRequested) sessionVisualizer.attach(audioSessionId)
+                        soundEffects.attach(audioSessionId)
                     }
 
                     override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -331,6 +334,7 @@ class VexoPlaybackController(
 
     fun release() {
         sessionVisualizer.close()
+        soundEffects.close()
         player.release()
     }
 

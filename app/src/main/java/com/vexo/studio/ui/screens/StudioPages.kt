@@ -188,6 +188,8 @@ fun AudioLibraryScreen(
 ) {
     val palette = LocalVexoPalette.current
     var showLibrary by remember { mutableStateOf(false) }
+    var showEffects by remember { mutableStateOf(false) }
+    if(showEffects){SoundEffectsPanel(vm){showEffects=false};return}
     if (showLibrary) {
         DeviceLibraryPanel(vm, onBack={showLibrary=false})
         return
@@ -216,6 +218,7 @@ fun AudioLibraryScreen(
 
         Row(Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.SpaceBetween) {
             TextButton(onClick={showLibrary=true}) { Text("DEVICE LIBRARY") }
+            TextButton(onClick={showEffects=true}) { Text("EQ / FX") }
             TextButton(onClick=vm::applyArtworkPalette) { Text("AUTO PALETTE") }
         }
         val sleep by vm.sleepRemaining.collectAsState()
