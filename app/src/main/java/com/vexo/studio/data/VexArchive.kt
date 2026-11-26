@@ -118,6 +118,9 @@ object VexArchive {
                             }
                             else -> total += copyLimited(zip, object : OutputStream() { override fun write(b: Int) {} ; override fun write(b: ByteArray, off: Int, len: Int) {} }, MAX_BYTES-total)
                         }
+                    } else {
+                        // Reject directory entries with payloads rather than silently draining unbounded data.
+                        require(zip.read() == -1) { "Archive directory contains unexpected data" }
                     }
                     zip.closeEntry()
                 }
@@ -152,14 +155,19 @@ object VexArchive {
                 if(used.isEmpty())dir.deleteRecursively()
                 return project
             }
+            val usedNative=mutableSetOf<File>()
             val project = remap(NativeVexCodec.decode(native)) { ref ->
                 if(!ref.startsWith(PREFIX)) {
                     require(!isLocal(ref)) { "Unbundled local media reference" }
                     ref
-                } else Uri.fromFile(assets[ref.removePrefix(PREFIX)] ?: error("Missing bundled media")).toString()
+                } else {
+                    val file=assets[ref.removePrefix(PREFIX)] ?: error("Missing bundled media")
+                    usedNative.add(file)
+                    Uri.fromFile(file).toString()
+                }
             }
-            legacyAssets.values.forEach{it.delete()}
-            if(assets.isEmpty()) dir.deleteRecursively()
+            (assets.values+legacyAssets.values).filter{it !in usedNative}.forEach{it.delete()}
+            if(usedNative.isEmpty()) dir.deleteRecursively()
             return project
         } catch(t: Throwable) {
             dir.deleteRecursively()

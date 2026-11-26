@@ -1696,6 +1696,7 @@ private fun AssetsTab(
             )
         }
 
+        ProjectAssetInventory(vm,uiState)
         if (selected?.type == LayerType.IMAGE && selected.common.locked)Text("Unlock this layer before replacing its media.",style=MaterialTheme.typography.labelSmall,color=palette.danger)
         if (selected?.type == LayerType.IMAGE && !selected.common.locked) {
             val cfg = selected.config as LayerConfig.Image

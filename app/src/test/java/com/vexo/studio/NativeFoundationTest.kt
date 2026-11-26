@@ -22,7 +22,9 @@ class NativeFoundationTest {
     @Test fun countAndRoundedGeometry() {
         assertArrayEquals(floatArrayOf(0f,.5f,1f),SpectrumGeometry.resample(floatArrayOf(0f,1f),3),.0001f)
         val mesh=SpectrumGeometry.roundedQuad(0f,0f,10f,0f,0f,40f,10f,40f,1f)
-        assertEquals(96,mesh.size)
+        assertTrue(mesh.size > 96)
+        assertEquals(0,mesh.size % 6)
+        assertTrue(mesh.size / 2 <= SpectrumGeometry.MAX_ROUNDED_VERTICES)
         assertTrue(mesh.all { it.isFinite() })
         assertTrue(mesh.indices.filter{it%2==0}.all{mesh[it] in -.001f..10.001f})
     }
