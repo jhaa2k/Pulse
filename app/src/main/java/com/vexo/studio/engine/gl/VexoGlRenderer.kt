@@ -331,8 +331,10 @@ class VexoGlRenderer(
         val ty = (anchored(c.posY,c.anchorY) + dPos.y) * h
         val sx = c.scaleX + dScale.x
         val sy = if (c.scaleIsUniform) sx else (c.scaleY + dScale.y)
-        val rot = c.rotationDeg + dRot * 20f
-        val opacity = (c.opacity + dOpacity).coerceIn(0f, 1f)
+        val shape=layer.config as? LayerConfig.Shape
+        val rot = c.rotationDeg + dRot * 20f + ((scene.trackMeta.positionMs/1000.0*(shape?.spin?:0f))%360.0).toFloat()
+        val opacity = (c.opacity + dOpacity).coerceIn(0f, 1f)*com.vexo.studio.engine.scene.LayerTimingMath.opacity(c.timing,scene.trackMeta.positionMs,scene.trackMeta.durationMs)
+        if(opacity<=0f)return
 
         Matrix.setIdentityM(tempMatrix, 0)
         Matrix.translateM(tempMatrix, 0, tx, ty, 0f)
@@ -347,7 +349,10 @@ class VexoGlRenderer(
             is LayerConfig.Bars -> drawBarsLayer(c.id, cfg, audioSnap, opacity, w, h)
             is LayerConfig.Image -> drawImageLayer(cfg, scene, audioSnap, trackNorm, opacity, w, h, compTextures)
             is LayerConfig.Text -> drawTextLayer(cfg, scene, opacity, w, h)
-            is LayerConfig.Shape -> drawShapeLayer(cfg, opacity, w, h)
+            is LayerConfig.Shape -> {
+                fun measure(m:com.vexo.studio.model.MeasureConfig)=MeasureEvaluator.evaluateScalar(m,scene.audioSnapshots[m.providerIndex],scene.totalTimeSec,scene.playingTimeSec,trackNorm,scene.isPlaying)
+                drawShapeLayer(cfg.copy(radius=(cfg.radius+measure(cfg.pulse)*.15f).coerceIn(.005f,.8f),strokeWidth=(cfg.strokeWidth+measure(cfg.strokePulse)*12f).coerceIn(0f,32f)),opacity,w,h)
+            }
             is LayerConfig.Particles -> drawParticlesLayer(c.id, cfg, audioSnap, scene, deltaSec, opacity, w, h)
             is LayerConfig.BlurEffect -> drawBlurEffect(cfg, scene, trackNorm, opacity, w, h, compTextures)
             is LayerConfig.RgbSplitEffect -> drawRgbSplitEffect(cfg, audioSnap, scene, trackNorm, opacity, w, h, compTextures)
@@ -713,7 +718,7 @@ class VexoGlRenderer(
         val frameH = if (shapeSquare) minOf(w,h).toFloat() else h.toFloat()
         val frameRatio = frameW / frameH.coerceAtLeast(1f)
         val crop = cfg.keepAspectRatioAndCropToFit
-        val (drawW, drawH) = if (cfg.keepAspectRatio && !crop && !shapeSquare && cfg.sourceType!=ImageSourceType.SOLID_COLOR && cfg.creative.gradient==com.vexo.studio.model.CreativeGradient.NONE) {
+        val (drawW, drawH) = if (cfg.keepAspectRatio && !crop && !shapeSquare && cfg.sourceType!=ImageSourceType.SOLID_COLOR && cfg.creative.gradient==com.vexo.studio.model.CreativeGradient.NONE && cfg.creative.pattern==com.vexo.studio.model.ProceduralPattern.NONE) {
             if(imageRatio > frameRatio) frameW to frameW / imageRatio else frameH * imageRatio to frameH
         } else frameW to frameH
         if(cfg.blurredBorder && cfg.keepAspectRatio && !crop && !shapeSquare && (drawW<frameW-.5f || drawH<frameH-.5f)){
@@ -836,7 +841,7 @@ class VexoGlRenderer(
     ) {
         val cx = w * 0.5f
         val cy = h * 0.5f
-        val r = minOf(w, h) * 0.32f
+        val r = minOf(w, h) * cfg.radius.coerceIn(.005f,.8f)
         val rect=if(cfg.kind==ShapeKind.RECTANGLE) ShapeGeometry.roundedSquare(r*.70710678f,cfg.cornerRadius) else null
         val sides = when (cfg.kind) {
             ShapeKind.RECTANGLE -> rect!!.size
@@ -877,8 +882,8 @@ class VexoGlRenderer(
         for (i in 0 until sides) {
             val a0 = (i.toFloat() / sides) * 2f * PI.toFloat() + (if (cfg.kind == ShapeKind.RECTANGLE) PI.toFloat() * 0.25f else 0f)
             val a1 = ((i + 1).toFloat() / sides) * 2f * PI.toFloat() + (if (cfg.kind == ShapeKind.RECTANGLE) PI.toFloat() * 0.25f else 0f)
-            val r0 = if (cfg.kind == ShapeKind.STAR && i % 2 == 1) r * 0.48f else r
-            val r1 = if (cfg.kind == ShapeKind.STAR && (i + 1) % 2 == 1) r * 0.48f else r
+            val r0 = if (cfg.kind == ShapeKind.STAR && i % 2 == 1) r * cfg.starInnerRatio.coerceIn(.05f,.99f) else r
+            val r1 = if (cfg.kind == ShapeKind.STAR && (i + 1) % 2 == 1) r * cfg.starInnerRatio.coerceIn(.05f,.99f) else r
 
             val x0 = cx + (rect?.get(i)?.first ?: cos(a0)*r0)
             val y0 = cy + (rect?.get(i)?.second ?: sin(a0)*r0)
@@ -1516,6 +1521,9 @@ class VexoGlRenderer(
         GLES20.glUniform4f(shader.uniform("uGrade"),cfg.brightness.coerceIn(-1f,1f),cfg.contrast.coerceIn(0f,3f),cfg.temperature.coerceIn(-1f,1f),cfg.hue*PI.toFloat()/180f)
         GLES20.glUniform3f(shader.uniform("uFinishing"),cfg.vignette.coerceIn(0f,1f),cfg.scanlines.coerceIn(0f,1f),cfg.grain.coerceIn(0f,1f))
         GLES20.glUniform2f(shader.uniform("uCreativeResolution"),w.toFloat(),h.toFloat())
+        GLES20.glUniform4f(shader.uniform("uPattern"),cfg.pattern.ordinal.toFloat(),cfg.patternDensity.coerceIn(1f,48f),cfg.patternIntensity.coerceIn(0f,1f),(scene.trackMeta.positionMs/1000.0*cfg.patternSpeed*6.2831853%6283.1853).toFloat())
+        GLES20.glUniform4f(shader.uniform("uAperture"),cfg.aperture.ordinal.toFloat(),cfg.apertureSize.coerceIn(.01f,2f),cfg.apertureFeather.coerceIn(.001f,.5f),if(cfg.apertureInvert)1f else 0f)
+        GLES20.glUniform2f(shader.uniform("uApertureCenter"),cfg.apertureX,cfg.apertureY)
     }
 
     private fun resetImageState(shader: GlShaderProgram) {
@@ -1533,6 +1541,9 @@ class VexoGlRenderer(
         GLES20.glUniform4f(shader.uniform("uDistort"),0f,2f,0f,0f)
         GLES20.glUniform3f(shader.uniform("uFinishing"),0f,0f,0f)
         GLES20.glUniform2f(shader.uniform("uCreativeResolution"),1f,1f)
+        GLES20.glUniform4f(shader.uniform("uPattern"),0f,1f,0f,0f)
+        GLES20.glUniform4f(shader.uniform("uAperture"),0f,1f,.001f,0f)
+        GLES20.glUniform2f(shader.uniform("uApertureCenter"),.5f,.5f)
         GLES20.glUniform1f(shader.uniform("uSaturation"),1f)
         GLES20.glUniform4f(shader.uniform("uTint"),1f,1f,1f,1f)
         GLES20.glUniform1f(shader.uniform("uOpacity"),1f)

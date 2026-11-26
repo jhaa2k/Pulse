@@ -350,6 +350,7 @@ data class LayerCommon(
     val measureRot: MeasureConfig = MeasureConfig(),
     val measureOpacity: MeasureConfig = MeasureConfig(),
     val groupName: String = "",
+    val timing: LayerTiming = LayerTiming(),
     val extraFields: Map<String, String> = emptyMap()
 )
 
@@ -462,7 +463,12 @@ sealed interface LayerConfig {
         val strokeColorArgb: Int = 0xFFFFFFFF.toInt(),
         val strokeWidth: Float = 3f,
         val cornerRadius: Float = 0f,
-        val gradientEndArgb: Int = 0x33C6F36A
+        val gradientEndArgb: Int = 0x33C6F36A,
+        val radius: Float = .32f,
+        val starInnerRatio: Float = .48f,
+        val spin: Float = 0f,
+        val pulse: MeasureConfig = MeasureConfig(),
+        val strokePulse: MeasureConfig = MeasureConfig()
     ) : LayerConfig
 
     @Serializable
@@ -1008,10 +1014,29 @@ data class CreativeImageConfig(
     val vignette: Float = 0f,
     val scanlines: Float = 0f,
     val grain: Float = 0f,
-    val audio: MeasureConfig = MeasureConfig()
+    val audio: MeasureConfig = MeasureConfig(),
+    val pattern: ProceduralPattern = ProceduralPattern.NONE,
+    val patternDensity: Float = 8f,
+    val patternIntensity: Float = .5f,
+    val patternSpeed: Float = .25f,
+    val aperture: Aperture = Aperture.NONE,
+    val apertureSize: Float = .75f,
+    val apertureFeather: Float = .05f,
+    val apertureInvert: Boolean = false,
+    val apertureX: Float = .5f,
+    val apertureY: Float = .5f
 )
 
 @Serializable enum class CreativeSpectrumPath { LEGACY, ARC, SPIRAL, HEART, SINE }
 @Serializable enum class CreativeSpectrumStyle { BARS, DOTS, STEPS }
 @Serializable enum class ParticleEmitter { LEGACY, POINT, LINE, BOX, RING, DISC }
 @Serializable enum class TextMotion { NONE, FADE, SLIDE, PULSE, REVEAL, BEAT_SCALE }
+
+@Serializable enum class ProceduralPattern { NONE, GRID, CHECKER, RINGS, PLASMA, STARFIELD }
+@Serializable enum class Aperture { NONE, CIRCLE, RECTANGLE, DIAMOND, LINEAR }
+@Serializable data class LayerTiming(
+    val startMs: Long = 0L,
+    val endMs: Long = 0L,
+    val fadeInMs: Long = 0L,
+    val fadeOutMs: Long = 0L
+)

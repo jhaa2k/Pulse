@@ -121,6 +121,9 @@ object VexoShaders {
         uniform vec4 uGrade;
         uniform vec3 uFinishing;
         uniform vec2 uCreativeResolution;
+        uniform vec4 uPattern;
+        uniform vec4 uAperture;
+        uniform vec2 uApertureCenter;
         vec3 hueShift(vec3 c,float a){
             vec3 axis=normalize(vec3(1.0,1.0,1.0));
             return c*cos(a)+cross(axis,c)*sin(a)+axis*dot(axis,c)*(1.0-cos(a));
@@ -180,6 +183,28 @@ object VexoShaders {
                 grad.rgb*=grad.a;
                 tex=mix(tex,grad,clamp(uGradientMix,0.0,1.0));
             }
+            if(uPattern.x>0.5){
+                vec2 p=uv*uPattern.y;
+                float f=0.0;
+                if(uPattern.x<1.5){
+                    vec2 d=abs(fract(p+uPattern.w*0.1)-0.5);
+                    f=smoothstep(0.40,0.48,max(d.x,d.y));
+                }else if(uPattern.x<2.5){
+                    f=mod(floor(p.x+uPattern.w*0.15)+floor(p.y),2.0);
+                }else if(uPattern.x<3.5){
+                    f=0.5+0.5*sin(length(uv-0.5)*uPattern.y*6.2831853-uPattern.w);
+                }else if(uPattern.x<4.5){
+                    f=0.5+0.25*sin(p.x+uPattern.w+sin(p.y))+0.25*cos(p.y-uPattern.w+sin(p.x));
+                }else{
+                    vec2 cell=floor(p);
+                    vec2 jitter=vec2(noise(cell),noise(cell+17.0))*0.65+0.175;
+                    float d=length(fract(p)-jitter);
+                    f=(1.0-smoothstep(0.02,0.13,d))*noise(cell+3.0)*(0.65+0.35*sin(uPattern.w+noise(cell)*6.2831853));
+                }
+                vec4 pattern=mix(uGradientFrom,uGradientTo,clamp(f,0.0,1.0));
+                pattern.rgb*=pattern.a;
+                tex=mix(tex,pattern,uPattern.z);
+            }
             vec3 straightColor = tex.a > 0.0001 ? tex.rgb / tex.a : vec3(0.0);
             float luma = dot(straightColor, vec3(0.299, 0.587, 0.114));
             vec3 satColor = mix(vec3(luma), straightColor, uSaturation);
@@ -205,6 +230,15 @@ object VexoShaders {
                 else if (uMaskMode == 2) coverage = max(0.0, mask.a - light);
                 else if (uMaskMode == 3) coverage = 1.0 - mask.a;
                 alpha *= coverage;
+            }
+            if(uAperture.x>0.5){
+                vec2 p=abs(uv-uApertureCenter)*2.0;
+                float d=length(p);
+                if(uAperture.x>1.5 && uAperture.x<2.5)d=max(p.x,p.y);
+                else if(uAperture.x>2.5 && uAperture.x<3.5)d=p.x+p.y;
+                else if(uAperture.x>3.5)d=p.x;
+                float coverage=1.0-smoothstep(max(0.0,uAperture.y-uAperture.z),uAperture.y,d);
+                alpha*=mix(coverage,1.0-coverage,uAperture.w);
             }
             gl_FragColor = vec4(satColor * uTint.rgb * alpha, alpha);
         }

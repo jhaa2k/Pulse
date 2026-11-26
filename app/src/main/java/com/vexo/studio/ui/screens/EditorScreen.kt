@@ -821,6 +821,22 @@ private fun PropertiesTab(
             StudioChipSelector("Vertical anchor",listOf(0f,.5f,1f),layer.common.posY,{when(it){0f->"Top";1f->"Bottom";else->"Center"}}){vm.alignLayer(layer.common.id,null,it)}
             Text("Positions align the layer pivot, not its visible bounds.",style=MaterialTheme.typography.labelSmall)
         }
+        ExpandableSectionHeader("Layer timing & fades",expandedSections["timing"]==true,{toggleAccordion(expandedSections,"timing")}){
+            val playback by vm.playbackState.collectAsState()
+            val t=layer.common.timing
+            fun timing(edit:(com.vexo.studio.model.LayerTiming)->com.vexo.studio.model.LayerTiming){vm.updateLayer(layer.common.id){l->l.copy(common=l.common.copy(timing=edit(l.common.timing)))}}
+            Text("Start / end in seconds. End 0 follows track duration.",style=MaterialTheme.typography.labelSmall)
+            TimingNumber("Start",t.startMs){v->timing{it.copy(startMs=v)}}
+            TimingNumber("End",t.endMs){v->timing{it.copy(endMs=v)}}
+            TimingNumber("Fade in",t.fadeInMs){v->timing{it.copy(fadeInMs=v)}}
+            TimingNumber("Fade out",t.fadeOutMs){v->timing{it.copy(fadeOutMs=v)}}
+            Row(Modifier.horizontalScroll(rememberScrollState())){
+                TextButton(onClick={timing{it.copy(startMs=playback.positionMs)}}){Text("SET IN")}
+                TextButton(onClick={timing{it.copy(endMs=playback.positionMs)}}){Text("SET OUT")}
+                TextButton(onClick={timing{com.vexo.studio.model.LayerTiming()}}){Text("RESET")}
+            }
+            if(t.endMs>0&&t.endMs<=t.startMs)Text("End must be after start",color=palette.danger)
+        }
         ExpandableSectionHeader("Keyframe animation",expandedSections["keyframes"]==true,{toggleAccordion(expandedSections,"keyframes")}){
             TransformKeyframePanel(vm,uiState,layer)
         }
@@ -934,6 +950,26 @@ private fun PropertiesTab(
                 val c=cfg.creative
                 fun change(undo:Boolean=true,edit:(com.vexo.studio.model.CreativeImageConfig)->com.vexo.studio.model.CreativeImageConfig){
                     vm.updateLayer(layer.common.id,undo){l->val image=l.config as LayerConfig.Image;l.copy(config=image.copy(creative=edit(image.creative)))}
+                }
+                ExpandableSectionHeader("Procedural backgrounds",expandedSections["patterns"]==true,{toggleAccordion(expandedSections,"patterns")}){
+                    StudioChipSelector("Pattern",com.vexo.studio.model.ProceduralPattern.entries,c.pattern,{it.name}){v->change{it.copy(pattern=v)}}
+                    if(c.pattern!=com.vexo.studio.model.ProceduralPattern.NONE){
+                        StudioColorPickerRow("Pattern dark",c.gradientFrom){v->change{it.copy(gradientFrom=v)}}
+                        StudioColorPickerRow("Pattern light",c.gradientTo){v->change{it.copy(gradientTo=v)}}
+                        StudioSlider("Density",c.patternDensity,1.0f,48.0f,8.0f,"",1.0f,onValueChange={v->beginDrag();change(false){it.copy(patternDensity=v)}},onCommit=::endDrag)
+                        StudioSlider("Intensity",c.patternIntensity,0.0f,1.0f,0.5f,"",0.01f,onValueChange={v->beginDrag();change(false){it.copy(patternIntensity=v)}},onCommit=::endDrag)
+                        StudioSlider("Motion speed",c.patternSpeed,-4.0f,4.0f,0.25f,"",0.05f,onValueChange={v->beginDrag();change(false){it.copy(patternSpeed=v)}},onCommit=::endDrag)
+                    }
+                }
+                ExpandableSectionHeader("Feathered aperture",expandedSections["aperture"]==true,{toggleAccordion(expandedSections,"aperture")}){
+                    StudioChipSelector("Mask shape",com.vexo.studio.model.Aperture.entries,c.aperture,{it.name}){v->change{it.copy(aperture=v)}}
+                    if(c.aperture!=com.vexo.studio.model.Aperture.NONE){
+                        StudioToggleRow("Invert",c.apertureInvert){v->change{it.copy(apertureInvert=v)}}
+                        StudioSlider("Size",c.apertureSize,0.01f,2.0f,0.75f,"",0.01f,onValueChange={v->beginDrag();change(false){it.copy(apertureSize=v)}},onCommit=::endDrag)
+                        StudioSlider("Feather",c.apertureFeather,0.001f,0.5f,0.05f,"",0.005f,onValueChange={v->beginDrag();change(false){it.copy(apertureFeather=v)}},onCommit=::endDrag)
+                        StudioSlider("Center X",c.apertureX,0.0f,1.0f,0.5f,"",0.01f,onValueChange={v->beginDrag();change(false){it.copy(apertureX=v)}},onCommit=::endDrag)
+                        StudioSlider("Center Y",c.apertureY,0.0f,1.0f,0.5f,"",0.01f,onValueChange={v->beginDrag();change(false){it.copy(apertureY=v)}},onCommit=::endDrag)
+                    }
                 }
                 ExpandableSectionHeader("Creative gradients",expandedSections["Image_gradient"]==true,{toggleAccordion(expandedSections,"Image_gradient")}){
                     StudioChipSelector("Gradient",com.vexo.studio.model.CreativeGradient.entries,c.gradient,{it.name}){v->change{it.copy(gradient=v)}}
@@ -1087,6 +1123,13 @@ private fun PropertiesTab(
                 }
             }
             is LayerConfig.Shape -> {
+                ExpandableSectionHeader("Shape motion",expandedSections["shape_motion"]==true,{toggleAccordion(expandedSections,"shape_motion")}){
+                    StudioSlider("Radius",cfg.radius,0.005f,0.8f,0.32f,"",0.005f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){l->l.copy(config=(l.config as LayerConfig.Shape).copy(radius=v))}},onCommit=::endDrag)
+                    StudioSlider("Star inner radius",cfg.starInnerRatio,0.05f,0.99f,0.48f,"",0.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){l->l.copy(config=(l.config as LayerConfig.Shape).copy(starInnerRatio=v))}},onCommit=::endDrag)
+                    StudioSlider("Spin (degrees/sec)",cfg.spin,-360.0f,360.0f,0.0f,"",1.0f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){l->l.copy(config=(l.config as LayerConfig.Shape).copy(spin=v))}},onCommit=::endDrag)
+                    MeasureBindingControls("Radius pulse",cfg.pulse,uiState.project.audioProviders.map{it.index},::beginDrag,::endDrag){v,undo->vm.updateLayer(layer.common.id,undo){l->l.copy(config=(l.config as LayerConfig.Shape).copy(pulse=v))}}
+                    MeasureBindingControls("Stroke pulse",cfg.strokePulse,uiState.project.audioProviders.map{it.index},::beginDrag,::endDrag){v,undo->vm.updateLayer(layer.common.id,undo){l->l.copy(config=(l.config as LayerConfig.Shape).copy(strokePulse=v))}}
+                }
                 ExpandableSectionHeader("Geometry", expandedSections["Shape_Geometry"] == true, { toggleAccordion(expandedSections, "Shape_Geometry") }) {
                     StudioChipSelector("Shape Kind", ShapeKind.entries, cfg.kind, { it.label }) { k ->
                         vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(kind = k)) }
@@ -1705,4 +1748,14 @@ private fun TransformKeyframePanel(vm:StudioViewModel,ui:StudioUiState,layer:Lay
         },confirmButton={TextButton(enabled=value!=null,onClick={value?.let{vm.moveTransformKeyframe(layer.common.id,key,old,(it*1000).toLong())};editTime=null}){Text("MOVE")}},dismissButton={TextButton(onClick={editTime=null}){Text("CANCEL")}})
     }
 
+}
+
+@Composable
+private fun TimingNumber(label:String,ms:Long,commit:(Long)->Unit){
+    var draft by remember(ms){mutableStateOf((ms/1000.0).toString())}
+    val parsed=draft.toDoubleOrNull()?.takeIf{it.isFinite()&&it>=0&&it<=86400}
+    Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
+        OutlinedTextField(draft,{draft=it.take(16)},label={Text(label+" (s)")},singleLine=true,modifier=Modifier.weight(1f),isError=parsed==null)
+        TextButton(enabled=parsed!=null,onClick={parsed?.let{commit((it*1000).toLong())}}){Text("SET")}
+    }
 }
