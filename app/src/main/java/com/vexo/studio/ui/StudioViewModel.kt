@@ -554,6 +554,16 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun attachLayerAsset(layerId:String,uri:Uri,role:String){
+        runCatching{app.contentResolver.takePersistableUriPermission(uri,android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)}
+        updateLayer(layerId){layer->layer.copy(config=when(val c=layer.config){
+            is LayerConfig.Image -> if(role=="mask")c.copy(maskImage=uri.toString()) else c
+            is LayerConfig.BlurEffect -> if(role=="mask")c.copy(maskImage=uri.toString()) else c
+            is LayerConfig.Particles -> if(role=="particle")c.copy(customImage=uri.toString()) else c
+            else -> layer.config
+        })}
+    }
+
     fun attachImageToSelectedLayer(uri: Uri) {
         val video = app.contentResolver.getType(uri)?.startsWith("video/") == true
         runCatching {

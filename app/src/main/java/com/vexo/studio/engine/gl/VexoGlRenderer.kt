@@ -744,8 +744,9 @@ class VexoGlRenderer(
         val cx = w * 0.5f
         val cy = h * 0.5f
         val r = minOf(w, h) * 0.32f
+        val rect=if(cfg.kind==ShapeKind.RECTANGLE) ShapeGeometry.roundedSquare(r*.70710678f,cfg.cornerRadius) else null
         val sides = when (cfg.kind) {
-            ShapeKind.RECTANGLE -> 4
+            ShapeKind.RECTANGLE -> rect!!.size
             ShapeKind.ELLIPSE -> 48
             ShapeKind.POLYGON -> cfg.sides.coerceIn(3, 24)
             ShapeKind.STAR -> cfg.sides.coerceIn(4, 16) * 2
@@ -786,23 +787,25 @@ class VexoGlRenderer(
             val r0 = if (cfg.kind == ShapeKind.STAR && i % 2 == 1) r * 0.48f else r
             val r1 = if (cfg.kind == ShapeKind.STAR && (i + 1) % 2 == 1) r * 0.48f else r
 
-            val x0 = cx + cos(a0) * r0
-            val y0 = cy + sin(a0) * r0
-            val x1 = cx + cos(a1) * r1
-            val y1 = cy + sin(a1) * r1
+            val x0 = cx + (rect?.get(i)?.first ?: cos(a0)*r0)
+            val y0 = cy + (rect?.get(i)?.second ?: sin(a0)*r0)
+            val x1 = cx + (rect?.get((i+1)%sides)?.first ?: cos(a1)*r1)
+            val y1 = cy + (rect?.get((i+1)%sides)?.second ?: sin(a1)*r1)
 
             // Fill triangle
-            if (((cfg.fillColorArgb ushr 24) and 0xFF) > 0 && cfg.kind != ShapeKind.LINE) {
+            if ((((cfg.fillColorArgb ushr 24) or (cfg.gradientEndArgb ushr 24)) and 0xFF) > 0 && cfg.kind != ShapeKind.LINE) {
                 pushVert(cx, cy, cfg.fillColorArgb)
                 pushVert(x0, y0, cfg.gradientEndArgb)
                 pushVert(x1, y1, cfg.gradientEndArgb)
             }
             // Stroke edge quad
             if(strokeW<=0f) continue
-            val x0i = cx + cos(a0) * (r0 - strokeW)
-            val y0i = cy + sin(a0) * (r0 - strokeW)
-            val x1i = cx + cos(a1) * (r1 - strokeW)
-            val y1i = cy + sin(a1) * (r1 - strokeW)
+            val scale0=(1f-strokeW/kotlin.math.hypot(x0-cx,y0-cy).coerceAtLeast(1f)).coerceAtLeast(0f)
+            val scale1=(1f-strokeW/kotlin.math.hypot(x1-cx,y1-cy).coerceAtLeast(1f)).coerceAtLeast(0f)
+            val x0i = cx + (x0-cx)*scale0
+            val y0i = cy + (y0-cy)*scale0
+            val x1i = cx + (x1-cx)*scale1
+            val y1i = cy + (y1-cy)*scale1
             pushVert(x0i, y0i, cfg.strokeColorArgb)
             pushVert(x0, y0, cfg.strokeColorArgb)
             pushVert(x1, y1, cfg.strokeColorArgb)
@@ -826,7 +829,7 @@ class VexoGlRenderer(
         val sim = particleSims.getOrPut(layerId) { ParticleSimulator() }
         sim.step(
             cfg = cfg,
-            snapshot = audioSnap,
+            snapshot = scene.audioSnapshots[cfg.measureOverallSpeed.providerIndex] ?: audioSnap,
             deltaSec = deltaSec,
             totalTimeSec = scene.totalTimeSec,
             playingTimeSec = scene.playingTimeSec,
