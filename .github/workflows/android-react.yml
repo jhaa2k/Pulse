@@ -37,7 +37,9 @@ jobs:
           test -f "$SDK_ROOT/platforms/android-35/android.jar"
       - name: Install JavaScript dependencies
         run: npm install --no-audit --no-fund
-      - name: Compile original React and TypeScript app
+      - name: Run scene model tests
+        run: node --test tests/scene.test.js
+      - name: Compile React and TypeScript studio
         run: npm run build
       - name: Create Android project and bundle web assets
         run: |
