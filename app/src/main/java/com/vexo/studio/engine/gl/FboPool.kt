@@ -15,6 +15,7 @@ data class GlFbo(
  */
 class FboPool {
     private val allocated = mutableMapOf<String, GlFbo>()
+    fun allocatedBytes():Long=allocated.values.sumOf{it.width.toLong()*it.height*4L}
 
     fun obtain(key: String, width: Int, height: Int): GlFbo {
         val w = width.coerceIn(16, 4096)

@@ -96,6 +96,10 @@ class VexoGlRenderer(
 
     @Volatile
     var lastFrameDurationMs: Float = 0f
+    @Volatile var diagnosticsEnabled=false
+    @Volatile var diagnostics=PreviewDiagnostics()
+        private set
+    private val diagnosticCounter=FrameDiagnosticsCounter()
         private set
 
     // Reusable buffers (zero per-frame large allocations)
@@ -165,6 +169,11 @@ class VexoGlRenderer(
         }
 
         lastFrameDurationMs = (System.nanoTime() - nowNs) / 1_000_000f
+        if(diagnosticsEnabled){
+            diagnosticCounter.frame(nowNs,lastFrameDurationMs)?.let{(fps,ms)->
+                diagnostics=PreviewDiagnostics(fps,ms,viewportW,viewportH,cachedReachable.size,cachedLayerIds.size,bitmapSizes.values.sumOf{it.first.toLong()*it.second*4L},fboPool.allocatedBytes())
+            }
+        }else diagnosticCounter.reset()
     }
 
     fun initGlResources() {
@@ -181,6 +190,7 @@ class VexoGlRenderer(
 
     fun releaseGlResources() {
         videoFrames.close()
+        diagnosticCounter.reset();diagnostics=PreviewDiagnostics()
         graphProject=null;cachedGraph=null;cachedReachable=emptySet();cachedDisplay=-1;cachedLayerIds=emptySet();cachedTrails=emptySet()
         particleSims.clear();barDelayHistory.clear()
         lastProjectId=null;lastPositionMs=-1L;lastArtworkVersion=-1

@@ -4,6 +4,13 @@ import android.opengl.GLSurfaceView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Text
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
+import com.vexo.studio.ui.theme.LocalVexoPalette
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
@@ -42,7 +49,8 @@ fun VexoPreviewSurface(
     fillBounds: Boolean = false,
     targetFps: Int = 60,
     continuousRendering: Boolean = true,
-    renderScale: Float = 1f
+    renderScale: Float = 1f,
+    showDiagnostics:Boolean=false
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -50,6 +58,11 @@ fun VexoPreviewSurface(
     val lastRequest = remember { longArrayOf(0L) }
 
     val renderer = remember { VexoGlRenderer(context, isExportRenderer = false) }
+    var diagnostics by remember{mutableStateOf(PreviewDiagnostics())}
+    LaunchedEffect(showDiagnostics){
+        renderer.diagnosticsEnabled=showDiagnostics
+        if(showDiagnostics){while(true){diagnostics=renderer.diagnostics;delay(500)}}
+    }
     val glView = remember {
         GLSurfaceView(context).apply {
             setEGLContextClientVersion(2)
@@ -79,15 +92,18 @@ fun VexoPreviewSurface(
         glView.requestRender()
     }
 
-    LaunchedEffect(sceneSnapshot) {
-        if (sceneSnapshot != null) {
-            renderer.submitSnapshot(sceneSnapshot)
-            val now = SystemClock.elapsedRealtimeNanos()
-            val interval = 1_000_000_000L / targetFps.coerceIn(15, 60)
-            if (now - lastRequest[0] >= interval - 2_000_000L) {
-                lastRequest[0] = now
-                glView.requestRender()
+    // Publish the newest snapshot immediately; request frames at the selected cadence.
+    LaunchedEffect(sceneSnapshot){if(sceneSnapshot!=null)renderer.submitSnapshot(sceneSnapshot)}
+    val currentSnapshot by rememberUpdatedState(sceneSnapshot)
+    LaunchedEffect(targetFps,continuousRendering,glView){
+        val interval=(1000L/targetFps.coerceIn(15,60)).coerceAtLeast(1)
+        var last:RenderSceneSnapshot?=null
+        while(true){
+            val snap=currentSnapshot
+            if(snap!=null&&(continuousRendering||snap!==last)){
+                renderer.submitSnapshot(snap);glView.requestRender();last=snap
             }
+            delay(interval)
         }
     }
 
@@ -141,5 +157,10 @@ fun VexoPreviewSurface(
             update = {},
             modifier = surfaceModifier.onSizeChanged{viewSize=it}
         )
+        if(showDiagnostics){
+            val palette=LocalVexoPalette.current
+            val d=diagnostics
+            Text("%.1f FPS · %.1f ms CPU\n%d × %d · %d comps / %d layers\n%.1f MiB textures + %.1f MiB FBO".format(d.fps,d.cpuFrameMs,d.width,d.height,d.compositions,d.layers,d.textureBytes/1048576.0,d.framebufferBytes/1048576.0),modifier=Modifier.align(Alignment.TopStart).background(Color.Black.copy(alpha=.85f)).padding(5.dp),style=MaterialTheme.typography.labelSmall,color=palette.accent)
+        }
     }
 }
