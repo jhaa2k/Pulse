@@ -50,6 +50,18 @@ object SceneGraph {
         return visited
     }
 
+    data class MissingReference(val compositionIndex:Int,val layerName:String,val targetIndex:Int)
+    /** Inspect only active dependencies for the requested output, not unused draft compositions. */
+    fun missingReferences(project:VexoProject,root:Int=0):List<MissingReference>{
+        val available=project.compositions.map{it.index}.toSet()
+        val active=reachable(project,root)
+        return project.compositions.filter{it.index in active}.flatMap{comp->
+            comp.layers.filter{it.common.visible}.flatMap{layer->
+                referencesOf(layer.config).filter{it !in available}.map{MissingReference(comp.index,layer.common.name,it)}
+            }
+        }
+    }
+
     fun resolve(project: VexoProject): ResolvedSceneGraph {
         val byIndex = project.compositions.associateBy { it.index }
         val state = mutableMapOf<Int, Int>() // 0=unvisited, 1=visiting, 2=visited

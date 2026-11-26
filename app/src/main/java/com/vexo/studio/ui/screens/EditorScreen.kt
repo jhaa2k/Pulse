@@ -423,6 +423,7 @@ private fun LayersTab(
     val visibleLayers=activeComp.layers.filter{layerQuery.isBlank()||it.common.name.contains(layerQuery,true)||it.common.groupName.contains(layerQuery,true)||it.type.label.contains(layerQuery,true)}
     Column(modifier = Modifier.fillMaxSize()) {
         var compositionMenu by remember { mutableStateOf(false) }
+        var showDependencies by remember{mutableStateOf(false)}
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Box(Modifier.weight(1f)) {
                 Row(Modifier.fillMaxWidth().clickable { compositionMenu = true }.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -434,12 +435,31 @@ private fun LayersTab(
                     DropdownMenuItem(text = { Text("New composition") }, onClick = { vm.addComposition(); compositionMenu = false })
                     DropdownMenuItem(text={Text("Rename composition")},onClick={compositionMenu=false;renameComp=true})
                     DropdownMenuItem(text={Text("Duplicate composition")},onClick={compositionMenu=false;vm.duplicateComposition(activeComp.index)})
+                    DropdownMenuItem(text={Text("Composition connections")},onClick={compositionMenu=false;showDependencies=true})
                     if(activeComp.index!=0)DropdownMenuItem(text={Text("Delete composition",color=palette.danger)},onClick={compositionMenu=false;deleteComp=true})
                 }
             }
             TextButton(onClick={searchOpen=!searchOpen;if(!searchOpen)layerQuery=""}){Text(if(searchOpen)"Close" else "Find")}
             if(uiState.clipboardLayerType!=null)TextButton(onClick=vm::pasteLayer){Text("Paste")}
             TextButton(onClick = { showAddLayerDialog = true }) { Icon(Icons.Default.Add, null, tint = palette.accent); Text("Layer", color = palette.accent) }
+        }
+        if(showDependencies){
+            val nodes=uiState.project.compositions.associateBy{it.index}
+            val uses=activeComp.layers.flatMap{l->com.vexo.studio.engine.scene.SceneGraph.referencesOf(l.config).map{it to l.common.name}}.distinct()
+            val parents=uiState.project.compositions.filter{it.index!=activeComp.index&&it.layers.any{l->activeComp.index in com.vexo.studio.engine.scene.SceneGraph.referencesOf(l.config)}}
+            AlertDialog(onDismissRequest={showDependencies=false},title={Text("COMPOSITION CONNECTIONS")},text={
+                Column(Modifier.fillMaxWidth().heightIn(max=320.dp).verticalScroll(rememberScrollState())){
+                    Text("SOURCES",color=palette.accent,style=MaterialTheme.typography.labelMedium)
+                    if(uses.isEmpty())Text("No composition sources",style=MaterialTheme.typography.bodySmall)
+                    uses.forEach{(id,label)->
+                        val node=nodes[id]
+                        TextButton(enabled=node!=null,onClick={vm.selectComposition(id);showDependencies=false}){Text(label+" → "+(node?.name?:"Missing composition "+id),color=if(node==null)palette.danger else palette.textPrimary)}
+                    }
+                    Text("USED BY",color=palette.accent,style=MaterialTheme.typography.labelMedium)
+                    if(parents.isEmpty())Text("No incoming references",style=MaterialTheme.typography.bodySmall)
+                    parents.forEach{node->TextButton(onClick={vm.selectComposition(node.index);showDependencies=false}){Text(node.name)}}
+                }
+            },confirmButton={TextButton(onClick={showDependencies=false}){Text("CLOSE")}})
         }
         Row(Modifier.fillMaxWidth().height(38.dp).horizontalScroll(rememberScrollState()),verticalAlignment=Alignment.CenterVertically){
             TextButton(onClick={timeline=false}){Text("LAYERS",color=if(!timeline)palette.accent else palette.textSecondary)}

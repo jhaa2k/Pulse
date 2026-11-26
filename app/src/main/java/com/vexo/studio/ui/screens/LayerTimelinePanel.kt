@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -33,23 +34,41 @@ internal fun ColumnScope.LayerTimelinePanel(vm:StudioViewModel,ui:StudioUiState,
     val palette=LocalVexoPalette.current
     val playback by vm.playbackState.collectAsState()
     var mode by remember{mutableStateOf(TimelineDragMode.MOVE)}
+    var zoom by remember(comp.index){mutableFloatStateOf(1f)}
+    var scrollFraction by remember(comp.index){mutableFloatStateOf(0f)}
+    var snap by remember(comp.index){mutableStateOf(true)}
     val duration=playback.durationMs
     val total=maxOf(if(duration>0)1000L else 10000L,duration,comp.layers.maxOfOrNull{maxOf(it.common.timing.startMs+100L,it.common.timing.endMs)}?:0L)
+    val window=TimelineWindow.create(total,zoom,scrollFraction)
+    val fps=ui.project.exportSettings.fps
+    fun snapTime(t:Long)=if(snap)LayerPropertyAnimation.snap(t,fps)else t
+    fun fraction(t:Long)=window.fraction(t)
+    fun stamp(t:Long)="%d:%02d".format(t/60000,t/1000%60)
     Text("LAYER TIMELINE",style=MaterialTheme.typography.labelMedium,color=palette.accent,modifier=Modifier.padding(6.dp))
     StudioChipSelector("Drag mode",TimelineDragMode.entries,mode,{it.name.replace('_',' ')}){mode=it}
+    Row(Modifier.fillMaxWidth().padding(horizontal=6.dp),verticalAlignment=Alignment.CenterVertically){
+        Text("ZOOM ${zoom.toInt()}X",style=MaterialTheme.typography.labelSmall,modifier=Modifier.width(72.dp))
+        Slider(zoom,{zoom=it},valueRange=1f..16f,steps=14,modifier=Modifier.weight(1f).height(32.dp))
+        TextButton(onClick={scrollFraction=TimelineWindow.centerFraction(total,zoom,playback.positionMs)}){Text("PLAYHEAD")}
+    }
+    if(window.span<total)Slider(scrollFraction,{scrollFraction=it},modifier=Modifier.fillMaxWidth().height(28.dp).padding(horizontal=6.dp))
+    Row(Modifier.fillMaxWidth().padding(horizontal=6.dp),verticalAlignment=Alignment.CenterVertically){
+        Text("FRAME SNAP",style=MaterialTheme.typography.labelSmall,modifier=Modifier.weight(1f))
+        Switch(checked=snap,onCheckedChange={snap=it},modifier=Modifier.height(32.dp))
+    }
     Text(if(duration<=0)"Import audio to enable timeline seeking." else "Tap ruler to seek. Drag a layer using the selected mode.",style=MaterialTheme.typography.labelSmall,modifier=Modifier.padding(horizontal=6.dp))
     Row(Modifier.fillMaxWidth().padding(6.dp),verticalAlignment=Alignment.CenterVertically){
-        Text("0:00",style=MaterialTheme.typography.labelSmall,modifier=Modifier.width(84.dp))
-        Canvas(Modifier.weight(1f).height(30.dp).background(palette.panelElevated).pointerInput(total,duration){
-            if(duration>0)detectTapGestures{p->vm.playbackController.seekTo((p.x/size.width.coerceAtLeast(1)*total).toLong().coerceIn(0L,duration))}
+        Text(stamp(window.start),style=MaterialTheme.typography.labelSmall,modifier=Modifier.width(84.dp))
+        Canvas(Modifier.weight(1f).height(30.dp).background(palette.panelElevated).pointerInput(window,duration,snap,fps){
+            if(duration>0)detectTapGestures{p->vm.playbackController.seekTo(snapTime(window.timeAt(p.x/size.width.coerceAtLeast(1))).coerceIn(0L,duration))}
         }){
             for(i in 0..4){val x=size.width*i/4f;drawLine(palette.border,Offset(x,0f),Offset(x,size.height),1.dp.toPx())}
-            val x=(playback.positionMs.toFloat()/total).coerceIn(0f,1f)*size.width
-            drawLine(palette.accent,Offset(x,0f),Offset(x,size.height),2.dp.toPx())
+            val x=fraction(playback.positionMs)*size.width
+            if(x in 0f..size.width)drawLine(palette.accent,Offset(x,0f),Offset(x,size.height),2.dp.toPx())
         }
 
     }
-    Text("Timeline span: "+"%d:%02d".format(total/60000,total/1000%60),style=MaterialTheme.typography.labelSmall,modifier=Modifier.padding(horizontal=6.dp))
+    Text("VISIBLE: "+stamp(window.start)+" – "+stamp(window.end)+" / "+stamp(total),style=MaterialTheme.typography.labelSmall,modifier=Modifier.padding(horizontal=6.dp))
     LazyColumn(Modifier.fillMaxWidth().weight(1f).padding(horizontal=6.dp)){
         items(comp.layers,key={it.common.id}){layer->
             val t=layer.common.timing
@@ -59,28 +78,33 @@ internal fun ColumnScope.LayerTimelinePanel(vm:StudioViewModel,ui:StudioUiState,
             val markers=remember(ui.project.keyframes,layer.common.id){ui.project.keyframes.filter{it.targetLayerId==layer.common.id}.flatMap{it.keyframes}.map{it.timeMs}.distinct().sorted()}
             Row(Modifier.fillMaxWidth().height(42.dp),verticalAlignment=Alignment.CenterVertically){
                 Text(layer.common.name,style=MaterialTheme.typography.labelSmall,color=if(ui.selectedLayerId==layer.common.id)palette.accent else palette.textPrimary,maxLines=2,overflow=TextOverflow.Ellipsis,modifier=Modifier.width(84.dp).clickable{vm.selectLayer(layer.common.id);vm.selectStudioTab(StudioTab.PROPERTIES)})
-                Canvas(Modifier.weight(1f).height(32.dp).background(palette.panelElevated).pointerInput(t,total,mode,layer.common.locked){
+                Canvas(Modifier.weight(1f).height(32.dp).background(palette.panelElevated).pointerInput(t,total,window,mode,layer.common.locked,snap,fps){
                     if(!layer.common.locked)detectHorizontalDragGestures(onDragStart={delta=0f;draft=t},onDragEnd={draft?.let{vm.setTimelineTiming(layer.common.id,it)};draft=null},onDragCancel={draft=null}){change,amount->
                         change.consume();delta+=amount
-                        draft=TimelineEditing.edit(t,(delta/size.width.coerceAtLeast(1)*total).toLong(),total,mode)
+                        val shift=(delta/size.width.coerceAtLeast(1)*window.span).toLong()
+                        draft=if(snap)TimelineEditing.editSnapped(t,shift,total,mode,fps)else TimelineEditing.edit(t,shift,total,mode)
                     }
                 }){
-                    val start=(shown.startMs.toFloat()/total).coerceIn(0f,1f)*size.width
-                    val end=((if(shown.endMs>0)shown.endMs else total).toFloat()/total).coerceIn(0f,1f)*size.width
+                    val rawStart=fraction(shown.startMs)*size.width
+                    val rawEnd=fraction(if(shown.endMs>0)shown.endMs else total)*size.width
+                    val start=rawStart.coerceIn(0f,size.width)
+                    val end=rawEnd.coerceIn(0f,size.width)
                     val width=(end-start).coerceAtLeast(0f)
                     val color=if(layer.common.visible)palette.accent else palette.textSecondary
                     drawRect(color.copy(alpha=if(layer.common.locked).25f else .55f),Offset(start,4.dp.toPx()),Size(width,(size.height-8.dp.toPx()).coerceAtLeast(0f)))
-                    val fadeIn=(shown.fadeInMs.toFloat()/total*size.width).coerceIn(0f,width)
-                    val fadeOut=(shown.fadeOutMs.toFloat()/total*size.width).coerceIn(0f,width)
-                    if(fadeIn>0)drawLine(palette.textPrimary,Offset(start,size.height-4.dp.toPx()),Offset(start+fadeIn,4.dp.toPx()),1.dp.toPx())
-                    if(fadeOut>0)drawLine(palette.textPrimary,Offset(end-fadeOut,4.dp.toPx()),Offset(end,size.height-4.dp.toPx()),1.dp.toPx())
-                    markers.filter{it in 0..total}.forEach{time->
-                        val x=time.toFloat()/total*size.width;val y=size.height*.5f;val r=3.dp.toPx()
+                    val fadeIn=(shown.fadeInMs.toFloat()/window.span*size.width).coerceIn(0f,(rawEnd-rawStart).coerceAtLeast(0f))
+                    val fadeOut=(shown.fadeOutMs.toFloat()/window.span*size.width).coerceIn(0f,(rawEnd-rawStart).coerceAtLeast(0f))
+                    clipRect(0f,0f,size.width,size.height){
+                        if(fadeIn>0)drawLine(palette.textPrimary,Offset(rawStart,size.height-4.dp.toPx()),Offset(rawStart+fadeIn,4.dp.toPx()),1.dp.toPx())
+                        if(fadeOut>0)drawLine(palette.textPrimary,Offset(rawEnd-fadeOut,4.dp.toPx()),Offset(rawEnd,size.height-4.dp.toPx()),1.dp.toPx())
+                    }
+                    markers.filter{it in window.start..window.end}.forEach{time->
+                        val x=fraction(time)*size.width;val y=size.height*.5f;val r=3.dp.toPx()
                         val path=androidx.compose.ui.graphics.Path().apply{moveTo(x,y-r);lineTo(x+r,y);lineTo(x,y+r);lineTo(x-r,y);close()}
                         drawPath(path,palette.textPrimary)
                     }
-                    val play=(playback.positionMs.toFloat()/total).coerceIn(0f,1f)*size.width
-                    drawLine(palette.textPrimary,Offset(play,0f),Offset(play,size.height),1.dp.toPx())
+                    val play=fraction(playback.positionMs)*size.width
+                    if(play in 0f..size.width)drawLine(palette.textPrimary,Offset(play,0f),Offset(play,size.height),1.dp.toPx())
                 }
             }
         }

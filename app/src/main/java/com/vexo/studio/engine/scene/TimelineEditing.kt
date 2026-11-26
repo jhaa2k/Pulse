@@ -2,6 +2,11 @@ package com.vexo.studio.engine.scene
 import com.vexo.studio.model.LayerTiming
 enum class TimelineDragMode { MOVE, TRIM_START, TRIM_END }
 object TimelineEditing{
+    fun editSnapped(t:LayerTiming,delta:Long,duration:Long,mode:TimelineDragMode,fps:Int):LayerTiming{
+        val anchor=if(mode==TimelineDragMode.TRIM_END)t.endMs.takeIf{it>0}?:duration else t.startMs
+        val target=LayerPropertyAnimation.snap((anchor+delta).coerceIn(0L,duration.coerceAtLeast(0L)),fps)
+        return edit(t,target-anchor,duration,mode)
+    }
     fun edit(t:LayerTiming,delta:Long,duration:Long,mode:TimelineDragMode):LayerTiming{
         val total=duration.coerceAtLeast(1)
         val minLen=minOf(100L,total)

@@ -87,6 +87,9 @@ class VexoVideoExporter(private val context: Context) {
         try {
             onProgress(ExportProgress(isRunning = true, progress = 0.01f, statusText = "Preparing audio & encoder"))
 
+            val missing=com.vexo.studio.engine.scene.SceneGraph.missingReferences(project)
+            check(missing.isEmpty()){val first=missing.first();"Missing composition ${first.targetIndex} referenced by ${first.layerName}. Repair the source before export."}
+            check(!com.vexo.studio.engine.scene.SceneGraph.resolve(project.copy(compositions=project.compositions.filter{it.index in com.vexo.studio.engine.scene.SceneGraph.reachable(project,0)})).hasCycle){"Final composition has a cyclic dependency"}
             val extractor = MediaExtractor()
             inputExtractor = extractor
             extractor.setDataSource(context, audioUri, null)
@@ -456,7 +459,7 @@ class VexoVideoExporter(private val context: Context) {
 
             onProgress(ExportProgress(isRunning = true, progress = 0.98f, statusText = "Verifying & publishing MP4"))
 
-            verifyMp4File(tempFile,width,height,totalDurationUs,videoMime)
+            verifyMp4File(tempFile,width,height,totalDurationUs,videoMime,fps)
             currentCoroutineContext().ensureActive()
             val publishedUri = publishVideo(tempFile, project.name, settings.customOutputUri)
             tempFile.delete()
@@ -568,7 +571,7 @@ class VexoVideoExporter(private val context: Context) {
         return bytesWritten
     }
 
-    private fun verifyMp4File(file: File,width:Int,height:Int,expectedDurationUs:Long,videoMime:String) {
+    private fun verifyMp4File(file: File,width:Int,height:Int,expectedDurationUs:Long,videoMime:String,fps:Int) {
         if (!file.exists() || file.length() <= 0L) {
             error("Exported MP4 file is empty")
         }
@@ -576,9 +579,25 @@ class VexoVideoExporter(private val context: Context) {
         try{
             extractor.setDataSource(file.absolutePath)
             val formats=(0 until extractor.trackCount).map{extractor.getTrackFormat(it)}
-            val video=formats.firstOrNull{it.getString(MediaFormat.KEY_MIME)==videoMime} ?: error("MP4 has no selected video codec track")
-            check(formats.any{it.getString(MediaFormat.KEY_MIME)=="audio/mp4a-latm"}){"MP4 has no AAC track"}
+            val videoIndex=formats.indexOfFirst{it.getString(MediaFormat.KEY_MIME)==videoMime}
+            val audioIndex=formats.indexOfFirst{it.getString(MediaFormat.KEY_MIME)=="audio/mp4a-latm"}
+            check(videoIndex>=0){"MP4 has no selected video codec track"}
+            check(audioIndex>=0){"MP4 has no AAC track"}
+            val video=formats[videoIndex]
+            val audio=formats[audioIndex]
             check(video.getInteger(MediaFormat.KEY_WIDTH)==width && video.getInteger(MediaFormat.KEY_HEIGHT)==height){"Export dimensions differ from selection"}
+            for(index in listOf(videoIndex,audioIndex)){
+                extractor.selectTrack(index)
+                extractor.seekTo(0L,MediaExtractor.SEEK_TO_CLOSEST_SYNC)
+                check(extractor.sampleTrackIndex==index && extractor.sampleTime>=0L){"MP4 contains an empty media track"}
+                extractor.unselectTrack(index)
+            }
+            if(video.containsKey(MediaFormat.KEY_DURATION)&&audio.containsKey(MediaFormat.KEY_DURATION)){
+                val vd=video.getLong(MediaFormat.KEY_DURATION)
+                val ad=audio.getLong(MediaFormat.KEY_DURATION)
+                val tolerance=maxOf(250_000L,2_000_000L/fps)
+                check(vd>0&&ad>0&&kotlin.math.abs(vd-ad)<=tolerance){"MP4 audio/video track durations are inconsistent"}
+            }
         }finally{extractor.release()}
         val retriever = MediaMetadataRetriever()
         try {
