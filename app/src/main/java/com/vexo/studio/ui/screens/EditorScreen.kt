@@ -922,14 +922,14 @@ private fun PropertiesTab(
                     StudioSlider("Steps",cfg.stepCount.toFloat(),2.0f,16.0f,8.0f,"",1.0f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){l->l.copy(config=(l.config as LayerConfig.Bars).copy(stepCount=v.toInt()))}},onCommit=::endDrag)
                 }
                 ExpandableSectionHeader("Path & geometry", expandedSections["Bars_Pathgeometry"] == true, { toggleAccordion(expandedSections, "Bars_Pathgeometry") }) {
-                    StudioSlider("Polygon Sides", cfg.polygonSides.toFloat(), 3f, 12f, 6f, "", 1f, onValueChange = { v ->
+                    StudioSlider("Polygon Sides", cfg.polygonSides.toFloat(), 3f, 24f, 6f, "", 1f, onValueChange = { v ->
                         beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(polygonSides = v.toInt())) }
                     }, onCommit = ::endDrag)
                     StudioSlider("Path Angle", cfg.pathAngleDeg, -360f, 360f, 0f, "deg", 1f, onValueChange = { v ->
                         beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(pathAngleDeg = v)) }
                     }, onCommit = ::endDrag)
                     StudioChipSelector("Path Shape", BarsShapePath.entries, cfg.shapePath, { it.label }) { path ->
-                        vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(shapePath = path)) }
+                        vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(shapePath = path,creativePath=com.vexo.studio.model.CreativeSpectrumPath.LEGACY,customPathEnabled=false)) }
                     }
                     StudioSlider("Circular Path Gap", cfg.pathGap, 0f, 0.9f, 0f, "", 0.01f, onValueChange = { v -> beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(pathGap = v)) } }, onCommit = ::endDrag)
                     if (cfg.shapePath == BarsShapePath.CIRCLE || cfg.shapePath == BarsShapePath.SIDED_POLYGON) {

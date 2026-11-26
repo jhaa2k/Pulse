@@ -8,7 +8,9 @@ class CustomSpectrumPath private constructor(
     private val points:List<SpectrumPathPoint>, private val cumulative:FloatArray
 ) {
     fun at(t:Float):SpectrumPathPoint {
-        val distance=(if(t.isFinite())t.coerceIn(0f,1f) else 0f)*cumulative.last()
+        if(!t.isFinite()||t<=0f)return points.first()
+        if(t>=1f)return points.last()
+        val distance=t*cumulative.last()
         var i=1
         while(i<cumulative.lastIndex && cumulative[i]<distance)i++
         val a=points[i-1];val b=points[i]

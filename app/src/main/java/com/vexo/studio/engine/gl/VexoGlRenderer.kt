@@ -533,7 +533,7 @@ class VexoGlRenderer(
                     val angle = Math.toRadians(cfg.pathAngleDeg.toDouble()).toFloat() +
                         (i.toFloat() / count) * 2f * PI.toFloat() * (1f - cfg.pathGap.coerceIn(0f, 0.9f))
                     val baseR = if (cfg.shapePath == BarsShapePath.SIDED_POLYGON) {
-                        val sides = cfg.polygonSides.coerceIn(3, 12)
+                        val sides = cfg.polygonSides.coerceIn(3, 24)
                         val sector = (2f * PI.toFloat()) / sides
                         val local = ((angle % sector) + sector) % sector - sector * 0.5f
                         (cfg.circleRadius * minDim) * (cos(sector * 0.5f) / cos(local).coerceAtLeast(0.2f))

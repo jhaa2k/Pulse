@@ -16,6 +16,7 @@ import com.vexo.studio.engine.scene.CustomSpectrumPath
 import com.vexo.studio.model.LayerConfig
 import com.vexo.studio.model.SpectrumPathPoint
 import com.vexo.studio.ui.theme.LocalVexoPalette
+import com.vexo.studio.ui.components.StudioToggleRow
 
 @Composable
 internal fun CustomSpectrumPathEditor(layerId:String,cfg:LayerConfig.Bars,apply:(LayerConfig.Bars)->Unit){
@@ -61,7 +62,7 @@ internal fun CustomSpectrumPathEditor(layerId:String,cfg:LayerConfig.Bars,apply:
                 StudioToggleRow("Close path",closed){closed=it}
             }
         },
-        confirmButton={TextButton(enabled=points.size>=if(closed)3 else 2,onClick={
+        confirmButton={TextButton(enabled=points.size>=(if(closed)3 else 2) && CustomSpectrumPath.create(points,closed)!=null,onClick={
             if(CustomSpectrumPath.create(points,closed)!=null){
                 apply(cfg.copy(customPathEnabled=true,customPathPoints=points,customPathClosed=closed));open=false
             }
