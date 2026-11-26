@@ -2,6 +2,15 @@ package com.vexo.studio.ui.screens
 
 import android.content.res.Configuration
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.setProgress
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -226,13 +235,13 @@ fun EditorScreen(
             PreviewBlock(vm, uiState, sceneSnapshot, settings.previewFps,
                 playback.isPlaying || settings.pauseBehavior != PauseBehavior.FREEZE,
                 modifier = Modifier.fillMaxSize())
-            Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().fillMaxHeight(1f - previewShare).background(palette.glassPanel, palette.shape).border(1.dp, palette.border, palette.shape)) {
+            Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().fillMaxHeight(1f - previewShare).background(palette.panel).clipToBounds()) {
                 CompactTransportBar(playback, { vm.playbackController.togglePlayPause() }, { vm.playbackController.previous() }, { vm.playbackController.next() }, { vm.playbackController.seekTo(it) }, onPickAudio, Modifier.fillMaxWidth())
                 StudioWorkspacePanel(vm, uiState, settings, onPickImage, onImportPreset, onExportPreset, Modifier.weight(1f).fillMaxWidth())
             }
         }
     } else {
-        Column(modifier = Modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize().background(palette.bg).clipToBounds()) {
             PreviewBlock(
                 vm = vm,
                 uiState = uiState,
@@ -242,7 +251,7 @@ fun EditorScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(previewShare)
-                    .heightIn(min = 120.dp)
+                    .clipToBounds()
             )
             CompactTransportBar(
                 playback = playback,
@@ -277,78 +286,21 @@ private fun PreviewBlock(
     modifier: Modifier = Modifier
 ) {
     val palette = LocalVexoPalette.current
-    Box(modifier = modifier.background(Color.Black)) {
-        VexoPreviewSurface(
-            aspectRatio = uiState.project.canvas.aspectRatio,
-            sceneSnapshot = sceneSnapshot.collectAsState().value,
-            onTransformGesture = vm::updatePreviewTransform,
-            modifier = Modifier.fillMaxSize(),
-            targetFps = targetFps,
-            continuousRendering = continuousRendering
-        )
-        // Compact aspect ratio + preview tools overlay bar
-        Row(
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(start = 78.dp, top = 6.dp, end = 6.dp)
-                .horizontalScroll(rememberScrollState())
-                .background(palette.glassPanel, palette.shape)
-                .border(1.dp, palette.border, palette.shape),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            AspectRatioPreset.entries.forEach { ratio ->
-                val active = ratio == uiState.project.canvas.aspectRatio
-                Text(
-                    text = ratio.label,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (active) palette.accentOn else palette.textSecondary,
-                    modifier = Modifier
-                        .background(if (active) palette.accent else Color.Transparent)
-                        .clickable { vm.setAspectRatio(ratio) }
-                        .padding(horizontal = 6.dp, vertical = 4.dp)
-                )
+    Column(modifier=modifier.background(Color.Black).clipToBounds()){
+        Row(Modifier.fillMaxWidth().background(palette.panel).padding(horizontal=4.dp),verticalAlignment=Alignment.CenterVertically){
+            IconButton(onClick=vm::undo,enabled=uiState.canUndo,modifier=Modifier.size(32.dp)){Icon(Icons.Default.Undo,"Undo",modifier=Modifier.size(17.dp),tint=if(uiState.canUndo)palette.textPrimary else palette.border)}
+            IconButton(onClick=vm::redo,enabled=uiState.canRedo,modifier=Modifier.size(32.dp)){Icon(Icons.Default.Redo,"Redo",modifier=Modifier.size(17.dp),tint=if(uiState.canRedo)palette.textPrimary else palette.border)}
+            Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()),verticalAlignment=Alignment.CenterVertically){
+                AspectRatioPreset.entries.forEach{ratio->
+                    val active=ratio==uiState.project.canvas.aspectRatio
+                    Text(ratio.label,style=MaterialTheme.typography.labelSmall,color=if(active)palette.accentOn else palette.textSecondary,modifier=Modifier.background(if(active)palette.accent else Color.Transparent).clickable{vm.setAspectRatio(ratio)}.padding(horizontal=8.dp,vertical=7.dp))
+                }
             }
-            IconButton(onClick = vm::toggleSafeAreaGuides, modifier = Modifier.size(28.dp)) {
-                Icon(
-                    Icons.Default.GridOn,
-                    "Safe area",
-                    tint = if (uiState.project.canvas.showSafeAreaGuides) palette.accent else palette.textSecondary,
-                    modifier = Modifier.size(15.dp)
-                )
-            }
-            IconButton(onClick = vm::resetPreviewCamera, modifier = Modifier.size(28.dp)) {
-                Icon(Icons.Default.CropFree, "Reset zoom", tint = palette.textSecondary, modifier = Modifier.size(15.dp))
-            }
-            IconButton(onClick = vm::toggleFullscreenPreview, modifier = Modifier.size(28.dp)) {
-                Icon(Icons.Default.Fullscreen, "Fullscreen", tint = palette.textPrimary, modifier = Modifier.size(16.dp))
-            }
+            IconButton(onClick=vm::toggleSafeAreaGuides,modifier=Modifier.size(32.dp)){Icon(Icons.Default.GridOn,"Safe area",tint=if(uiState.project.canvas.showSafeAreaGuides)palette.accent else palette.textSecondary,modifier=Modifier.size(16.dp))}
+            IconButton(onClick=vm::resetPreviewCamera,modifier=Modifier.size(32.dp)){Icon(Icons.Default.CropFree,"Reset zoom",tint=palette.textSecondary,modifier=Modifier.size(16.dp))}
+            IconButton(onClick=vm::toggleFullscreenPreview,modifier=Modifier.size(32.dp)){Icon(Icons.Default.Fullscreen,"Fullscreen",tint=palette.textPrimary,modifier=Modifier.size(18.dp))}
         }
-
-        // Undo / Redo mini strip
-        Row(
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(6.dp)
-                .background(palette.glassPanel, palette.shape)
-                .border(1.dp, palette.border, palette.shape)
-        ) {
-            IconButton(onClick = vm::undo, enabled = uiState.canUndo, modifier = Modifier.size(28.dp)) {
-                Icon(
-                    Icons.Default.Undo,
-                    "Undo",
-                    tint = if (uiState.canUndo) palette.textPrimary else palette.textSecondary.copy(alpha = 0.35f),
-                    modifier = Modifier.size(15.dp)
-                )
-            }
-            IconButton(onClick = vm::redo, enabled = uiState.canRedo, modifier = Modifier.size(28.dp)) {
-                Icon(
-                    Icons.Default.Redo,
-                    "Redo",
-                    tint = if (uiState.canRedo) palette.textPrimary else palette.textSecondary.copy(alpha = 0.35f),
-                    modifier = Modifier.size(15.dp)
-                )
-            }
-        }
+        VexoPreviewSurface(aspectRatio=uiState.project.canvas.aspectRatio,sceneSnapshot=sceneSnapshot.collectAsState().value,onTransformGesture=vm::updatePreviewTransform,modifier=Modifier.weight(1f).fillMaxWidth().clipToBounds(),targetFps=targetFps,continuousRendering=continuousRendering)
     }
 }
 
@@ -362,87 +314,40 @@ fun CompactTransportBar(
     onPickAudio: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val palette = LocalVexoPalette.current
-    Column(
-        modifier = modifier
-            .background(palette.glassPanel, palette.shape)
-            .border(1.dp, palette.border, palette.shape)
-            .padding(horizontal = 10.dp, vertical = 4.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = if (playback.queue.isEmpty()) "Import music to begin" else playback.trackMeta.title,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = palette.textPrimary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = if (playback.queue.isEmpty()) "Choose an audio file" else "${playback.trackMeta.artist} · ${formatDuration(playback.positionMs)} / ${formatDuration(playback.durationMs)}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = palette.textSecondary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+    val palette=LocalVexoPalette.current
+    val maxDur=playback.durationMs.coerceAtLeast(1L).toFloat()
+    var scrub by remember(playback.currentIndex){mutableStateOf<Float?>(null)}
+    val pos=(scrub?:playback.positionMs.toFloat()).coerceIn(0f,maxDur)
+    val enabled=playback.durationMs>0
+    val seek by rememberUpdatedState(onSeek)
+    Column(modifier.background(palette.panel).clipToBounds().padding(horizontal=10.dp,vertical=3.dp)){
+        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
+            Column(Modifier.weight(1f)){
+                Text(if(playback.queue.isEmpty())"Import music" else playback.trackMeta.title,style=MaterialTheme.typography.bodySmall,fontWeight=FontWeight.SemiBold,color=palette.textPrimary,maxLines=1,overflow=TextOverflow.Ellipsis)
+                Text(if(playback.queue.isEmpty())"Select audio" else playback.trackMeta.artist,style=MaterialTheme.typography.labelSmall,color=palette.textSecondary,maxLines=1,overflow=TextOverflow.Ellipsis)
             }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onPickAudio, modifier = Modifier.size(44.dp)) {
-                    Icon(Icons.Default.FolderOpen, "Import audio", tint = palette.accent, modifier = Modifier.size(18.dp))
-                }
-                IconButton(onClick = onPrev, enabled = playback.queue.isNotEmpty(), modifier = Modifier.size(44.dp)) {
-                    Icon(Icons.Default.SkipPrevious, "Previous", tint = palette.textPrimary, modifier = Modifier.size(20.dp))
-                }
-                IconButton(onClick = onTogglePlay, enabled = playback.queue.isNotEmpty(), modifier = Modifier.size(48.dp).background(palette.accent, palette.shape)) {
-                    Icon(
-                        if (playback.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                        if (playback.isPlaying) "Pause" else "Play",
-                        tint = palette.accentOn,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-                IconButton(onClick = onNext, enabled = playback.queue.isNotEmpty(), modifier = Modifier.size(44.dp)) {
-                    Icon(Icons.Default.SkipNext, "Next", tint = palette.textPrimary, modifier = Modifier.size(20.dp))
-                }
+            IconButton(onClick=onPickAudio,modifier=Modifier.size(36.dp)){Icon(Icons.Default.FolderOpen,"Import audio",tint=palette.accent,modifier=Modifier.size(18.dp))}
+            IconButton(onClick=onPrev,enabled=playback.queue.isNotEmpty(),modifier=Modifier.size(36.dp)){Icon(Icons.Default.SkipPrevious,"Previous",tint=palette.textPrimary,modifier=Modifier.size(20.dp))}
+            IconButton(onClick=onTogglePlay,enabled=playback.queue.isNotEmpty(),modifier=Modifier.size(40.dp).background(palette.accent)){Icon(if(playback.isPlaying)Icons.Default.Pause else Icons.Default.PlayArrow,if(playback.isPlaying)"Pause" else "Play",tint=palette.accentOn,modifier=Modifier.size(23.dp))}
+            IconButton(onClick=onNext,enabled=playback.queue.isNotEmpty(),modifier=Modifier.size(36.dp)){Icon(Icons.Default.SkipNext,"Next",tint=palette.textPrimary,modifier=Modifier.size(20.dp))}
+        }
+        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)){
+            Text(formatDuration(pos.toLong()),style=MaterialTheme.typography.labelSmall,color=palette.accent)
+            Canvas(Modifier.weight(1f).height(30.dp).semantics{
+                progressBarRangeInfo=ProgressBarRangeInfo(pos,0f..maxDur)
+                if(enabled)setProgress{v->seek(v.coerceIn(0f,maxDur).toLong());true}
+            }.pointerInput(enabled,maxDur){
+                if(enabled)detectTapGestures{point->val p=((point.x-5.dp.toPx())/(size.width-10.dp.toPx()).coerceAtLeast(1f)).coerceIn(0f,1f)*maxDur;seek(p.toLong())}
+            }.pointerInput(enabled,maxDur){
+                if(enabled)detectHorizontalDragGestures(onDragStart={point->scrub=((point.x-5.dp.toPx())/(size.width-10.dp.toPx()).coerceAtLeast(1f)).coerceIn(0f,1f)*maxDur},onDragEnd={scrub?.let{seek(it.toLong())};scrub=null},onDragCancel={scrub=null}){change,_->change.consume();scrub=((change.position.x-5.dp.toPx())/(size.width-10.dp.toPx()).coerceAtLeast(1f)).coerceIn(0f,1f)*maxDur}
+            }){
+                val pad=5.dp.toPx();val y=size.height*.5f;val end=(size.width-pad).coerceAtLeast(pad);val thumb=pad+(end-pad)*(pos/maxDur)
+                drawLine(palette.border,Offset(pad,y),Offset(end,y),2.dp.toPx())
+                drawLine(palette.accent,Offset(pad,y),Offset(thumb,y),2.dp.toPx())
+                if(enabled)drawCircle(palette.accent,4.dp.toPx(),Offset(thumb,y))
             }
+            Text(formatDuration(playback.durationMs),style=MaterialTheme.typography.labelSmall,color=palette.textSecondary)
         }
-        val maxDur = playback.durationMs.coerceAtLeast(1L).toFloat()
-        var scrubPosition by remember { mutableStateOf<Float?>(null) }
-        LaunchedEffect(playback.currentIndex) { scrubPosition = null }
-        val timelinePosition = (scrubPosition ?: playback.positionMs.toFloat()).coerceIn(0f, maxDur)
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(formatDuration(timelinePosition.toLong()), style = MaterialTheme.typography.labelSmall, color = palette.accent)
-            Text(formatDuration(playback.durationMs), style = MaterialTheme.typography.labelSmall, color = palette.textSecondary)
-        }
-        Canvas(Modifier.fillMaxWidth().height(8.dp)) {
-            for (i in 0..20) {
-                val x = size.width * i / 20f
-                drawLine(palette.border, Offset(x, 0f), Offset(x, if (i % 5 == 0) size.height else size.height * 0.5f), strokeWidth = 1.dp.toPx())
-            }
-        }
-        Slider(
-            value = timelinePosition,
-            enabled = playback.durationMs > 0L,
-            onValueChange = { scrubPosition = it },
-            onValueChangeFinished = {
-                scrubPosition?.let { onSeek(it.toLong()) }
-                scrubPosition = null
-            },
-            valueRange = 0f..maxDur,
-            colors = SliderDefaults.colors(
-                thumbColor = palette.accent,
-                activeTrackColor = palette.accent,
-                inactiveTrackColor = palette.border
-            ),
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(32.dp)
-        )
     }
 }
 
@@ -458,7 +363,7 @@ private fun StudioWorkspacePanel(
     modifier: Modifier = Modifier
 ) {
     val palette = LocalVexoPalette.current
-    Column(modifier = modifier.padding(horizontal = 6.dp, vertical = 4.dp).background(palette.glassPanel, palette.shape).border(1.dp, palette.border, palette.shape)) {
+    Column(modifier = modifier.background(palette.panel).clipToBounds()) {
         // Editor Tabs
         Row(
             modifier = Modifier
@@ -471,10 +376,9 @@ private fun StudioWorkspacePanel(
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .padding(2.dp)
-                        .background(if (active) palette.accent else Color.Transparent, palette.shape)
+                        .background(if (active) palette.accent else Color.Transparent)
                         .clickable { vm.selectStudioTab(tab) }
-                        .padding(vertical = 10.dp),
+                        .padding(vertical = 6.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
@@ -486,11 +390,13 @@ private fun StudioWorkspacePanel(
             }
         }
 
+        Box(Modifier.weight(1f).fillMaxWidth().clipToBounds().background(palette.bg)) {
         when (uiState.studioTab) {
             StudioTab.LAYERS -> LayersTab(vm = vm, uiState = uiState)
             StudioTab.PROPERTIES -> PropertiesTab(vm = vm, uiState = uiState, settings = settings)
             StudioTab.ASSETS -> AssetsTab(vm = vm, uiState = uiState, onPickImage = onPickImage)
             StudioTab.PRESETS -> PresetsTab(vm = vm, onImportPreset = onImportPreset, onExportPreset = onExportPreset)
+        }
         }
     }
 }
@@ -671,7 +577,7 @@ private fun PropertiesTab(
 ) {
     val palette = LocalVexoPalette.current
     var editTarget by rememberSaveable(uiState.selectedLayerId) { mutableStateOf("LAYER") } // LAYER or PROVIDER
-    val expandedSections = remember(uiState.selectedLayerId, uiState.selectedProviderIndex, editTarget) { mutableStateMapOf<String, Boolean>() }
+    val expandedSections = remember(uiState.project.id, editTarget) { mutableStateMapOf<String, Boolean>() }
     var undoAnchor by remember { mutableStateOf<VexoProject?>(null) }
 
     fun beginDrag() {
@@ -687,8 +593,8 @@ private fun PropertiesTab(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(10.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+            .padding(6.dp),
+        verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             listOf("LAYER", "PROVIDER").forEach { mode ->

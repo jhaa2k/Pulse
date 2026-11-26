@@ -166,7 +166,7 @@ private fun VexoRootApp(vm: StudioViewModel) {
     }
 
     Box(Modifier.fillMaxSize().background(palette.bg)) {
-        if (settings.glassEnabled) {
+        if (settings.glassEnabled && uiState.navDestination != NavDestination.STUDIO) {
             val artwork = playback.trackMeta.artwork
             if (artwork != null && Build.VERSION.SDK_INT >= 31) {
                 Image(bitmap = artwork.asImageBitmap(), contentDescription = null, contentScale = ContentScale.Crop,
@@ -177,15 +177,14 @@ private fun VexoRootApp(vm: StudioViewModel) {
             }
         }
     Scaffold(
-        containerColor = Color.Transparent,
+        containerColor = palette.bg,
         topBar = {
             if (!uiState.isFullscreenPreview) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(palette.glassPanel, palette.shape)
-                        .border(1.dp, palette.border, palette.shape)
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                        .background(palette.panel)
+                        .padding(horizontal = 10.dp, vertical = 3.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {

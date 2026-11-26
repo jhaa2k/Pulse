@@ -649,10 +649,10 @@ data class AppSettings(
     val glassEnabled: Boolean = true,
     val glassOpacity: Float = 0.82f,
     val backdropBlurDp: Float = 24f,
-    val cornerRadiusDp: Float = 8f,
+    val cornerRadiusDp: Float = 0f,
     val controlScale: Float = 1f,
     val uiTextScale: Float = 1f,
-    val previewFps: Int = 60,
+    val previewFps: Int = 30,
     val previewShare: Float = 0.44f,
     val portraitOverlay: Boolean = false
 )

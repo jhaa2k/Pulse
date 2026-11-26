@@ -47,6 +47,7 @@ fun VexoPreviewSurface(
     val glView = remember {
         GLSurfaceView(context).apply {
             setEGLContextClientVersion(2)
+            holder.setFormat(android.graphics.PixelFormat.OPAQUE)
             setEGLConfigChooser(8, 8, 8, 8, 0, 0)
             preserveEGLContextOnPause = true
             setRenderer(renderer)

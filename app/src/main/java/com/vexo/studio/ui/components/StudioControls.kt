@@ -158,7 +158,7 @@ fun StudioSlider(
         Canvas(
             modifier = Modifier
                 .fillMaxWidth()
-                .height((36f * palette.controlScale).dp)
+                .height((28f * palette.controlScale).dp)
                 .onSizeChanged { trackWidthPx = it.width.toFloat().coerceAtLeast(1f) }
                 .pointerInput(min, max, step, defaultValue, palette.controlScale) {
                     detectTapGestures(
@@ -209,8 +209,8 @@ fun StudioSlider(
             )
             // Sharp rectangular studio handle
             val thumbX = pad + usable * norm
-            val thumbW = (14f * palette.controlScale).dp.toPx()
-            val thumbH = (20f * palette.controlScale).dp.toPx()
+            val thumbW = (12f * palette.controlScale).dp.toPx()
+            val thumbH = (16f * palette.controlScale).dp.toPx()
             drawRoundRect(
                 color = palette.accent,
                 cornerRadius = CornerRadius(palette.radiusDp.coerceIn(0f, 7f).dp.toPx()),
@@ -371,48 +371,31 @@ fun <T> StudioChipSelector(
 }
 
 @Composable
-fun StudioColorPickerRow(
-    label: String,
-    argb: Int,
-    onColorChange: (Int) -> Unit
-) {
-    val palette = LocalVexoPalette.current
-    val presets = listOf(
-        0xFFFFFFFF.toInt(),
-        0xFFC6F36A.toInt(),
-        0xFF38BDF8.toInt(),
-        0xFFF59E0B.toInt(),
-        0xFFEF4444.toInt(),
-        0xFFA855F7.toInt(),
-        0xFF10B981.toInt(),
-        0xFF000000.toInt()
-    )
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(
-            text = label.uppercase(),
-            style = MaterialTheme.typography.labelSmall,
-            color = palette.textSecondary
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            presets.forEach { col ->
-                val active = col == argb
-                Box(
-                    modifier = Modifier
-                        .size(22.dp)
-                        .background(Color(col))
-                        .border(
-                            width = if (active) 2.dp else 1.dp,
-                            color = if (active) palette.accent else palette.border
-                        )
-                        .clickable { onColorChange(col) }
-                )
-            }
+fun StudioColorPickerRow(label:String,argb:Int,onColorChange:(Int)->Unit){
+    val palette=LocalVexoPalette.current
+    var open by remember{mutableStateOf(false)}
+    val presets=listOf(0xFFFFFFFF.toInt(),0xFFC6F36A.toInt(),0xFF38BDF8.toInt(),0xFFF59E0B.toInt(),0xFFEF4444.toInt(),0xFFA855F7.toInt(),0xFF10B981.toInt(),0xFF000000.toInt(),0)
+    Column(Modifier.fillMaxWidth().padding(vertical=3.dp)){
+        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween){
+            Text(label.uppercase(),style=MaterialTheme.typography.labelSmall,color=palette.textSecondary,modifier=Modifier.weight(1f))
+            Text("#%08X".format(argb),style=MaterialTheme.typography.labelSmall,color=palette.textPrimary,modifier=Modifier.clickable{open=true}.padding(5.dp))
+            Box(Modifier.size(23.dp).background(Color(argb)).border(1.dp,palette.border).clickable{open=true})
         }
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(5.dp)){
+            presets.forEach{col->Box(Modifier.size(23.dp).background(Color(col)).border(if(col==argb)2.dp else 1.dp,if(col==argb)palette.accent else palette.border).clickable{onColorChange(col)})}
+            Text("CUSTOM",style=MaterialTheme.typography.labelSmall,color=palette.accent,modifier=Modifier.clickable{open=true}.padding(5.dp))
+        }
+    }
+    if(open){
+        var hex by remember{mutableStateOf("%08X".format(argb))}
+        val raw=hex.trim().removePrefix("#")
+        val parsed=raw.toLongOrNull(16)?.takeIf{raw.length==6||raw.length==8}?.let{if(raw.length==6)(it or 0xFF000000L).toInt() else it.toInt()}
+        AlertDialog(onDismissRequest={open=false},title={Text("CUSTOM COLOR")},text={
+            Column{
+                OutlinedTextField(value=hex,onValueChange={hex=it.take(9)},label={Text("RRGGBB or AARRGGBB")},singleLine=true)
+                Box(Modifier.fillMaxWidth().height(32.dp).background(Color(parsed?:argb)).border(1.dp,palette.border))
+                if(parsed!=null) StudioSlider("Alpha",((parsed ushr 24)and 255)/255f,0f,1f,1f,"",.01f,onValueChange={v->hex="%08X".format(((v*255).toInt() shl 24) or (parsed and 0xFFFFFF))})
+            }
+        },confirmButton={TextButton(enabled=parsed!=null,onClick={parsed?.let(onColorChange);open=false}){Text("APPLY")}},dismissButton={TextButton(onClick={open=false}){Text("CANCEL")}})
     }
 }

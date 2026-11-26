@@ -34,7 +34,7 @@ data class VexoPalette(
     val glassOpacity: Float = 0.82f
 ) {
     val shape get() = RoundedCornerShape(radiusDp.coerceIn(0f, 28f).dp)
-    val glassPanel get() = panel.copy(alpha = if (glassEnabled) glassOpacity.coerceIn(0.65f, 1f) else 1f)
+    val glassPanel get() = if (glassEnabled) androidx.compose.ui.graphics.lerp(bg,panel,glassOpacity.coerceIn(0.65f,1f)) else panel
 }
 
 val LocalVexoPalette = staticCompositionLocalOf {
