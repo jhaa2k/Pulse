@@ -159,6 +159,7 @@ private fun VexoRootApp(vm: StudioViewModel) {
     var pendingImage by rememberSaveable { mutableStateOf<android.net.Uri?>(null) }
     var pendingImageProject by rememberSaveable { mutableStateOf("") }
     var pendingImageLayer by rememberSaveable { mutableStateOf<String?>(null) }
+    var pendingImageComposition by rememberSaveable { mutableStateOf(-1) }
     val imagePicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri ->
@@ -303,6 +304,7 @@ private fun VexoRootApp(vm: StudioViewModel) {
                     onPickImage = {
                         pendingImageProject = uiState.project.id
                         pendingImageLayer = uiState.selectedLayerId
+                        pendingImageComposition = uiState.selectedCompositionIndex
                         imagePicker.launch(arrayOf("image/*", "video/*"))
                     },
                     onImportPreset = { presetImportPicker.launch(arrayOf("application/json", "application/octet-stream", "*/*")) },
@@ -348,13 +350,22 @@ private fun VexoRootApp(vm: StudioViewModel) {
     uiState.pendingPreset?.let{tpl->AlertDialog(onDismissRequest={vm.resolvePresetSwitch(false,false)},title={Text("UNSAVED EDITS")},text={Text("Apply "+tpl.name+"? Save the current edits first, or discard them. Music and canvas ratio will stay unchanged.")},confirmButton={TextButton(onClick={vm.resolvePresetSwitch(true,false)}){Text("SAVE & APPLY")}},dismissButton={Row{TextButton(onClick={vm.resolvePresetSwitch(false,true)}){Text("DISCARD & APPLY")};TextButton(onClick={vm.resolvePresetSwitch(false,false)}){Text("CANCEL")}}})}
     pendingImage?.let { uri ->
         val targetMatches = uiState.project.id == pendingImageProject &&
-            uiState.selectedLayerId == pendingImageLayer
+            uiState.selectedLayerId == pendingImageLayer &&
+            uiState.selectedCompositionIndex == pendingImageComposition
+        val selectedLayer = uiState.project.compositions.firstOrNull { it.index == pendingImageComposition }?.layers?.firstOrNull { it.common.id == pendingImageLayer }
+        val replacesImage = selectedLayer?.type == com.vexo.studio.model.LayerType.IMAGE
+        val lockedImage = replacesImage && selectedLayer?.common?.locked == true
         AlertDialog(
             onDismissRequest = { pendingImage = null },
             title = { Text("APPLY IMAGE / VIDEO?") },
-            text = { Text(if (targetMatches) "Apply selected media to the current layer, or cancel to keep the original." else "The original selection changed while choosing media. Cancel and select media again for the intended layer.") },
+            text = { Text(when {
+                !targetMatches -> "The original selection changed while choosing media. Cancel and select media again for the intended layer."
+                lockedImage -> "Unlock the selected image layer before replacing media."
+                replacesImage -> "Replace media in the selected image layer, or cancel to keep the original."
+                else -> "Add selected media as a new image layer in this composition, or cancel."
+            }) },
             confirmButton = {
-                TextButton(enabled = targetMatches, onClick = {
+                TextButton(enabled = targetMatches && !lockedImage, onClick = {
                     if (targetMatches) vm.attachImageToSelectedLayer(uri)
                     pendingImage = null
                 }) { Text("APPLY") }
