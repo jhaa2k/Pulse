@@ -181,13 +181,13 @@ object VexoShaders {
             vec3 straightColor = tex.a > 0.0001 ? tex.rgb / tex.a : vec3(0.0);
             float luma = dot(straightColor, vec3(0.299, 0.587, 0.114));
             vec3 satColor = mix(vec3(luma), straightColor, uSaturation);
-            satColor=hueShift(satColor,uGrade.w);
+            if(abs(uGrade.w)>0.0001)satColor=hueShift(satColor,uGrade.w);
             satColor=(satColor-0.5)*uGrade.y+0.5+uGrade.x;
             satColor+=vec3(uGrade.z*0.15,0.0,-uGrade.z*0.15);
             float vignette=1.0-uFinishing.x*smoothstep(0.2,0.72,length(uv-0.5));
             float scan=1.0-uFinishing.y*(0.5+0.5*sin(uv.y*uCreativeResolution.y*1.5707963));
             satColor=satColor*vignette*scan;
-            satColor+=(noise(floor(uv*uCreativeResolution)+floor(uDistort.z*24.0))-0.5)*uFinishing.z*0.25;
+            if(uFinishing.z>0.0)satColor+=(noise(floor(uv*uCreativeResolution)+floor(uDistort.z*24.0))-0.5)*uFinishing.z*0.25;
             satColor=clamp(satColor,0.0,1.0);
             float alpha = tex.a * uTint.a * uOpacity;
             if (uColorKeyEnabled == 1) {

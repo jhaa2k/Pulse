@@ -51,6 +51,7 @@ data class StudioUiState(
     val selectedCompositionIndex: Int = 0,
     val previewSelectedComposition: Boolean = false,
     val selectedLayerId: String? = null,
+    val clipboardLayerType: LayerType? = null,
     val selectedProviderIndex: Int = 1,
     val projects: List<ProjectSummary> = emptyList(),
     val canUndo: Boolean = false,
@@ -283,6 +284,58 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
             else if(time==null)null else t.copy(keyframes=t.keyframes.filterNot{it.timeMs==time}).takeIf{it.keyframes.isNotEmpty()}
         }
         commitProjectChange(p.copy(keyframes=tracks))
+    }
+
+    private data class LayerClipboard(val projectId:String,val layer:LayerNode,val keyframes:List<com.vexo.studio.model.KeyframeTrack>)
+    private var layerClipboard:LayerClipboard?=null
+
+    fun copyLayer(layerId:String){
+        val p=_uiState.value.project
+        val layer=p.compositions.flatMap{it.layers}.firstOrNull{it.common.id==layerId}?:return
+        layerClipboard=LayerClipboard(p.id,layer,p.keyframes.filter{it.targetLayerId==layerId})
+        _uiState.value=_uiState.value.copy(clipboardLayerType=layer.type,statusBanner="Copied "+layer.common.name)
+    }
+
+    fun pasteLayer(){
+        val clip=layerClipboard?:return
+        val p=_uiState.value.project
+        if(clip.projectId!=p.id){_uiState.value=_uiState.value.copy(statusBanner="Copy a layer from the current project first");return}
+        if(p.compositions.sumOf{it.layers.size}>=2048)return
+        val idx=_uiState.value.selectedCompositionIndex
+        val clone=clip.layer.copy(common=clip.layer.common.copy(id=UUID.randomUUID().toString(),name=clip.layer.common.name+" Copy",locked=false))
+        val next=p.copy(compositions=p.compositions.map{if(it.index==idx)it.copy(layers=it.layers+clone) else it},keyframes=p.keyframes+clip.keyframes.map{it.copy(targetLayerId=clone.common.id)})
+        if(com.vexo.studio.engine.scene.SceneGraph.resolve(next).hasCycle){_uiState.value=_uiState.value.copy(statusBanner="Cannot paste: circular composition reference");return}
+        commitProjectChange(next)
+        _uiState.value=_uiState.value.copy(selectedLayerId=clone.common.id,studioTab=StudioTab.PROPERTIES,statusBanner="Layer pasted")
+    }
+
+    fun pasteLayerStyle(layerId:String,transformOnly:Boolean){
+        val clip=layerClipboard?:return
+        val p=_uiState.value.project
+        val target=p.compositions.flatMap{it.layers}.firstOrNull{it.common.id==layerId&&!it.common.locked}?:return
+        if(!transformOnly&&(clip.projectId!=p.id||clip.layer.type!=target.type)){_uiState.value=_uiState.value.copy(statusBanner="Style requires the same layer type in the current project");return}
+        val source=clip.layer.common
+        val common=target.common.copy(posX=source.posX,posY=source.posY,anchorX=source.anchorX,anchorY=source.anchorY,alignmentX=source.alignmentX,alignmentY=source.alignmentY,scaleX=source.scaleX,scaleY=source.scaleY,scaleIsUniform=source.scaleIsUniform,rotationDeg=source.rotationDeg,opacity=source.opacity,blendMode=source.blendMode)
+        val replacement=target.copy(common=common,config=if(transformOnly)target.config else clip.layer.config)
+        val next=p.copy(compositions=p.compositions.map{c->c.copy(layers=c.layers.map{if(it.common.id==layerId)replacement else it})})
+        if(com.vexo.studio.engine.scene.SceneGraph.resolve(next).hasCycle){_uiState.value=_uiState.value.copy(statusBanner="Cannot paste style: circular composition reference");return}
+        commitProjectChange(next)
+        _uiState.value=_uiState.value.copy(statusBanner=if(transformOnly)"Transform pasted" else "Style pasted")
+    }
+
+    fun resetLayerTransform(layerId:String){
+        updateLayer(layerId){l->if(l.common.locked)l else l.copy(common=l.common.copy(posX=.5f,posY=.5f,anchorX=com.vexo.studio.model.AnchorMode.UNSET,anchorY=com.vexo.studio.model.AnchorMode.UNSET,alignmentX=.5f,alignmentY=.5f,scaleX=1f,scaleY=1f,scaleIsUniform=false,rotationDeg=0f))}
+    }
+
+    fun alignLayer(layerId:String,x:Float?,y:Float?){
+        updateLayer(layerId){l->
+            if(l.common.locked)l else l.copy(common=l.common.copy(posX=x?:l.common.posX,posY=y?:l.common.posY,anchorX=if(x!=null)com.vexo.studio.model.AnchorMode.UNSET else l.common.anchorX,anchorY=if(y!=null)com.vexo.studio.model.AnchorMode.UNSET else l.common.anchorY))
+        }
+    }
+
+    fun setCanvasColor(argb:Int){
+        val p=_uiState.value.project
+        commitProjectChange(p.copy(canvas=p.canvas.copy(backgroundColorArgb=argb)))
     }
 
     fun addCreativeLayer(name:String){

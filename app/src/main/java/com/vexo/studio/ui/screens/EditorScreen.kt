@@ -433,9 +433,12 @@ private fun LayersTab(
                     if(activeComp.index!=0)DropdownMenuItem(text={Text("Delete composition",color=palette.danger)},onClick={compositionMenu=false;deleteComp=true})
                 }
             }
+            if(uiState.clipboardLayerType!=null)TextButton(onClick=vm::pasteLayer){Text("Paste")}
             TextButton(onClick = { showAddLayerDialog = true }) { Icon(Icons.Default.Add, null, tint = palette.accent); Text("Layer", color = palette.accent) }
         }
         StudioToggleRow("Preview selected composition",uiState.previewSelectedComposition,{_:Boolean->vm.toggleCompositionPreview()})
+        var canvasOpen by remember{mutableStateOf(false)}
+        if(activeComp.index==0)ExpandableSectionHeader("Canvas background",canvasOpen,{canvasOpen=!canvasOpen}){StudioColorPickerRow("Background",uiState.project.canvas.backgroundColorArgb,vm::setCanvasColor)}
         LazyColumn(
             modifier = Modifier
                 .weight(1f).fillMaxWidth()
@@ -493,6 +496,9 @@ private fun LayersTab(
                             DropdownMenuItem(text = { Text("Move down") }, onClick = { menu = false; vm.moveLayer(layer.common.id, 1) })
                             DropdownMenuItem(text = { Text("Rename") }, onClick = { menu = false; renameLayerTarget = layer })
                             DropdownMenuItem(text = { Text("Duplicate") }, onClick = { menu = false; vm.duplicateLayer(layer.common.id) })
+                            DropdownMenuItem(text={Text("Copy layer")},onClick={menu=false;vm.copyLayer(layer.common.id)})
+                            if(!layer.common.locked&&uiState.clipboardLayerType!=null)DropdownMenuItem(text={Text("Paste transform")},onClick={menu=false;vm.pasteLayerStyle(layer.common.id,true)})
+                            if(!layer.common.locked&&uiState.clipboardLayerType==layer.type)DropdownMenuItem(text={Text("Paste style")},onClick={menu=false;vm.pasteLayerStyle(layer.common.id,false)})
                             DropdownMenuItem(text = { Text("Delete", color = palette.danger) }, onClick = { menu = false; deleteLayerTarget = layer })
                         }
                     }
@@ -804,6 +810,17 @@ private fun PropertiesTab(
             )
         }
 
+        ExpandableSectionHeader("Quick layer tools",expandedSections["quick_tools"]==true,{toggleAccordion(expandedSections,"quick_tools")}){
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())){
+                TextButton(onClick={vm.copyLayer(layer.common.id)}){Text("COPY")}
+                TextButton(enabled=uiState.clipboardLayerType!=null,onClick={vm.pasteLayerStyle(layer.common.id,true)}){Text("PASTE TRANSFORM")}
+                TextButton(enabled=uiState.clipboardLayerType==layer.type,onClick={vm.pasteLayerStyle(layer.common.id,false)}){Text("PASTE STYLE")}
+            }
+            TextButton(onClick={vm.resetLayerTransform(layer.common.id)}){Text("RESET TRANSFORM")}
+            StudioChipSelector("Horizontal anchor",listOf(0f,.5f,1f),layer.common.posX,{when(it){0f->"Left";1f->"Right";else->"Center"}}){vm.alignLayer(layer.common.id,it,null)}
+            StudioChipSelector("Vertical anchor",listOf(0f,.5f,1f),layer.common.posY,{when(it){0f->"Top";1f->"Bottom";else->"Center"}}){vm.alignLayer(layer.common.id,null,it)}
+            Text("Positions align the layer pivot, not its visible bounds.",style=MaterialTheme.typography.labelSmall)
+        }
         ExpandableSectionHeader("Keyframe animation",expandedSections["keyframes"]==true,{toggleAccordion(expandedSections,"keyframes")}){
             TransformKeyframePanel(vm,uiState,layer)
         }
