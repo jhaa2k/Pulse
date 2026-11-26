@@ -130,6 +130,7 @@ fun ProjectsScreen(
                         Text("OPEN", style = MaterialTheme.typography.labelSmall, color = palette.accent)
                         Spacer(Modifier.width(8.dp))
                     }
+                    TextButton(onClick={vm.restorePreviousProject(proj.id)}){Text("RECOVER",style=MaterialTheme.typography.labelSmall)}
                     IconButton(onClick = { vm.duplicateProject(proj.id) }, modifier = Modifier.size(30.dp)) {
                         Icon(Icons.Default.ContentCopy, "Duplicate", tint = palette.textSecondary, modifier = Modifier.size(16.dp))
                     }

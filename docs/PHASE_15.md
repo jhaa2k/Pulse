@@ -1,0 +1,2 @@
+# Phase 15 recovery
+Android AtomicFile primary saves with last valid previous version, bounded project IDs and load sizes, active-project marker, recovery as separate project, deletion of associated backup and autosave, coalesced pending saves, final best-effort ViewModel flush, selection and undo reset after deletion. Backup is local, not a cloud backup. Device process-death and storage-failure testing still required.

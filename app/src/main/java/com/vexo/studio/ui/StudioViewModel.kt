@@ -70,13 +70,13 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     private val projectRepo = app.projectRepository
     private val settingsRepo = app.settingsRepository
     private val history = ProjectHistoryStack(50)
-    private val pendingSaves = Channel<VexoProject>(Channel.UNLIMITED)
+    private val pendingSaves = Channel<Unit>(Channel.CONFLATED)
     private val saveLock = Any()
     private val latestSave = java.util.concurrent.ConcurrentHashMap<String, VexoProject>()
 
     private fun enqueueSave(project: VexoProject) {
         latestSave[project.id] = project
-        pendingSaves.trySend(project)
+        pendingSaves.trySend(Unit)
     }
 
     private fun updateProjectSummary(project: VexoProject): List<ProjectSummary> {
@@ -113,11 +113,19 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         )
         playbackController.loadProjectAudio(recovered.audioUri)
         viewModelScope.launch(Dispatchers.IO) {
-            for (project in pendingSaves) {
-                if (latestSave[project.id] !== project) continue
-                runCatching { synchronized(saveLock) { if (latestSave[project.id] === project) projectRepo.saveProject(project) } }
-                    .onFailure { err -> withContext(Dispatchers.Main) { _uiState.value = _uiState.value.copy(statusBanner = "Save failed: ${err.message}") } }
-                latestSave.remove(project.id, project)
+            for(signal in pendingSaves){
+                for(project in latestSave.values.toList()){
+                    if(latestSave[project.id]!==project)continue
+                    val result=runCatching{
+                        synchronized(saveLock){
+                            if(latestSave[project.id]===project){
+                                projectRepo.saveProject(project,_uiState.value.project.id==project.id)
+                                latestSave.remove(project.id,project)
+                            }
+                        }
+                    }
+                    result.onFailure{err->withContext(Dispatchers.Main){_uiState.value=_uiState.value.copy(statusBanner="Save failed: "+err.message)}}
+                }
             }
         }
         startAnalysisLoop()
@@ -163,6 +171,9 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     override fun onCleared() {
+        pendingSaves.close()
+        // Final synchronous flush only for still-pending projects when the editor is destroyed.
+        synchronized(saveLock){latestSave.values.toList().forEach{p->runCatching{projectRepo.saveProject(p,_uiState.value.project.id==p.id)}};latestSave.clear()}
         realtimeFftEngine.close()
         super.onCleared()
     }
@@ -615,12 +626,18 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
             canRedo = false,
             navDestination = NavDestination.STUDIO
         )
+        synchronized(saveLock){projectRepo.markActive(loaded.id)}
         playbackController.loadProjectAudio(loaded.audioUri)
     }
 
     fun duplicateProject(id: String) {
-        projectRepo.duplicateProject(id)
+        synchronized(saveLock){latestSave[id]?.let{projectRepo.saveProject(it,false);latestSave.remove(id,it)};projectRepo.duplicateProject(id)}
         _uiState.value = _uiState.value.copy(projects = projectRepo.listProjects())
+    }
+
+    fun restorePreviousProject(id:String){
+        val restored=synchronized(saveLock){projectRepo.restorePrevious(id)}
+        _uiState.value=_uiState.value.copy(projects=projectRepo.listProjects(),statusBanner=if(restored!=null)"Recovered as a separate project" else "No previous saved version available")
     }
 
     fun renameCurrentProject(newName: String) {
@@ -629,16 +646,20 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun deleteProject(id: String) {
-        latestSave.remove(id)
-        synchronized(saveLock) { projectRepo.deleteProject(id) }
+        synchronized(saveLock) {latestSave.remove(id);projectRepo.deleteProject(id)}
         val remaining = projectRepo.listProjects()
         if (_uiState.value.project.id == id) {
             val fallback = remaining.firstOrNull()?.let { projectRepo.loadProject(it.id) }
                 ?: VexoTemplates.monochromeStudio().also { projectRepo.saveProject(it) }
+            history.clear()
+            val comp=fallback.compositions.firstOrNull{it.index==0}?:fallback.compositions.first()
             _uiState.value = _uiState.value.copy(
                 project = fallback,
+                selectedCompositionIndex=comp.index,selectedLayerId=comp.layers.firstOrNull()?.common?.id,
+                selectedProviderIndex=fallback.audioProviders.first().index,canUndo=false,canRedo=false,previewSelectedComposition=false,
                 projects = projectRepo.listProjects()
             )
+            projectRepo.markActive(fallback.id)
             playbackController.loadProjectAudio(fallback.audioUri)
         } else {
             _uiState.value = _uiState.value.copy(projects = remaining)
