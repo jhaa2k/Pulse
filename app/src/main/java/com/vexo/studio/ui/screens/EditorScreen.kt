@@ -1923,6 +1923,7 @@ private fun MotionPresetPanel(vm:StudioViewModel,layer:LayerNode){
     if(confirm)AlertDialog(onDismissRequest={confirm=false},title={Text("APPLY ANIMATION?")},text={Text("Replaces existing keyframes for the affected transform properties. Saved presets use absolute values and the selected duration.")},confirmButton={TextButton(onClick={vm.applyMotionPreset(layer.common.id,if(useSaved)null else recipe,if(useSaved)selectedSaved else null,playback.positionMs,(duration*1000).toLong(),strength);confirm=false}){Text("APPLY")}},dismissButton={TextButton(onClick={confirm=false}){Text("CANCEL")}})
 }
 
+@UnstableApi
 @Composable
 private fun LayerPresetSavePanel(vm:StudioViewModel,layer:LayerNode){
     var open by remember(layer.common.id){mutableStateOf(false)}
@@ -1937,6 +1938,7 @@ private fun LayerPresetSavePanel(vm:StudioViewModel,layer:LayerNode){
         }
     },confirmButton={TextButton(enabled=name.isNotBlank(),onClick={vm.saveLayerPreset(layer.common.id,name);open=false}){Text("SAVE")}},dismissButton={TextButton(onClick={open=false}){Text("CANCEL")}})
 }
+@UnstableApi
 @Composable
 private fun LayerPresetLibrary(vm:StudioViewModel){
     val palette=LocalVexoPalette.current
