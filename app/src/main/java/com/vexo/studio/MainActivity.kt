@@ -69,6 +69,12 @@ import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.common.util.UnstableApi
 import com.vexo.studio.model.NavDestination
+import com.vexo.studio.model.StudioTab
+import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.foundation.layout.height
+import androidx.compose.runtime.DisposableEffect
 import com.vexo.studio.ui.StudioViewModel
 import com.vexo.studio.ui.screens.AudioLibraryScreen
 import com.vexo.studio.ui.screens.EditorScreen
@@ -103,6 +109,11 @@ private fun VexoRootApp(vm: StudioViewModel) {
     val sceneSnapshot = vm.sceneSnapshot
     val exportState by vm.exportState.collectAsState()
     val settings by vm.appSettings.collectAsState()
+    DisposableEffect(context){
+        val token=androidx.media3.session.SessionToken(context,android.content.ComponentName(context,com.vexo.studio.playback.VexoPlaybackService::class.java))
+        val future=androidx.media3.session.MediaController.Builder(context,token).buildAsync()
+        onDispose{androidx.media3.session.MediaController.releaseFuture(future)}
+    }
 
     var showRenameProject by remember { mutableStateOf(false) }
     var showAppMenu by remember { mutableStateOf(false) }
@@ -132,11 +143,14 @@ private fun VexoRootApp(vm: StudioViewModel) {
         }
     }
 
+    var pendingImage by remember { mutableStateOf<android.net.Uri?>(null) }
+    var pendingImageProject by remember { mutableStateOf("") }
+    var pendingImageLayer by remember { mutableStateOf<String?>(null) }
     val imagePicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri ->
         if (uri != null) {
-            vm.attachImageToSelectedLayer(uri)
+            pendingImage=uri;pendingImageProject=uiState.project.id;pendingImageLayer=uiState.selectedLayerId
         }
     }
 
@@ -184,7 +198,7 @@ private fun VexoRootApp(vm: StudioViewModel) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(palette.panel)
-                        .padding(horizontal = 10.dp, vertical = 3.dp),
+                        .padding(horizontal = 8.dp, vertical = 2.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
@@ -209,12 +223,12 @@ private fun VexoRootApp(vm: StudioViewModel) {
                         )
                     }
                     Box {
-                        IconButton(onClick = { showAppMenu = true }) { Icon(Icons.Default.MoreVert, "Studio menu", tint = palette.textSecondary) }
+                        IconButton(onClick = { showAppMenu = true },modifier=Modifier.size(36.dp)) { Icon(Icons.Default.MoreVert, "Studio menu", tint = palette.textSecondary) }
                         DropdownMenu(expanded = showAppMenu, onDismissRequest = { showAppMenu = false }) {
                             NavDestination.entries.forEach { dest -> DropdownMenuItem(text = { Text(dest.label) }, onClick = { showAppMenu = false; vm.navigateTo(dest) }) }
                         }
                     }
-                    IconButton(onClick = vm::saveCurrentProject) {
+                    IconButton(onClick = vm::saveCurrentProject,modifier=Modifier.size(36.dp)) {
                         Icon(Icons.Default.Save, "Save to project library", tint = if(uiState.unsaved)palette.accent else palette.textSecondary)
                     }
                     Box(
@@ -229,19 +243,26 @@ private fun VexoRootApp(vm: StudioViewModel) {
             }
         },
         bottomBar = {
-            if (!uiState.isFullscreenPreview && uiState.navDestination != NavDestination.STUDIO) {
+            if (!uiState.isFullscreenPreview) {
                 Column {
-                if (playback.queue.isNotEmpty()) {
+                if (uiState.navDestination!=NavDestination.STUDIO && playback.queue.isNotEmpty()) {
                     com.vexo.studio.ui.screens.CompactTransportBar(playback, {vm.playbackController.togglePlayPause()}, {vm.playbackController.previous()}, {vm.playbackController.next()}, {vm.playbackController.seekTo(it)}, {audioPicker.launch(arrayOf("audio/*"))}, Modifier.fillMaxWidth().padding(horizontal=8.dp))
                 }
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)
-                        .background(palette.glassPanel, palette.shape).border(1.dp, palette.border, palette.shape)
+                    modifier = Modifier.fillMaxWidth().background(palette.panel).border(1.dp, palette.border)
                         .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(2.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    val destinations = if (uiState.navDestination == NavDestination.STUDIO) listOf(NavDestination.STUDIO, NavDestination.PROJECTS, NavDestination.AUDIO, NavDestination.TEMPLATES, NavDestination.SETTINGS) else NavDestination.entries.toList()
+                    StudioTab.entries.forEach{tab->
+                        val active=uiState.navDestination==NavDestination.STUDIO&&uiState.studioTab==tab
+                        val glyph=when(tab){StudioTab.LAYERS->Icons.Default.Layers;StudioTab.PROPERTIES->Icons.Default.Tune;StudioTab.ASSETS->Icons.Default.Image;StudioTab.PRESETS->Icons.Default.Dashboard}
+                        Column(Modifier.semantics{selected=active}.clickable{vm.navigateTo(NavDestination.STUDIO);vm.selectStudioTab(tab)}.padding(horizontal=9.dp,vertical=5.dp),horizontalAlignment=Alignment.CenterHorizontally){
+                            Icon(glyph,tab.label,tint=if(active)palette.accent else palette.textSecondary,modifier=Modifier.size(18.dp))
+                            Text(tab.label,style=MaterialTheme.typography.labelSmall,color=if(active)palette.accent else palette.textSecondary,maxLines=1)
+                        }
+                    }
+                    val destinations=NavDestination.entries.filter{it!=NavDestination.STUDIO}
                     destinations.forEach { dest ->
                         val active = dest == uiState.navDestination
                         val icon = when(dest) {
@@ -254,12 +275,12 @@ private fun VexoRootApp(vm: StudioViewModel) {
                         }
                         Column(
                             modifier = Modifier.semantics { selected = active }.clickable { vm.navigateTo(dest) }
-                                .heightIn(min = 56.dp).padding(horizontal = 8.dp, vertical = 5.dp),
+                                .heightIn(min = 42.dp).padding(horizontal = 8.dp, vertical = 3.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(3.dp)
                         ) {
-                            Box(Modifier.background(if(active) palette.accent else Color.Transparent, palette.shape).padding(horizontal = 12.dp, vertical = 5.dp)) {
-                                Icon(icon, contentDescription = dest.label, tint = if(active) palette.accentOn else palette.textSecondary, modifier = Modifier.size(20.dp))
+                            Box(Modifier.background(if(active) palette.accent else Color.Transparent, palette.shape).padding(horizontal = 8.dp, vertical = 2.dp)) {
+                                Icon(icon, contentDescription = dest.label, tint = if(active) palette.accentOn else palette.textSecondary, modifier = Modifier.size(18.dp))
                             }
                             Text(dest.label, style = MaterialTheme.typography.labelSmall, color = if(active) palette.accent else palette.textSecondary, maxLines = 1)
                         }
@@ -334,6 +355,7 @@ private fun VexoRootApp(vm: StudioViewModel) {
 
     }
 
+    pendingImage?.let{uri->AlertDialog(onDismissRequest={pendingImage=null},title={Text("APPLY IMAGE / VIDEO?")},text={Text("Apply selected media to the current layer, or cancel to keep the original.")},confirmButton={TextButton(onClick={if(uiState.project.id==pendingImageProject&&uiState.selectedLayerId==pendingImageLayer)vm.attachImageToSelectedLayer(uri);pendingImage=null}){Text("APPLY")}},dismissButton={TextButton(onClick={pendingImage=null}){Text("CANCEL")}})}
     if (showRenameProject) {
         var text by remember { mutableStateOf(uiState.project.name) }
         AlertDialog(

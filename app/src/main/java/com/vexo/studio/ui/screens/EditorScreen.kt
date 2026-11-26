@@ -298,15 +298,16 @@ private fun PreviewBlock(
 ) {
     val palette = LocalVexoPalette.current
     Column(modifier=modifier.background(Color.Black).clipToBounds()){
-        Row(Modifier.fillMaxWidth().background(palette.panel).padding(horizontal=4.dp),verticalAlignment=Alignment.CenterVertically){
+        Row(Modifier.fillMaxWidth().background(palette.panel).horizontalScroll(rememberScrollState()).padding(horizontal=4.dp),verticalAlignment=Alignment.CenterVertically){
             IconButton(onClick=vm::undo,enabled=uiState.canUndo,modifier=Modifier.size(32.dp)){Icon(Icons.Default.Undo,"Undo",modifier=Modifier.size(17.dp),tint=if(uiState.canUndo)palette.textPrimary else palette.border)}
             IconButton(onClick=vm::redo,enabled=uiState.canRedo,modifier=Modifier.size(32.dp)){Icon(Icons.Default.Redo,"Redo",modifier=Modifier.size(17.dp),tint=if(uiState.canRedo)palette.textPrimary else palette.border)}
-            Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()),verticalAlignment=Alignment.CenterVertically){
+            Row(verticalAlignment=Alignment.CenterVertically){
                 AspectRatioPreset.entries.forEach{ratio->
                     val active=ratio==uiState.project.canvas.aspectRatio
                     Text(ratio.label,style=MaterialTheme.typography.labelSmall,color=if(active)palette.accentOn else palette.textSecondary,modifier=Modifier.background(if(active)palette.accent else Color.Transparent).clickable{vm.setAspectRatio(ratio)}.padding(horizontal=8.dp,vertical=7.dp))
                 }
             }
+            Text(if(uiState.previewSelectedComposition&&uiState.selectedCompositionIndex!=0)"SELECTED" else "FINAL",style=MaterialTheme.typography.labelSmall,color=if(uiState.previewSelectedComposition)palette.accent else palette.textSecondary,modifier=Modifier.clickable{vm.toggleCompositionPreview()}.padding(horizontal=10.dp,vertical=8.dp))
             IconButton(onClick=vm::toggleSafeAreaGuides,modifier=Modifier.size(32.dp)){Icon(Icons.Default.GridOn,"Safe area",tint=if(uiState.project.canvas.showSafeAreaGuides)palette.accent else palette.textSecondary,modifier=Modifier.size(16.dp))}
             IconButton(onClick=vm::resetPreviewCamera,modifier=Modifier.size(32.dp)){Icon(Icons.Default.CropFree,"Reset zoom",tint=palette.textSecondary,modifier=Modifier.size(16.dp))}
             IconButton(onClick=vm::toggleFullscreenPreview,modifier=Modifier.size(32.dp)){Icon(Icons.Default.Fullscreen,"Fullscreen",tint=palette.textPrimary,modifier=Modifier.size(18.dp))}
@@ -339,12 +340,12 @@ fun CompactTransportBar(
             }
             IconButton(onClick=onPickAudio,modifier=Modifier.size(36.dp)){Icon(Icons.Default.FolderOpen,"Import audio",tint=palette.accent,modifier=Modifier.size(18.dp))}
             IconButton(onClick=onPrev,enabled=playback.queue.isNotEmpty(),modifier=Modifier.size(36.dp)){Icon(Icons.Default.SkipPrevious,"Previous",tint=palette.textPrimary,modifier=Modifier.size(20.dp))}
-            IconButton(onClick=onTogglePlay,enabled=playback.queue.isNotEmpty(),modifier=Modifier.size(40.dp).background(palette.accent)){Icon(if(playback.isPlaying)Icons.Default.Pause else Icons.Default.PlayArrow,if(playback.isPlaying)"Pause" else "Play",tint=palette.accentOn,modifier=Modifier.size(23.dp))}
+            IconButton(onClick=onTogglePlay,enabled=playback.queue.isNotEmpty(),modifier=Modifier.size(36.dp).background(palette.accent)){Icon(if(playback.isPlaying)Icons.Default.Pause else Icons.Default.PlayArrow,if(playback.isPlaying)"Pause" else "Play",tint=palette.accentOn,modifier=Modifier.size(23.dp))}
             IconButton(onClick=onNext,enabled=playback.queue.isNotEmpty(),modifier=Modifier.size(36.dp)){Icon(Icons.Default.SkipNext,"Next",tint=palette.textPrimary,modifier=Modifier.size(20.dp))}
         }
         Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)){
             Text(formatDuration(pos.toLong()),style=MaterialTheme.typography.labelSmall,color=palette.accent)
-            Canvas(Modifier.weight(1f).height(30.dp).semantics{
+            Canvas(Modifier.weight(1f).height(24.dp).semantics{
                 progressBarRangeInfo=ProgressBarRangeInfo(pos,0f..maxDur)
                 if(enabled)setProgress{v->seek(v.coerceIn(0f,maxDur).toLong());true}
             }.pointerInput(enabled,maxDur){
@@ -375,32 +376,6 @@ private fun StudioWorkspacePanel(
 ) {
     val palette = LocalVexoPalette.current
     Column(modifier = modifier.background(palette.panel).clipToBounds()) {
-        // Editor Tabs
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(palette.glassPanel, palette.shape)
-                .border(1.dp, palette.border, palette.shape)
-        ) {
-            StudioTab.entries.forEach { tab ->
-                val active = tab == uiState.studioTab
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .background(if (active) palette.accent else Color.Transparent)
-                        .clickable { vm.selectStudioTab(tab) }
-                        .padding(vertical = 6.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                        val glyph = when(tab) { StudioTab.LAYERS -> Icons.Default.Layers; StudioTab.PROPERTIES -> Icons.Default.Tune; StudioTab.ASSETS -> Icons.Default.Image; StudioTab.PRESETS -> Icons.Default.Dashboard }
-                        Icon(glyph, contentDescription = null, tint = if(active) palette.accentOn else palette.textSecondary, modifier = Modifier.size(18.dp))
-                        Text(tab.label, style = MaterialTheme.typography.labelSmall, color = if(active) palette.accentOn else palette.textSecondary, maxLines = 1)
-                    }
-                }
-            }
-        }
-
         Box(Modifier.weight(1f).fillMaxWidth().clipToBounds().background(palette.bg)) {
         when (uiState.studioTab) {
             StudioTab.LAYERS -> LayersTab(vm = vm, uiState = uiState)
@@ -479,7 +454,6 @@ private fun LayersTab(
             }
         }
         if(searchOpen)OutlinedTextField(layerQuery,{layerQuery=it},label={Text("Search name, type, group")},singleLine=true,modifier=Modifier.fillMaxWidth().padding(horizontal=6.dp))
-        StudioToggleRow("Preview selected composition",uiState.previewSelectedComposition,{_:Boolean->vm.toggleCompositionPreview()})
         var canvasOpen by remember{mutableStateOf(false)}
         if(activeComp.index==0)ExpandableSectionHeader("Canvas background",canvasOpen,{canvasOpen=!canvasOpen}){StudioColorPickerRow("Background",uiState.project.canvas.backgroundColorArgb,vm::setCanvasColor)}
         LazyColumn(
@@ -655,7 +629,7 @@ private fun PropertiesTab(
 ) {
     val palette = LocalVexoPalette.current
     var editTarget by rememberSaveable(uiState.selectedLayerId) { mutableStateOf("LAYER") } // LAYER or PROVIDER
-    val expandedSections = remember(uiState.project.id, editTarget) { mutableStateMapOf<String, Boolean>() }
+    val expandedSections = remember(uiState.project.id,uiState.selectedLayerId,editTarget) { mutableStateMapOf<String, Boolean>() }
     var propertyQuery by rememberSaveable(uiState.project.id,editTarget){mutableStateOf("")}
     var undoAnchor by remember { mutableStateOf<VexoProject?>(null) }
 
@@ -750,7 +724,7 @@ private fun PropertiesTab(
         // Section 1: Transform & Blend
         ExpandableSectionHeader(
             title = "General & Transform",
-            expanded = expandedSections["transform"] ?: true,
+            expanded = expandedSections["transform"] ?: expandedSections.isEmpty(),
             onToggle = { toggleAccordion(expandedSections, "transform") }
         ) {
             StudioToggleRow(
@@ -1600,7 +1574,10 @@ private fun AudioProviderEditorSection(
 }
 
 internal fun toggleAccordion(sections: MutableMap<String, Boolean>, key: String) {
-    sections[key] = !(sections[key] ?: (key == "transform"))
+    val wasOpen=sections[key] ?: (key=="transform"&&sections.isEmpty())
+    sections.clear()
+    sections["transform"]=false
+    sections[key]=!wasOpen
 }
 
 private val LocalInspectorQuery=staticCompositionLocalOf{ "" }
@@ -1650,6 +1627,7 @@ private fun AssetsTab(
 ) {
     val palette = LocalVexoPalette.current
     val selected = vm.currentSelectedLayer()
+    var pendingTexture by remember(uiState.project.id,selected?.common?.id){mutableStateOf<String?>(null)}
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -1685,23 +1663,27 @@ private fun AssetsTab(
                 "internalres:black" to "Solid Black"
             ).forEach { (resKey, label) ->
                 val active = cfg.sourceType == ImageSourceType.INTERNAL && cfg.internalRes == resKey
+                val pending=pendingTexture==resKey
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .border(1.dp, if (active) palette.accent else palette.border, palette.shape)
+                        .border(1.dp, if (active||pending) palette.accent else palette.border, palette.shape)
                         .background(palette.glassPanel, palette.shape)
-                        .clickable {
-                            vm.updateLayer(selected.common.id) {
-                                it.copy(config = cfg.copy(sourceType = ImageSourceType.INTERNAL, internalRes = resKey))
-                            }
-                        }
+                        .clickable { pendingTexture=if(pending)null else resKey }
                         .padding(10.dp),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(label, style = MaterialTheme.typography.bodyMedium)
-                    Text(if (active) "ACTIVE" else "USE", style = MaterialTheme.typography.labelSmall, color = palette.accent)
+                    Text(if(pending)"SELECTED" else if (active) "ACTIVE" else "SELECT", style = MaterialTheme.typography.labelSmall, color = palette.accent)
                 }
             }
+            pendingTexture?.let{key->
+                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.End){
+                    TextButton(onClick={pendingTexture=null}){Text("CANCEL")}
+                    TextButton(onClick={vm.updateLayer(selected.common.id){l->if(l.common.locked)l else l.copy(config=(l.config as LayerConfig.Image).copy(sourceType=ImageSourceType.INTERNAL,internalRes=key,videoEnabled=false,customUri=null))};pendingTexture=null}){Text("APPLY")}
+                }
+            }
+            TextButton(onClick={vm.updateLayer(selected.common.id){l->if(l.common.locked)l else l.copy(config=(l.config as LayerConfig.Image).copy(sourceType=ImageSourceType.ALBUM_ART,customUri=null,videoEnabled=false))};pendingTexture=null}){Text("RESTORE ALBUM ART")}
         }
     }
 }
@@ -1764,7 +1746,7 @@ private fun PresetsTab(
             ) {
                 Column {
                     Text(tpl.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                    Text("${tpl.canvas.aspectRatio.label} · ${tpl.compositions.sumOf { it.layers.size }} layers", style = MaterialTheme.typography.labelSmall, color = palette.textSecondary)
+                    Text("${tpl.compositions.sumOf { it.layers.size }} layers · Current canvas ratio", style = MaterialTheme.typography.labelSmall, color = palette.textSecondary)
                 }
                 Text("APPLY", style = MaterialTheme.typography.labelSmall, color = palette.accent)
             }
@@ -1779,8 +1761,10 @@ fun formatDuration(ms: Long): String {
 
 @Composable
 private fun MediaAssetButton(label:String,onPicked:(android.net.Uri)->Unit){
-    val picker=androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()){uri->if(uri!=null)onPicked(uri)}
+    var pending by remember{mutableStateOf<android.net.Uri?>(null)}
+    val picker=androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()){uri->pending=uri}
     TextButton(onClick={picker.launch(arrayOf("image/*"))}){Text(label)}
+    pending?.let{uri->AlertDialog(onDismissRequest={pending=null},title={Text("Apply asset?")},text={Text("Use selected image for this property?")},confirmButton={TextButton(onClick={onPicked(uri);pending=null}){Text("APPLY")}},dismissButton={TextButton(onClick={pending=null}){Text("CANCEL")}})}
 }
 
 @Composable

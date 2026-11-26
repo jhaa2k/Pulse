@@ -213,7 +213,7 @@ class VexoPlaybackController(
         runCatching {
             val intent = Intent(context, VexoPlaybackService::class.java)
             context.startService(intent)
-        }
+        }.onFailure{android.util.Log.w("VexoPlayback","Unable to start media session service",it)}
     }
 
     fun cancelAudioImport(){

@@ -225,6 +225,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         val comp = _uiState.value.project.compositions.firstOrNull { it.index == index } ?: return
         _uiState.value = _uiState.value.copy(
             selectedCompositionIndex = index,
+            previewSelectedComposition=_uiState.value.previewSelectedComposition&&index!=0,
             selectedLayerId = comp.layers.firstOrNull()?.common?.id
         )
     }
@@ -233,7 +234,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         _uiState.value = _uiState.value.copy(selectedLayerId = layerId)
     }
 
-    fun toggleCompositionPreview(){_uiState.value=_uiState.value.copy(previewSelectedComposition=!_uiState.value.previewSelectedComposition)}
+    fun toggleCompositionPreview(){val s=_uiState.value;_uiState.value=s.copy(previewSelectedComposition=s.selectedCompositionIndex!=0&&!s.previewSelectedComposition)}
 
     fun addComposition() {
         val p = _uiState.value.project
