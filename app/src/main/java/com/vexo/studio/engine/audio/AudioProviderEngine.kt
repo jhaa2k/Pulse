@@ -129,7 +129,8 @@ class AudioProviderEngine(initialConfig: AudioProviderConfig) {
         val validLength = if (samples == null) 0 else sampleLength.coerceIn(0, samples.size)
 
         if (samples == null || validLength == 0 || !isPlaying || !config.enabled) {
-            // Decay gracefully toward zero
+            // Decay gracefully toward zero; resume with a fresh FFT window.
+            configChanged=true
             decayEnvelopes(dtMs)
             return snapshot()
         }
@@ -388,6 +389,7 @@ class AudioProviderEngine(initialConfig: AudioProviderConfig) {
         val nyquist = sampleRate * 0.5f
         val hzPerBin = nyquist / linearSpectrum.size
         fun bandAvg(lowHz: Float, highHz: Float): Float {
+            if(lowHz>=nyquist)return 0f
             val f = (lowHz / hzPerBin).toInt().coerceIn(1, linearSpectrum.lastIndex)
             val l = (highHz / hzPerBin).toInt().coerceIn(f, linearSpectrum.lastIndex)
             var s = 0f

@@ -24,6 +24,7 @@ class FboPool {
             return existing
         }
         if (existing != null) {
+            allocated.remove(key)
             deleteFbo(existing)
         }
         val created = createFbo(w, h)

@@ -127,6 +127,12 @@ class VexoGlRenderer(
     private val particleSims = mutableMapOf<String, ParticleSimulator>()
     private val barDelayHistory = mutableMapOf<String, ArrayDeque<FloatArray>>()
     private var lastProjectId: String? = null
+    private var graphProject: com.vexo.studio.model.VexoProject?=null
+    private var cachedGraph: com.vexo.studio.engine.scene.ResolvedSceneGraph?=null
+    private var cachedReachable: Set<Int> = emptySet()
+    private var cachedDisplay = -1
+    private var cachedLayerIds: Set<String> = emptySet()
+    private var cachedTrails: Set<String> = emptySet()
     private var lastPositionMs = -1L
     private var lastArtworkVersion = -1
     private var artworkTexId = 0
@@ -175,6 +181,9 @@ class VexoGlRenderer(
 
     fun releaseGlResources() {
         videoFrames.close()
+        graphProject=null;cachedGraph=null;cachedReachable=emptySet();cachedDisplay=-1;cachedLayerIds=emptySet();cachedTrails=emptySet()
+        particleSims.clear();barDelayHistory.clear()
+        lastProjectId=null;lastPositionMs=-1L;lastArtworkVersion=-1
         particleShader?.release(); particleShader=null
         motionShader?.release(); motionShader=null
         previousMotion.clear()
@@ -224,18 +233,30 @@ class VexoGlRenderer(
             uploadArtworkTexture(scene.trackMeta.artwork)
         }
 
-        val resolved = SceneGraph.resolve(scene.project)
         val compTextures = mutableMapOf<Int, Int>()
         val displayIndex=if(isExportRenderer)0 else scene.previewCompositionIndex.takeIf{idx->scene.project.compositions.any{it.index==idx}}?:0
+        if(graphProject!==scene.project || cachedDisplay!=displayIndex){
+            graphProject=scene.project;cachedDisplay=displayIndex
+            cachedGraph=SceneGraph.resolve(scene.project)
+            cachedReachable=SceneGraph.reachable(scene.project,displayIndex)
+            val activeLayers=scene.project.compositions.filter{it.index in cachedReachable}.flatMap{it.layers}.filter{it.common.visible}
+            cachedLayerIds=activeLayers.map{it.common.id}.toSet()
+            cachedTrails=activeLayers.filter{it.config is LayerConfig.MotionBlurEffect}.map{it.common.id}.toSet()
+            previousMotion.keys.retainAll(cachedLayerIds)
+            particleSims.keys.retainAll(cachedLayerIds)
+            barDelayHistory.keys.removeAll{it.removeSuffix("_segment2") !in cachedLayerIds}
+            fboPool.retainSceneBuffers(cachedReachable-displayIndex,cachedTrails)
+        }
+        val resolved=checkNotNull(cachedGraph)
 
         // Render sub-compositions first (index != 0) into offscreen FBOs
         for (comp in resolved.order) {
-            if (comp.index == 0 || comp.index == displayIndex) continue
+            if (comp.index !in cachedReachable || comp.index == displayIndex) continue
             val fbo = fboPool.obtain("comp_${comp.index}", viewportW, viewportH)
             GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, fbo.fboId)
             GLES20.glViewport(0, 0, fbo.width, fbo.height)
-            clearBackground(0x00000000)
-            renderComposition(comp, scene, deltaSec, fbo.width, fbo.height, compTextures)
+            clearBackground(if(comp.index==0)scene.project.canvas.backgroundColorArgb else 0x00000000)
+            renderComposition(comp, scene, deltaSec, fbo.width, fbo.height, compTextures,applyCamera=false)
             compTextures[comp.index] = fbo.textureId
         }
 
@@ -247,18 +268,14 @@ class VexoGlRenderer(
         val finalComp = resolved.order.firstOrNull { it.index == displayIndex }
             ?: scene.project.compositions.firstOrNull()
         if (finalComp != null) {
-            renderComposition(finalComp, scene, deltaSec, viewportW, viewportH, compTextures)
+            renderComposition(finalComp, scene, deltaSec, viewportW, viewportH, compTextures,applyCamera=true)
         }
 
         if (!isExportRenderer && scene.showSafeArea) {
             drawSafeAreaOverlay(viewportW, viewportH)
         }
         trimTextureCache()
-        val layerIds=scene.project.compositions.flatMap{it.layers}.map{it.common.id}.toSet()
-        previousMotion.keys.retainAll(layerIds)
-        particleSims.keys.retainAll(layerIds)
-        barDelayHistory.keys.removeAll{it.removeSuffix("_segment2") !in layerIds}
-        fboPool.retainSceneBuffers(scene.project.compositions.map{it.index}.toSet(),layerIds)
+
     }
 
     private fun renderComposition(
@@ -267,10 +284,11 @@ class VexoGlRenderer(
         deltaSec: Float,
         w: Int,
         h: Int,
-        compTextures: Map<Int, Int>
+        compTextures: Map<Int, Int>,
+        applyCamera:Boolean
     ) {
         Matrix.orthoM(orthoMatrix, 0, 0f, w.toFloat(), h.toFloat(), 0f, -1f, 1f)
-        if (!isExportRenderer && comp.index == 0 && (scene.zoom != 1f || scene.panX != 0f || scene.panY != 0f)) {
+        if (!isExportRenderer && applyCamera && (scene.zoom != 1f || scene.panX != 0f || scene.panY != 0f)) {
             Matrix.setIdentityM(tempMatrix, 0)
             Matrix.translateM(tempMatrix, 0, w * 0.5f + scene.panX, h * 0.5f + scene.panY, 0f)
             Matrix.scaleM(tempMatrix, 0, scene.zoom, scene.zoom, 1f)
@@ -297,7 +315,7 @@ class VexoGlRenderer(
             is LayerConfig.Bars -> cfg.audioProviderIndex
             else -> c.measurePos.providerIndex
         }
-        val audioSnap = scene.audioSnapshots[providerIdx] ?: scene.audioSnapshots.values.firstOrNull()
+        val audioSnap = scene.audioSnapshots[providerIdx]
         val trackNorm = if (scene.trackMeta.durationMs > 0) {
             (scene.trackMeta.positionMs.toFloat() / scene.trackMeta.durationMs).coerceIn(0f, 1f)
         } else 0f
@@ -309,16 +327,16 @@ class VexoGlRenderer(
         )
 
         val dPos = MeasureEvaluator.evaluatePair(
-            c.measurePos, scene.audioSnapshots[c.measurePos.providerIndex] ?: audioSnap, scene.totalTimeSec, scene.playingTimeSec, trackNorm, scene.isPlaying, keyframePos
+            c.measurePos, scene.audioSnapshots[c.measurePos.providerIndex], scene.totalTimeSec, scene.playingTimeSec, trackNorm, scene.isPlaying, keyframePos
         )
         val dScale = MeasureEvaluator.evaluatePair(
-            c.measureScale, scene.audioSnapshots[c.measureScale.providerIndex] ?: audioSnap, scene.totalTimeSec, scene.playingTimeSec, trackNorm, scene.isPlaying
+            c.measureScale, scene.audioSnapshots[c.measureScale.providerIndex], scene.totalTimeSec, scene.playingTimeSec, trackNorm, scene.isPlaying
         )
         val dRot = MeasureEvaluator.evaluateScalar(
-            c.measureRot, scene.audioSnapshots[c.measureRot.providerIndex] ?: audioSnap, scene.totalTimeSec, scene.playingTimeSec, trackNorm, scene.isPlaying
+            c.measureRot, scene.audioSnapshots[c.measureRot.providerIndex], scene.totalTimeSec, scene.playingTimeSec, trackNorm, scene.isPlaying
         )
         val dOpacity = MeasureEvaluator.evaluateScalar(
-            c.measureOpacity, scene.audioSnapshots[c.measureOpacity.providerIndex] ?: audioSnap, scene.totalTimeSec, scene.playingTimeSec, trackNorm, scene.isPlaying
+            c.measureOpacity, scene.audioSnapshots[c.measureOpacity.providerIndex], scene.totalTimeSec, scene.playingTimeSec, trackNorm, scene.isPlaying
         )
 
         fun anchored(value: Float, anchor: com.vexo.studio.model.AnchorMode): Float = when(anchor) {
@@ -676,7 +694,7 @@ class VexoGlRenderer(
         if (texId == 0) return
 
         val colorBlend = MeasureEvaluator.evaluateScalar(
-            cfg.measureColorBlend, scene.audioSnapshots[cfg.measureColorBlend.providerIndex] ?: audioSnap, scene.totalTimeSec, scene.playingTimeSec, trackNorm, scene.isPlaying
+            cfg.measureColorBlend, scene.audioSnapshots[cfg.measureColorBlend.providerIndex], scene.totalTimeSec, scene.playingTimeSec, trackNorm, scene.isPlaying
         ).coerceIn(0f, 1f)
         val tint = MeasureEvaluator.blendArgb(cfg.colorArgb, cfg.colorToArgb, colorBlend)
 
@@ -927,7 +945,7 @@ class VexoGlRenderer(
         val sim = particleSims.getOrPut(layerId) { ParticleSimulator() }
         sim.step(
             cfg = cfg,
-            snapshot = scene.audioSnapshots[cfg.measureOverallSpeed.providerIndex] ?: audioSnap,
+            snapshot = scene.audioSnapshots[cfg.measureOverallSpeed.providerIndex],
             deltaSec = deltaSec,
             totalTimeSec = scene.totalTimeSec,
             playingTimeSec = scene.playingTimeSec,
@@ -1353,11 +1371,12 @@ class VexoGlRenderer(
     }
 
     private fun clearBackground(argb: Int) {
+        val alpha=((argb ushr 24)and 255)/255f
         GLES20.glClearColor(
-            ((argb ushr 16) and 0xFF) / 255f,
-            ((argb ushr 8) and 0xFF) / 255f,
-            (argb and 0xFF) / 255f,
-            ((argb ushr 24) and 0xFF) / 255f
+            ((argb ushr 16) and 0xFF) / 255f*alpha,
+            ((argb ushr 8) and 0xFF) / 255f*alpha,
+            (argb and 0xFF) / 255f*alpha,
+            alpha
         )
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
     }

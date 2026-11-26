@@ -37,6 +37,19 @@ object SceneGraph {
     fun hasSelfReference(comp:CompositionNode):Boolean =
         comp.layers.any{it.common.visible && comp.index in referencesOf(it.config)}
 
+    /** Only the dependency closure of the displayed composition needs rendering. */
+    fun reachable(project:VexoProject,root:Int):Set<Int>{
+        val nodes=project.compositions.associateBy{it.index}
+        val visited=linkedSetOf<Int>()
+        fun visit(index:Int){
+            val node=nodes[index]?:return
+            if(!visited.add(index))return
+            dependenciesOf(node).forEach(::visit)
+        }
+        visit(root)
+        return visited
+    }
+
     fun resolve(project: VexoProject): ResolvedSceneGraph {
         val byIndex = project.compositions.associateBy { it.index }
         val state = mutableMapOf<Int, Int>() // 0=unvisited, 1=visiting, 2=visited
