@@ -421,10 +421,16 @@ private fun LayersTab(
     var groupTarget by remember { mutableStateOf<LayerNode?>(null) }
     var searchOpen by remember { mutableStateOf(false) }
     var layerQuery by remember { mutableStateOf("") }
+    var timeline by rememberSaveable(uiState.project.id){mutableStateOf(false)}
+    var multi by rememberSaveable(uiState.project.id,uiState.selectedCompositionIndex){mutableStateOf(false)}
+    var selectedIds by remember(uiState.project.id,uiState.selectedCompositionIndex){mutableStateOf(setOf<String>())}
+    var confirmBatchDelete by remember{mutableStateOf(false)}
 
     val activeComp = uiState.project.compositions.firstOrNull { it.index == uiState.selectedCompositionIndex }
         ?: uiState.project.compositions.first()
 
+    val validIds=selectedIds.intersect(activeComp.layers.map{it.common.id}.toSet())
+    val visibleLayers=activeComp.layers.filter{layerQuery.isBlank()||it.common.name.contains(layerQuery,true)||it.common.groupName.contains(layerQuery,true)||it.type.label.contains(layerQuery,true)}
     Column(modifier = Modifier.fillMaxSize()) {
         var compositionMenu by remember { mutableStateOf(false) }
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -445,6 +451,26 @@ private fun LayersTab(
             if(uiState.clipboardLayerType!=null)TextButton(onClick=vm::pasteLayer){Text("Paste")}
             TextButton(onClick = { showAddLayerDialog = true }) { Icon(Icons.Default.Add, null, tint = palette.accent); Text("Layer", color = palette.accent) }
         }
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),verticalAlignment=Alignment.CenterVertically){
+            TextButton(onClick={timeline=false}){Text("LAYERS",color=if(!timeline)palette.accent else palette.textSecondary)}
+            TextButton(onClick={timeline=true;multi=false;selectedIds=emptySet()}){Text("TIMELINE",color=if(timeline)palette.accent else palette.textSecondary)}
+            if(!timeline)TextButton(onClick={multi=!multi;selectedIds=emptySet()}){Text(if(multi)"DONE" else "MULTI SELECT")}
+        }
+        if(timeline){
+            LayerTimelinePanel(vm,uiState,activeComp)
+            return@Column
+        }
+        if(multi){
+            val actions=com.vexo.studio.engine.scene.BatchLayerAction.entries
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),verticalAlignment=Alignment.CenterVertically){
+                TextButton(onClick={selectedIds=visibleLayers.map{it.common.id}.toSet()}){Text("ALL SHOWN")}
+                TextButton(onClick={selectedIds=emptySet()}){Text("CLEAR")}
+                Text("SELECTED "+validIds.size,style=MaterialTheme.typography.labelSmall,color=palette.accent)
+            }
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())){
+                actions.forEach{action->TextButton(enabled=validIds.isNotEmpty(),onClick={if(action==com.vexo.studio.engine.scene.BatchLayerAction.DELETE)confirmBatchDelete=true else vm.batchEditLayers(validIds,action)}){Text(action.label)}}
+            }
+        }
         if(searchOpen)OutlinedTextField(layerQuery,{layerQuery=it},label={Text("Search name, type, group")},singleLine=true,modifier=Modifier.fillMaxWidth().padding(horizontal=6.dp))
         StudioToggleRow("Preview selected composition",uiState.previewSelectedComposition,{_:Boolean->vm.toggleCompositionPreview()})
         var canvasOpen by remember{mutableStateOf(false)}
@@ -455,17 +481,18 @@ private fun LayersTab(
                 .padding(horizontal = 6.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            items(activeComp.layers.filter{layerQuery.isBlank()||it.common.name.contains(layerQuery,true)||it.common.groupName.contains(layerQuery,true)||it.type.label.contains(layerQuery,true)}, key = { it.common.id }) { layer ->
-                val isSelected = layer.common.id == uiState.selectedLayerId
+            items(visibleLayers, key = { it.common.id }) { layer ->
+                val isSelected = if(multi)layer.common.id in validIds else layer.common.id == uiState.selectedLayerId
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .border(1.dp, if (isSelected) palette.accent else palette.border, palette.shape)
                         .background(if (isSelected) palette.panelElevated else palette.panel)
-                        .clickable { vm.selectLayer(layer.common.id); vm.selectStudioTab(StudioTab.PROPERTIES) }
+                        .clickable { if(multi)selectedIds=if(layer.common.id in selectedIds)selectedIds-layer.common.id else selectedIds+layer.common.id else {vm.selectLayer(layer.common.id); vm.selectStudioTab(StudioTab.PROPERTIES)} }
                         .padding(horizontal = 8.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    if(multi) androidx.compose.material3.Checkbox(checked=isSelected,onCheckedChange={checked->selectedIds=if(checked)selectedIds+layer.common.id else selectedIds-layer.common.id})
                     IconButton(
                         onClick = {
                             vm.updateLayer(layer.common.id) {
@@ -522,6 +549,7 @@ private fun LayersTab(
         }
     }
 
+    if(confirmBatchDelete)AlertDialog(onDismissRequest={confirmBatchDelete=false},title={Text("DELETE SELECTED LAYERS?")},text={Text("Locked layers are kept. Keyframes belonging to deleted layers will be removed.")},confirmButton={TextButton(onClick={vm.batchEditLayers(validIds,com.vexo.studio.engine.scene.BatchLayerAction.DELETE);selectedIds=emptySet();confirmBatchDelete=false}){Text("DELETE")}},dismissButton={TextButton(onClick={confirmBatchDelete=false}){Text("CANCEL")}})
     groupTarget?.let{layer->
         var name by remember(layer.common.id){mutableStateOf(layer.common.groupName)}
         AlertDialog(onDismissRequest={groupTarget=null},title={Text("GROUP LABEL")},text={OutlinedTextField(name,{name=it.take(80)},label={Text("Group (blank to clear)")},singleLine=true)},confirmButton={TextButton(onClick={vm.updateLayer(layer.common.id){it.copy(common=it.common.copy(groupName=name.trim()))};groupTarget=null}){Text("SAVE")}},dismissButton={TextButton(onClick={groupTarget=null}){Text("CANCEL")}})

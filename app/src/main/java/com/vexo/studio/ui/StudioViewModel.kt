@@ -393,6 +393,19 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         _uiState.value = _uiState.value.copy(selectedLayerId = newLayer.common.id)
     }
 
+    fun batchEditLayers(ids:Set<String>,action:com.vexo.studio.engine.scene.BatchLayerAction){
+        val p=_uiState.value.project
+        val next=com.vexo.studio.engine.scene.BatchLayerEdits.apply(p,_uiState.value.selectedCompositionIndex,ids,action)
+        if(next==p)return
+        commitProjectChange(next)
+        val comp=next.compositions.first{it.index==_uiState.value.selectedCompositionIndex}
+        _uiState.value=_uiState.value.copy(selectedLayerId=comp.layers.firstOrNull{it.common.id==_uiState.value.selectedLayerId}?.common?.id?:comp.layers.firstOrNull()?.common?.id,statusBanner="Batch edit applied")
+    }
+
+    fun setTimelineTiming(layerId:String,timing:com.vexo.studio.model.LayerTiming){
+        updateLayer(layerId){l->if(l.common.locked)l else l.copy(common=l.common.copy(timing=timing))}
+    }
+
     fun duplicateLayer(layerId: String) {
         val p = _uiState.value.project
         val compIdx = _uiState.value.selectedCompositionIndex
