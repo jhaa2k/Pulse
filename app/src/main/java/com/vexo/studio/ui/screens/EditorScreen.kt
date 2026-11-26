@@ -334,7 +334,7 @@ fun CompactTransportBar(
     Column(modifier.background(palette.panel).clipToBounds().padding(horizontal=10.dp,vertical=3.dp)){
         Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
             Column(Modifier.weight(1f)){
-                Text(if(playback.queue.isEmpty())"Import music" else playback.trackMeta.title,style=MaterialTheme.typography.bodySmall,fontWeight=FontWeight.SemiBold,color=palette.textPrimary,maxLines=1,overflow=TextOverflow.Ellipsis)
+                Text(if(playback.importTotal>0)"Importing ${playback.importCompleted}/${playback.importTotal}" else if(playback.queue.isEmpty())"Import music" else playback.trackMeta.title,style=MaterialTheme.typography.bodySmall,fontWeight=FontWeight.SemiBold,color=palette.textPrimary,maxLines=1,overflow=TextOverflow.Ellipsis)
                 Text(if(playback.queue.isEmpty())"Select audio" else playback.trackMeta.artist,style=MaterialTheme.typography.labelSmall,color=palette.textSecondary,maxLines=1,overflow=TextOverflow.Ellipsis)
             }
             IconButton(onClick=onPickAudio,modifier=Modifier.size(36.dp)){Icon(Icons.Default.FolderOpen,"Import audio",tint=palette.accent,modifier=Modifier.size(18.dp))}

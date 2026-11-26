@@ -32,6 +32,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -50,7 +52,9 @@ data class PlaybackUiState(
     val volume: Float = 1f,
     val transitionFadeMs: Int = 0,
     val trackMeta: TrackMetadataSnapshot = TrackMetadataSnapshot(),
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val importTotal:Int=0,
+    val importCompleted:Int=0
 )
 
 /**
@@ -80,6 +84,8 @@ class VexoPlaybackController(
     private var artworkCounter = 0
     private val artworkScope=CoroutineScope(SupervisorJob()+Dispatchers.Main.immediate)
     private var artworkJob:Job?=null
+    private var importJob:Job?=null
+    private var importGeneration=0L
     private val _sleepRemaining=MutableStateFlow(0L)
     val sleepRemaining=_sleepRemaining.asStateFlow()
     private var sleepDeadline=0L
@@ -200,7 +206,14 @@ class VexoPlaybackController(
         }
     }
 
+    fun cancelAudioImport(){
+        importGeneration++
+        importJob?.cancel();importJob=null
+        _state.value=_state.value.copy(importTotal=0,importCompleted=0)
+    }
+
     fun loadProjectAudio(uri: String?) {
+        cancelAudioImport()
         if (uri != null && currentAudioUri() == uri) return
         artworkJob?.cancel();artworkJob=null
         player.pause()
@@ -211,22 +224,41 @@ class VexoPlaybackController(
             trackMeta = TrackMetadataSnapshot(artworkVersion = ++artworkCounter), errorMessage = null)
         if (!uri.isNullOrBlank()) {
             importTracks(listOf(Uri.parse(uri)), playFirstImmediately = false)
-            updateCurrentTrackMetadata(0)
         }
     }
 
-    fun importTracks(uris: List<Uri>, playFirstImmediately: Boolean = true) {
-        if (uris.isEmpty()) return
-        val newItems = uris.map { uri ->
-            runCatching {
-                context.contentResolver.takePersistableUriPermission(
-                    uri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION
-                )
-            }
-            extractTrackItem(uri)
+    fun importTracks(uris:List<Uri>,playFirstImmediately:Boolean=true,onImported:(AudioTrackItem)->Unit={}){
+        if(uris.isEmpty())return
+        cancelAudioImport()
+        val generation=importGeneration
+        val input=uris.take(5000)
+        _state.value=_state.value.copy(importTotal=input.size,importCompleted=0,errorMessage=null)
+        importJob=artworkScope.launch{
+            try{
+                val items=withContext(Dispatchers.IO){
+                    val result=ArrayList<AudioTrackItem>(input.size)
+                    for((index,uri) in input.withIndex()){
+                        ensureActive()
+                        runCatching{context.contentResolver.takePersistableUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION)}
+                        result.add(extractTrackItem(uri))
+                        if(index%16==0||index==input.lastIndex)withContext(Dispatchers.Main.immediate){
+                            if(generation==importGeneration)_state.value=_state.value.copy(importCompleted=index+1)
+                        }
+                    }
+                    result
+                }
+                if(generation!=importGeneration)return@launch
+                appendImportedTracks(items,playFirstImmediately)
+                if(items.isNotEmpty())onImported(items.first())
+                if(uris.size>input.size)_state.value=_state.value.copy(errorMessage="Import limited to 5000 tracks per batch")
+            }catch(cancelled:CancellationException){throw cancelled}
+            catch(err:Exception){if(generation==importGeneration)_state.value=_state.value.copy(errorMessage="Audio import failed: "+err.javaClass.simpleName)}
+            finally{if(generation==importGeneration){_state.value=_state.value.copy(importTotal=0,importCompleted=0);importJob=null}}
         }
+    }
 
+    private fun appendImportedTracks(newItems:List<AudioTrackItem>,playFirstImmediately:Boolean){
+        if(newItems.isEmpty())return
         val existing = _state.value.queue
         val updatedQueue = existing + newItems
         val startIndex = if (existing.isEmpty() || playFirstImmediately) existing.size else _state.value.currentIndex
@@ -262,6 +294,7 @@ class VexoPlaybackController(
         } else {
             player.setMediaItems(mediaItems,0,0L)
             player.prepare()
+            updateCurrentTrackMetadata(0)
         }
     }
 
@@ -399,6 +432,7 @@ class VexoPlaybackController(
 
     fun release() {
         transitionHandler.removeCallbacks(transitionTick)
+        cancelAudioImport()
         artworkScope.cancel()
         sessionVisualizer.close()
         soundEffects.close()

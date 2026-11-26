@@ -794,11 +794,10 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun importAudioTracks(uris: List<Uri>) {
-        playbackController.importTracks(uris, playFirstImmediately = true)
-        val first = uris.firstOrNull()?.toString()
-        if (first != null) {
-            val p = _uiState.value.project
-            commitProjectChange(p.copy(audioUri = first))
+        val projectId=_uiState.value.project.id
+        playbackController.importTracks(uris,playFirstImmediately=true){item->
+            val current=_uiState.value.project
+            if(current.id==projectId)commitProjectChange(current.copy(audioUri=item.uri))
         }
     }
 
@@ -880,6 +879,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun startVideoExport() {
+        if(playbackState.value.importTotal>0){_uiState.value=_uiState.value.copy(statusBanner="Finish audio import before exporting");return}
         val audioUri = playbackController.currentAudioUri() ?: _uiState.value.project.audioUri
         if (exportState.value.isRunning) return
         if (audioUri.isNullOrBlank()) {

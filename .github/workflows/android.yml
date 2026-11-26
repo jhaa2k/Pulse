@@ -20,6 +20,16 @@ jobs:
         run: chmod +x gradlew
       - name: Run unit tests and lint
         run: ./gradlew testDebugUnitTest lintDebug
+      - name: Upload test and lint reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vexo-validation-reports
+          path: |
+            app/build/reports/tests/testDebugUnitTest/
+            app/build/reports/lint-results-debug.*
+            app/build/test-results/testDebugUnitTest/
+          if-no-files-found: ignore
       - name: Build Debug APK
         run: ./gradlew assembleDebug
       - name: Upload APK

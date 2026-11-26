@@ -1,0 +1,3 @@
+# Phase 21
+
+Phase 20 compiled and passed unit tests but failed lint (Media3 opt-in usage in new preset composables). Marked those composables with the same UnstableApi contract as their callers. Bulk audio import now performs metadata and URI permission work on Dispatchers.IO, reports progress and supports cancel; new import supersedes previous, project switch cancels it, callbacks check project ID before saving audio selection. Existing queue behavior retained. Batch limit 5000, no persistent queue added. Export blocked while importing. CI uploads unit/lint reports on success or failure. Still no actual overlapping crossfade, no physical-device certification or signed production build.
