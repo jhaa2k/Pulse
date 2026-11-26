@@ -923,8 +923,12 @@ private fun PropertiesTab(
         when (val cfg = layer.config) {
             is LayerConfig.Bars -> {
                 ExpandableSectionHeader("Creative spectrum",expandedSections["creative_bars"]==true,{toggleAccordion(expandedSections,"creative_bars")}){
+                    SpectrumStyleGallery(layer.common.id,cfg){next->vm.updateLayer(layer.common.id){it.copy(config=next)}}
                     StudioChipSelector("Creative path",com.vexo.studio.model.CreativeSpectrumPath.entries,cfg.creativePath,{it.name}){v->vm.updateLayer(layer.common.id){l->l.copy(config=(l.config as LayerConfig.Bars).copy(creativePath=v))}}
-                    StudioChipSelector("Creative style",com.vexo.studio.model.CreativeSpectrumStyle.entries,cfg.creativeStyle,{it.name}){v->vm.updateLayer(layer.common.id){l->l.copy(config=(l.config as LayerConfig.Bars).copy(creativeStyle=v))}}
+                    StudioChipSelector("Creative style",com.vexo.studio.model.CreativeSpectrumStyle.entries,cfg.creativeStyle,{it.name}){v->vm.updateLayer(layer.common.id){l->l.copy(config=(l.config as LayerConfig.Bars).copy(creativeStyle=v,segment1=BarsSegmentType.BARS))}}
+                    StudioSlider("Line / Outline Width",cfg.creativeStrokeWidth,.25f,24f,2f,"px",.25f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){l->l.copy(config=(l.config as LayerConfig.Bars).copy(creativeStrokeWidth=v))}},onCommit=::endDrag)
+                    StudioSlider("Fill Opacity",cfg.creativeFillAlpha,0f,1f,.65f,"",.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){l->l.copy(config=(l.config as LayerConfig.Bars).copy(creativeFillAlpha=v))}},onCommit=::endDrag)
+                    StudioSlider("Dot / Tip Size",cfg.creativeTipSize,.25f,3f,1f,"x",.05f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){l->l.copy(config=(l.config as LayerConfig.Bars).copy(creativeTipSize=v))}},onCommit=::endDrag)
                     StudioSlider("Radius",cfg.circleRadius,0.01f,0.8f,0.28f,"",0.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){l->l.copy(config=(l.config as LayerConfig.Bars).copy(circleRadius=v))}},onCommit=::endDrag)
                     StudioSlider("Turns",cfg.pathTurns,0.25f,5.0f,2.0f,"",0.05f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){l->l.copy(config=(l.config as LayerConfig.Bars).copy(pathTurns=v))}},onCommit=::endDrag)
                     StudioSlider("Wave spread",cfg.pathSpread,0.0f,1.0f,0.3f,"",0.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){l->l.copy(config=(l.config as LayerConfig.Bars).copy(pathSpread=v))}},onCommit=::endDrag)
@@ -955,7 +959,7 @@ private fun PropertiesTab(
                         beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(fixedHeight = v)) }
                     }, onCommit = ::endDrag)
                     StudioChipSelector("Segment Style", BarsSegmentType.entries, cfg.segment1, { it.label }) { seg ->
-                        vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(segment1 = seg)) }
+                        vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(segment1 = seg,creativeStyle=com.vexo.studio.model.CreativeSpectrumStyle.BARS)) }
                     }
                     StudioToggleRow("Mirror Symmetry", cfg.mirror) { m ->
                         vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(mirror = m)) }
@@ -968,9 +972,9 @@ private fun PropertiesTab(
                     }
                     StudioSlider("Bar Count (0 = Provider)", cfg.barCount.toFloat(), 0f, 512f, 0f, "", 1f, onValueChange={v -> beginDrag(); vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.Bars).copy(barCount=v.toInt()))}}, onCommit=::endDrag)
                     StudioSlider("Bar Spacing", cfg.barSpacing, 0f, .95f, 0f, "", .01f, onValueChange={v -> beginDrag(); vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.Bars).copy(barSpacing=v))}}, onCommit=::endDrag)
-                    if (cfg.segment1 == BarsSegmentType.ROUND_BARS) StudioSlider("Roundness", cfg.roundness, 0f, 1f, 1f, "", .01f, onValueChange={v -> beginDrag(); vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.Bars).copy(roundness=v))}}, onCommit=::endDrag)
+                    if (cfg.segment1 == BarsSegmentType.ROUND_BARS || cfg.creativeStyle==com.vexo.studio.model.CreativeSpectrumStyle.CAPSULE) StudioSlider("Roundness", cfg.roundness, 0f, 1f, 1f, "", .01f, onValueChange={v -> beginDrag(); vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.Bars).copy(roundness=v))}}, onCommit=::endDrag)
                     StudioSlider("Spectrum Softness",cfg.softness.toFloat(),0f,20f,2f,"",1f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.Bars).copy(softness=v.toInt()))}},onCommit=::endDrag)
-                    if(cfg.segment1!=BarsSegmentType.LINE) StudioToggleRow("Peak Hold Markers",cfg.showPeaks){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.Bars).copy(showPeaks=v))}}
+                    if(cfg.segment1!=BarsSegmentType.LINE || cfg.creativePath!=com.vexo.studio.model.CreativeSpectrumPath.LEGACY || cfg.creativeStyle!=com.vexo.studio.model.CreativeSpectrumStyle.BARS) StudioToggleRow("Peak Hold Markers",cfg.showPeaks){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.Bars).copy(showPeaks=v))}}
                     RegisteredSlider("barWidth", cfg.barWidth, settings.showPropertyHelpHints, { v ->
                         beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(barWidth = v)) }
                     }, ::endDrag)
@@ -987,6 +991,7 @@ private fun PropertiesTab(
                 ExpandableSectionHeader("Secondary segment", expandedSections["Bars_Secondarysegment"] == true, { toggleAccordion(expandedSections, "Bars_Secondarysegment") }) {
                     StudioChipSelector("Secondary Segment", BarsSegmentType.entries, cfg.segment2, { it.label }) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(segment2 = v)) } }
                     if (cfg.segment2 != BarsSegmentType.NONE) {
+                    StudioChipSelector("Secondary Creative Style",com.vexo.studio.model.CreativeSpectrumStyle.entries,cfg.secondaryCreativeStyle,{it.name.replace('_',' ')}){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.Bars).copy(secondaryCreativeStyle=v))}}
                     StudioSlider("Segment 2 Width", cfg.segment2Width, 0.05f, 1.5f, 0.72f, "", 0.01f, onValueChange = { v -> beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(segment2Width = v)) } }, onCommit = ::endDrag)
                     StudioSlider("Segment 2 Height", cfg.segment2HeightMultiplier, -2f, 2f, 1f, "", 0.05f, onValueChange = { v -> beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(segment2HeightMultiplier = v)) } }, onCommit = ::endDrag)
                     StudioSlider("Segment 2 Fixed Height", cfg.segment2FixedHeight, -50f, 50f, 0f, "", 0.5f, onValueChange = { v -> beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(segment2FixedHeight = v)) } }, onCommit = ::endDrag)

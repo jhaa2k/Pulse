@@ -86,7 +86,7 @@ object SpectrumStudioMesh {
                 val ac=a.p(0f,a.tip);val bc=b.p(0f,b.tip);val ab=a.p(0f,a.base);val bb=b.p(0f,b.base)
                 when(style){
                     CreativeSpectrumStyle.FILL->{quad(ab,bb,ac,bc,alpha(a.color,c.creativeFillAlpha*.35f),alpha(b.color,c.creativeFillAlpha));line(ac,bc,stroke,a.color,b.color)}
-                    CreativeSpectrumStyle.DOUBLE_LINE->{line(ac,bc,stroke,a.color,b.color);line(ab,bb,stroke,a.color,b.color)}
+                    CreativeSpectrumStyle.DOUBLE_LINE->{line(ac,bc,stroke,a.color,b.color);line(a.p(0f,a.tip-stroke*2.5f),b.p(0f,b.tip-stroke*2.5f),stroke,a.color,b.color);if(c.mirror)line(ab,bb,stroke,a.color,b.color)}
                     CreativeSpectrumStyle.RIBBON->{val aw=a.width*.5f;val bw=b.width*.5f;quad(a.p(0f,a.tip-aw),b.p(0f,b.tip-bw),a.p(0f,a.tip+aw),b.p(0f,b.tip+bw),alpha(a.color,c.creativeFillAlpha),alpha(b.color,c.creativeFillAlpha));line(ac,bc,stroke,a.color,b.color)}
                     CreativeSpectrumStyle.ZIGZAG->{val pa=if(i%2==0)ac else ab;val pb=if((i+1)%2==0)bc else bb;line(pa,pb,stroke,a.color,b.color)}
                     else->{line(ac,bc,stroke,a.color,b.color);if(c.mirror)line(ab,bb,stroke,a.color,b.color)}
