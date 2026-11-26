@@ -114,6 +114,7 @@ class VexoGlRenderer(
     private var colorBuf: FloatBuffer = allocFloatBuffer(colorScratch.size)
 
     // Caches & simulation state
+    private val videoFrames = VideoFrameTextures(context)
     private val textureCache = mutableMapOf<String, Int>()
     private val bitmapSizes = mutableMapOf<Int, Pair<Int, Int>>()
     private val particleSims = mutableMapOf<String, ParticleSimulator>()
@@ -164,6 +165,7 @@ class VexoGlRenderer(
     }
 
     fun releaseGlResources() {
+        videoFrames.close()
         colorShader?.release(); colorShader = null
         imageShader?.release(); imageShader = null
         blurShader?.release(); blurShader = null
@@ -199,7 +201,7 @@ class VexoGlRenderer(
             particleSims.clear()
             barDelayHistory.clear()
         }
-        if (lastProjectId != scene.project.id) fboPool.releaseByPrefix("comp_")
+        if (lastProjectId != scene.project.id) { fboPool.releaseByPrefix("comp_"); videoFrames.close() }
         lastProjectId = scene.project.id
         lastPositionMs = position
         if (scene.trackMeta.artworkVersion != lastArtworkVersion || (artworkTexId == 0 && scene.trackMeta.artwork != null)) {
@@ -556,7 +558,7 @@ class VexoGlRenderer(
             ImageSourceType.COMPOSITION -> compTextures[cfg.sourceCompositionIndex] ?: return
             ImageSourceType.ALBUM_ART -> if (artworkTexId != 0) artworkTexId else ensureInternalTex("internalres:vignette80")
             ImageSourceType.INTERNAL -> ensureInternalTex(cfg.internalRes)
-            ImageSourceType.IMPORTED -> ensureUriTex(cfg.customUri)
+            ImageSourceType.IMPORTED -> if(cfg.videoEnabled) videoFrames.texture(cfg,scene.trackMeta.positionMs) else ensureUriTex(cfg.customUri)
             ImageSourceType.SOLID_COLOR -> ensureInternalTex("internalres:white")
         }
         if (texId == 0) return
@@ -595,7 +597,7 @@ class VexoGlRenderer(
         )
         GLES20.glUniform1f(shader.uniform("uOpacity"), opacity * cfg.opacityStrength.coerceIn(0f, 1f))
 
-        val (sourceW, sourceH) = if (cfg.sourceType == ImageSourceType.COMPOSITION) w to h else bitmapSizes[texId] ?: (w to h)
+        val (sourceW, sourceH) = if (cfg.sourceType == ImageSourceType.COMPOSITION) w to h else (if(cfg.videoEnabled && cfg.sourceType==ImageSourceType.IMPORTED) videoFrames.size(texId) else bitmapSizes[texId]) ?: (w to h)
         val imageRatio = sourceW.toFloat() / sourceH.coerceAtLeast(1)
         val shapeSquare = cfg.shape != ImageShape.NONE
         val frameW = if (shapeSquare) minOf(w,h).toFloat() else w.toFloat()

@@ -985,6 +985,15 @@ private fun PropertiesTab(
                     if (cfg.sourceType == ImageSourceType.COMPOSITION) {
                     StudioChipSelector("Source Composition", uiState.project.compositions.map { it.index }.filter { it != uiState.selectedCompositionIndex }, cfg.sourceCompositionIndex, { "Composition $it" }) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(sourceCompositionIndex = v)) } }
                     }
+                    if(cfg.sourceType == ImageSourceType.IMPORTED) {
+                        StudioToggleRow("Video source",cfg.videoEnabled){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.Image).copy(videoEnabled=v))}}
+                        if(cfg.videoEnabled){
+                            StudioToggleRow("Loop video",cfg.videoLoop){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.Image).copy(videoLoop=v))}}
+                            StudioSlider("Video speed",cfg.videoSpeed,.25f,4f,1f,"x",.05f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.Image).copy(videoSpeed=v))}},onCommit=::endDrag)
+                            StudioSlider("Video offset",cfg.videoOffsetMs/1000f,0f,60f,0f,"s",.1f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.Image).copy(videoOffsetMs=(v*1000).toLong()))}},onCommit=::endDrag)
+                            StudioChipSelector("Video sample FPS",listOf(6,12,15,24),cfg.videoSampleFps,{"$it FPS"}){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.Image).copy(videoSampleFps=v))}}
+                        }
+                    }
                     StudioChipSelector("Shape Mask", ImageShape.entries, cfg.shape, { it.label }) { sh ->
                         vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(shape = sh)) }
                     }
@@ -1464,8 +1473,8 @@ private fun AssetsTab(
             contentAlignment = Alignment.Center
         ) {
             Text(
-                if (selected?.type == LayerType.IMAGE) "IMPORT IMAGE TO SELECTED LAYER"
-                else "IMPORT IMAGE AS NEW LAYER",
+                if (selected?.type == LayerType.IMAGE) "IMPORT IMAGE / VIDEO TO SELECTED LAYER"
+                else "IMPORT IMAGE / VIDEO AS NEW LAYER",
                 style = MaterialTheme.typography.labelMedium,
                 color = palette.accentOn
             )

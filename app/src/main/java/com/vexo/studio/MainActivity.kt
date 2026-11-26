@@ -307,7 +307,7 @@ private fun VexoRootApp(vm: StudioViewModel) {
                     sceneSnapshot = sceneSnapshot,
                     settings = settings,
                     onPickAudio = { audioPicker.launch(arrayOf("audio/*")) },
-                    onPickImage = { imagePicker.launch(arrayOf("image/*")) },
+                    onPickImage = { imagePicker.launch(arrayOf("image/*","video/*")) },
                     onImportPreset = { presetImportPicker.launch(arrayOf("application/json", "application/octet-stream", "*/*")) },
                     onExportPreset = { presetExportPicker.launch("${uiState.project.name}.VEX") }
                 )

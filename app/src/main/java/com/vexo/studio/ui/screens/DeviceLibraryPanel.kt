@@ -49,7 +49,7 @@ fun DeviceLibraryPanel(vm: StudioViewModel, onBack: () -> Unit) {
         }
     }
     fun key(t:LibraryTrack)=when(mode) { "Album"->t.album; "Artist"->t.artist; "Folder"->t.folder; "Genre"->t.genre; else->t.title }.ifBlank{"Unknown"}
-    val filtered=tracks.filter { (group==null||if(mode=="Playlist") it.uri in playlists[group].orEmpty() else key(it)==group) && (it.title.contains(query,true)||it.artist.contains(query,true)||it.album.contains(query,true)) }
+    val filtered=tracks.filter { (group==null||if(mode=="Playlist") it.uri in playlists[group.orEmpty()].orEmpty() else key(it)==group) && (it.title.contains(query,true)||it.artist.contains(query,true)||it.album.contains(query,true)) }
     Column(Modifier.fillMaxSize().padding(12.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.SpaceBetween) {
             TextButton(onClick={if(group!=null)group=null else onBack()}){Text("BACK")}

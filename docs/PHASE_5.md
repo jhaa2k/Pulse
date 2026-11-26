@@ -1,0 +1,3 @@
+# Phase 5
+
+Session-scoped Android EQ (device-native band count, presets), bass boost, virtualizer and reverb where supported; persistent settings. Genre browsing and local saved playlists. Video source in Image layer uses bounded 6–24fps MediaMetadataRetriever frame sampling, maximum texture size 1280px, looping, speed and offset; preview and export use track time. This is not a continuous MediaCodec video decoder and may be slow, particularly on old devices. Video soundtrack is not mixed. True overlapping crossfade, gapless verification and full property/device testing remain. Audio effects affect playback only; offline export uses source PCM.

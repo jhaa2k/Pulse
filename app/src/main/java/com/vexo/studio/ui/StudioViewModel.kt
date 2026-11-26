@@ -535,6 +535,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun attachImageToSelectedLayer(uri: Uri) {
+        val video = app.contentResolver.getType(uri)?.startsWith("video/") == true
         runCatching {
             app.contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
@@ -545,20 +546,20 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                 it.copy(
                     config = cfg.copy(
                         sourceType = com.vexo.studio.model.ImageSourceType.IMPORTED,
-                        customUri = uri.toString()
+                        customUri = uri.toString(), videoEnabled = video
                     )
                 )
             }
-            _uiState.value = _uiState.value.copy(statusBanner = "Image applied to ${selected.common.name}")
+            _uiState.value = _uiState.value.copy(statusBanner = (if(video) "Video" else "Image") + " applied to ${selected.common.name}")
         } else {
             val p = _uiState.value.project
             val compIdx = _uiState.value.selectedCompositionIndex
             val newLayer = LayerNode(
                 type = LayerType.IMAGE,
-                common = LayerCommon(name = "Imported Image"),
+                common = LayerCommon(name = if(video) "Video Background" else "Imported Image"),
                 config = LayerConfig.Image(
                     sourceType = com.vexo.studio.model.ImageSourceType.IMPORTED,
-                    customUri = uri.toString()
+                    customUri = uri.toString(), videoEnabled = video, keepAspectRatioAndCropToFit = video
                 )
             )
             val updated = p.compositions.map {

@@ -417,7 +417,12 @@ sealed interface LayerConfig {
         val blurDivider: Int = 5,
         val blurredBorder: Boolean = false,
         val maskImage: String = "",
-        val maskMode: MaskMode = MaskMode.TRANSPARENCY
+        val maskMode: MaskMode = MaskMode.TRANSPARENCY,
+        val videoEnabled: Boolean = false,
+        val videoLoop: Boolean = true,
+        val videoSpeed: Float = 1f,
+        val videoOffsetMs: Long = 0L,
+        val videoSampleFps: Int = 12
     ) : LayerConfig
 
     @Serializable
