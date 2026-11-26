@@ -1,5 +1,6 @@
 package com.vexo.studio.engine.scene
 import com.vexo.studio.model.*
+import com.vexo.studio.engine.gl.SpectrumGeometry
 import kotlin.math.*
 
 /** Shared triangle geometry for live preview, export and sample gallery. */
@@ -90,8 +91,9 @@ object SpectrumStudioMesh {
             quad(a-off,a+off,b-off,b+off,col,end)
         }
         fun disk(p:P,r:Float,col:Int,hollow:Boolean=false){
-            for(j in 0 until 12){
-                val a=j*PI.toFloat()/6f;val b=(j+1)*PI.toFloat()/6f
+            val n=SpectrumGeometry.quarterSegments(r)*4
+            for(j in 0 until n){
+                val a=j*2f*PI.toFloat()/n;val b=(j+1)*2f*PI.toFloat()/n
                 val u=P(cos(a),sin(a));val v=P(cos(b),sin(b))
                 if(hollow)quad(p+u*(r*.62f),p+v*(r*.62f),p+u*r,p+v*r,col)else tri(p,p+u*r,p+v*r,col)
             }
@@ -206,26 +208,17 @@ object SpectrumStudioMesh {
             }
             fun dot(at:P,r:Float,hollow:Boolean=false){
                 if(styled&&!hollow){
-                    polygon(s,List(12){j->val a=j*PI.toFloat()/6f;at+P(cos(a),sin(a))*r})
+                    val n=SpectrumGeometry.quarterSegments(r)*4
+                    polygon(s,List(n){j->val a=j*2f*PI.toFloat()/n;at+P(cos(a),sin(a))*r})
                 } else disk(at,r,c0,hollow)
             }
             fun capsule(){
                 val low=minOf(base,tip);val high=maxOf(base,tip)
                 val r=minOf(q,(high-low)*.5f)*c.roundness.coerceIn(0f,1f)
                 if(r<=.001f){rect(base,tip);return}
-                if(!styled){val dir=if(tip>=base)1f else -1f;val a=base+r*dir;val b=tip-r*dir;rect(a,b);disk(s.p(0f,a),r,c0);disk(s.p(0f,b),r,c0);return}
-                // Rounded rectangle contour, with ordered corner arcs.
-                val pts=ArrayList<P>(24)
-                val centers=listOf((q-r) to (low+r),(q-r) to (high-r),(-q+r) to (high-r),(-q+r) to (low+r))
-                for(k in 0..3)for(j in 0..5){
-                    val a=(-90f+k*90f+j*18f)*PI.toFloat()/180f
-                    val point=s.p(centers[k].first+r*cos(a),centers[k].second+r*sin(a))
-                    if(pts.lastOrNull()!=point)pts.add(point)
-                }
-                // Remove zero length edges when the radius reaches half the width/height.
-                val clean=pts.filterIndexed{i,p->i==0||abs(p.x-pts[i-1].x)+abs(p.y-pts[i-1].y)>.0001f}.toMutableList()
-                if(clean.size>2 && abs(clean.first().x-clean.last().x)+abs(clean.first().y-clean.last().y)<.0001f)clean.removeAt(clean.lastIndex)
-                polygon(s,clean)
+                val center=(low+high)*.5f
+                val contour=SpectrumGeometry.roundedContour(q,(high-low)*.5f,r).map{(x,y)->s.p(x,center+y)}
+                polygon(s,contour)
             }
             fun localLine(x:Float,y:Float,xx:Float,yy:Float){line(s.p(x,y),s.p(xx,yy),stroke,c0)}
             when(style){

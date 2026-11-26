@@ -56,6 +56,7 @@ fun VexoPreviewSurface(
     val lifecycleOwner = LocalLifecycleOwner.current
     val gestureCallback = rememberUpdatedState(onTransformGesture)
     val lastRequest = remember { longArrayOf(0L) }
+    var resumed by remember(lifecycleOwner){mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))}
 
     val renderer = remember { VexoGlRenderer(context, isExportRenderer = false) }
     var diagnostics by remember{mutableStateOf(PreviewDiagnostics())}
@@ -66,6 +67,7 @@ fun VexoPreviewSurface(
     val glView = remember {
         GLSurfaceView(context).apply {
             setEGLContextClientVersion(2)
+            setZOrderOnTop(false)
             holder.setFormat(android.graphics.PixelFormat.OPAQUE)
             setEGLConfigChooser(8, 8, 8, 8, 0, 0)
             preserveEGLContextOnPause = true
@@ -95,7 +97,8 @@ fun VexoPreviewSurface(
     // Publish the newest snapshot immediately; request frames at the selected cadence.
     LaunchedEffect(sceneSnapshot){if(sceneSnapshot!=null)renderer.submitSnapshot(sceneSnapshot)}
     val currentSnapshot by rememberUpdatedState(sceneSnapshot)
-    LaunchedEffect(targetFps,continuousRendering,glView){
+    LaunchedEffect(targetFps,continuousRendering,glView,resumed){
+        if(!resumed)return@LaunchedEffect
         val interval=(1000L/targetFps.coerceIn(15,60)).coerceAtLeast(1)
         var last:RenderSceneSnapshot?=null
         while(true){
@@ -113,8 +116,8 @@ fun VexoPreviewSurface(
         }
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_RESUME -> glView.onResume()
-                Lifecycle.Event.ON_PAUSE -> glView.onPause()
+                Lifecycle.Event.ON_RESUME -> {glView.onResume();resumed=true;glView.requestRender()}
+                Lifecycle.Event.ON_PAUSE -> {resumed=false;glView.onPause()}
                 else -> Unit
             }
         }

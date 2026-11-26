@@ -102,6 +102,9 @@ import com.vexo.studio.ui.theme.VexoTheme
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // The launch drawable must not remain behind SurfaceView holes in task snapshots.
+        window.setBackgroundDrawableResource(android.R.color.black)
+        window.decorView.setBackgroundColor(android.graphics.Color.BLACK)
         setContent {
             val vm: StudioViewModel = viewModel()
             val settings by vm.appSettings.collectAsState()

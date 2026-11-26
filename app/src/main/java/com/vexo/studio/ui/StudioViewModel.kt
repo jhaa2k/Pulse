@@ -182,7 +182,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun navigateTo(dest: NavDestination) {
-        _uiState.value = _uiState.value.copy(navDestination = dest)
+        _uiState.value = _uiState.value.copy(navDestination = dest,isFullscreenPreview = dest == NavDestination.STUDIO && _uiState.value.isFullscreenPreview)
     }
 
     fun selectStudioTab(tab: StudioTab) {
@@ -566,6 +566,9 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     fun moveLayer(layerId: String, direction: Int) {
         val p = _uiState.value.project
         val compIdx = _uiState.value.selectedCompositionIndex
+        val comp=p.compositions.firstOrNull{it.index==compIdx}?:return
+        val index=comp.layers.indexOfFirst{it.common.id==layerId}
+        if(index !in comp.layers.indices || comp.layers[index].common.locked || index+direction !in comp.layers.indices || direction !in listOf(-1,1))return
         val updatedComps = p.compositions.map { comp ->
             if (comp.index != compIdx) comp else {
                 val list = comp.layers.toMutableList()

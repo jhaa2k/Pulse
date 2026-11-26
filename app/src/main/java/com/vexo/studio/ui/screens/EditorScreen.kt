@@ -69,6 +69,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import com.vexo.studio.ui.theme.StudioText as Text
@@ -149,6 +150,9 @@ fun EditorScreen(
     val previewShare = settings.previewShare.coerceIn(0.30f, 0.65f)
 
     if (uiState.isFullscreenPreview) {
+        val aspect=uiState.project.canvas.aspectRatio
+        var landscapePreview by rememberSaveable(aspect){mutableStateOf(aspect.widthRatio>aspect.heightRatio)}
+        FullscreenPreviewOrientation(landscapePreview,vm::toggleFullscreenPreview)
         Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
             VexoPreviewSurface(
                 aspectRatio = uiState.project.canvas.aspectRatio,
@@ -164,7 +168,7 @@ fun EditorScreen(
             Row(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .padding(12.dp)
+                    .padding(6.dp)
                     .background(palette.panel.copy(alpha = 0.85f))
                     .border(1.dp, palette.border, palette.shape),
                 verticalAlignment = Alignment.CenterVertically
@@ -178,6 +182,9 @@ fun EditorScreen(
                         "Safe area",
                         tint = if (uiState.project.canvas.showSafeAreaGuides) palette.accent else palette.textSecondary
                     )
+                }
+                IconButton(onClick = {landscapePreview=!landscapePreview}) {
+                    Icon(Icons.Default.Refresh, "Rotate fullscreen", tint = palette.textPrimary)
                 }
                 IconButton(onClick = vm::toggleFullscreenPreview) {
                     Icon(Icons.Default.FullscreenExit, "Exit fullscreen", tint = palette.accent)
@@ -454,7 +461,7 @@ private fun LayersTab(
                 actions.forEach{action->TextButton(enabled=validIds.isNotEmpty(),onClick={if(action==com.vexo.studio.engine.scene.BatchLayerAction.DELETE)confirmBatchDelete=true else vm.batchEditLayers(validIds,action)}){Text(action.label)}}
             }
         }
-        if(searchOpen)OutlinedTextField(layerQuery,{layerQuery=it},label={Text("Search name, type, group")},singleLine=true,modifier=Modifier.fillMaxWidth().padding(horizontal=6.dp))
+        if(searchOpen)CompactStudioSearch(layerQuery,{layerQuery=it.take(80)},"Search layers",Modifier.fillMaxWidth().padding(horizontal=6.dp))
         var canvasOpen by remember{mutableStateOf(false)}
         if(activeComp.index==0)ExpandableSectionHeader("Canvas background",canvasOpen,{canvasOpen=!canvasOpen}){StudioColorPickerRow("Background",uiState.project.canvas.backgroundColorArgb,vm::setCanvasColor)}
         LazyColumn(
@@ -506,13 +513,18 @@ private fun LayersTab(
                             maxLines = 1
                         )
                     }
+                    val layerIndex=activeComp.layers.indexOfFirst{it.common.id==layer.common.id}
+                    IconButton(onClick={vm.moveLayer(layer.common.id,-1)},enabled=layerIndex>0&&!layer.common.locked,modifier=Modifier.size(36.dp)){
+                        Icon(Icons.Default.ArrowUpward,"Move layer up",tint=if(layerIndex>0&&!layer.common.locked)palette.textPrimary else palette.border,modifier=Modifier.size(18.dp))
+                    }
+                    IconButton(onClick={vm.moveLayer(layer.common.id,1)},enabled=layerIndex in 0 until activeComp.layers.lastIndex&&!layer.common.locked,modifier=Modifier.size(36.dp)){
+                        Icon(Icons.Default.ArrowDownward,"Move layer down",tint=if(layerIndex in 0 until activeComp.layers.lastIndex&&!layer.common.locked)palette.textPrimary else palette.border,modifier=Modifier.size(18.dp))
+                    }
                     var menu by remember { mutableStateOf(false) }
                     Box {
                         IconButton(onClick = { menu = true }, modifier = Modifier.size(40.dp)) { Icon(Icons.Default.MoreVert, "Layer actions", tint = palette.textSecondary) }
                         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                             DropdownMenuItem(text = { Text(if(layer.common.locked) "Unlock" else "Lock") }, onClick = { menu = false; vm.updateLayer(layer.common.id) { it.copy(common = it.common.copy(locked = !it.common.locked)) } })
-                            DropdownMenuItem(text = { Text("Move up") }, onClick = { menu = false; vm.moveLayer(layer.common.id, -1) })
-                            DropdownMenuItem(text = { Text("Move down") }, onClick = { menu = false; vm.moveLayer(layer.common.id, 1) })
                             DropdownMenuItem(text = { Text("Rename") }, onClick = { menu = false; renameLayerTarget = layer })
                             DropdownMenuItem(text = { Text("Duplicate") }, onClick = { menu = false; vm.duplicateLayer(layer.common.id) })
                             DropdownMenuItem(text={Text("Copy layer")},onClick={menu=false;vm.copyLayer(layer.common.id)})
@@ -569,10 +581,6 @@ private fun LayersTab(
                     }
                     Text("CREATIVE EFFECTS",style=MaterialTheme.typography.labelMedium,color=palette.accent)
                     Box(Modifier.fillMaxWidth().background(palette.panelElevated,palette.shape).border(1.dp,palette.border,palette.shape).clickable{vm.addGlowLayer();showAddLayerDialog=false}.padding(12.dp)){Text("GLOW • SELECTED LAYER",style=MaterialTheme.typography.labelMedium,color=palette.textPrimary)}
-                    Text("CREATIVE RECIPES",style=MaterialTheme.typography.labelMedium,color=palette.accent)
-                    com.vexo.studio.model.CreativeRecipes.names.forEach{name->
-                        Box(Modifier.fillMaxWidth().background(palette.panelElevated).border(1.dp,palette.border).clickable{vm.addCreativeLayer(name);showAddLayerDialog=false}.padding(12.dp)){Text(name.uppercase(),style=MaterialTheme.typography.labelMedium)}
-                    }
                 }
             },
             confirmButton = {
@@ -677,8 +685,7 @@ private fun PropertiesTab(
         }
 
         Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
-            OutlinedTextField(propertyQuery,{propertyQuery=it.take(80)},label={Text("Find property / section")},singleLine=true,modifier=Modifier.weight(1f))
-            if(propertyQuery.isNotBlank())TextButton(onClick={propertyQuery=""}){Text("CLEAR")}
+            CompactStudioSearch(propertyQuery,{propertyQuery=it.take(80)},"Find property / section",Modifier.weight(1f))
         }
         if(propertyQuery.isNotBlank())Text("Matching sections only. Open one section at a time.",style=MaterialTheme.typography.labelSmall,color=palette.textSecondary)
         if (editTarget == "PROVIDER") {
@@ -1769,7 +1776,7 @@ private fun PresetsTab(
         val builtIns = remember { vm.availableTemplates() }
         var query by rememberSaveable { mutableStateOf("") }
         Text("BUILT-IN PRESETS · ${builtIns.size}", style = MaterialTheme.typography.labelSmall, color = palette.textSecondary)
-        OutlinedTextField(value = query, onValueChange = { query = it }, label = { Text("Find a preset") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        CompactStudioSearch(query,{query=it.take(80)},"Find a preset",Modifier.fillMaxWidth())
         builtIns.filter { it.name.contains(query, ignoreCase = true) }.forEach { tpl ->
             Row(
                 modifier = Modifier

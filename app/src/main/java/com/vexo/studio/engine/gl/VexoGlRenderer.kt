@@ -425,7 +425,7 @@ class VexoGlRenderer(
         val minDim = minOf(w, h).toFloat()
 
         // Ensure vertex scratch capacity (each bar = 6 vertices = 12 floats pos + 24 floats color)
-        val vertsPerBar = (if (cfg.segment1 == BarsSegmentType.ROUND_BARS) 48 else 6)*(if(peaks!=null)2 else 1)
+        val vertsPerBar = (if (cfg.segment1 == BarsSegmentType.ROUND_BARS) SpectrumGeometry.MAX_ROUNDED_VERTICES else 6)*(if(peaks!=null)2 else 1)
         val neededVerts = count * vertsPerBar * 2
         if (vertexScratch.size < neededVerts || colorScratch.size < count * vertsPerBar * 4) {
             vertexScratch = FloatArray(neededVerts)
