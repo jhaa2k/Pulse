@@ -33,7 +33,7 @@ internal fun LayerTimelinePanel(vm:StudioViewModel,ui:StudioUiState,comp:Composi
     val playback by vm.playbackState.collectAsState()
     var mode by remember{mutableStateOf(TimelineDragMode.MOVE)}
     val duration=playback.durationMs
-    val total=maxOf(1000L,duration,comp.layers.maxOfOrNull{maxOf(it.common.timing.startMs+100L,it.common.timing.endMs)}?:0L)
+    val total=maxOf(if(duration>0)1000L else 10000L,duration,comp.layers.maxOfOrNull{maxOf(it.common.timing.startMs+100L,it.common.timing.endMs)}?:0L)
     Text("LAYER TIMELINE",style=MaterialTheme.typography.labelMedium,color=palette.accent,modifier=Modifier.padding(6.dp))
     StudioChipSelector("Drag mode",TimelineDragMode.entries,mode,{it.name.replace('_',' ')}){mode=it}
     Text(if(duration<=0)"Import audio to enable timeline seeking." else "Tap ruler to seek. Drag a layer using the selected mode.",style=MaterialTheme.typography.labelSmall,modifier=Modifier.padding(horizontal=6.dp))
@@ -46,8 +46,9 @@ internal fun LayerTimelinePanel(vm:StudioViewModel,ui:StudioUiState,comp:Composi
             val x=(playback.positionMs.toFloat()/total).coerceIn(0f,1f)*size.width
             drawLine(palette.accent,Offset(x,0f),Offset(x,size.height),2.dp.toPx())
         }
-        Text("%d:%02d".format(total/60000,total/1000%60),style=MaterialTheme.typography.labelSmall,modifier=Modifier.padding(start=4.dp))
+
     }
+    Text("Timeline span: "+"%d:%02d".format(total/60000,total/1000%60),style=MaterialTheme.typography.labelSmall,modifier=Modifier.padding(horizontal=6.dp))
     LazyColumn(Modifier.fillMaxWidth().weight(1f).padding(horizontal=6.dp)){
         items(comp.layers,key={it.common.id}){layer->
             val t=layer.common.timing

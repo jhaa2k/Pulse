@@ -74,6 +74,9 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import kotlinx.coroutines.flow.StateFlow
 import androidx.compose.runtime.getValue
@@ -649,6 +652,7 @@ private fun PropertiesTab(
     val palette = LocalVexoPalette.current
     var editTarget by rememberSaveable(uiState.selectedLayerId) { mutableStateOf("LAYER") } // LAYER or PROVIDER
     val expandedSections = remember(uiState.project.id, editTarget) { mutableStateMapOf<String, Boolean>() }
+    var propertyQuery by rememberSaveable(uiState.project.id,editTarget){mutableStateOf("")}
     var undoAnchor by remember { mutableStateOf<VexoProject?>(null) }
 
     fun beginDrag() {
@@ -660,6 +664,9 @@ private fun PropertiesTab(
         undoAnchor = null
     }
 
+    val latestAnchor by rememberUpdatedState(undoAnchor)
+    DisposableEffect(uiState.project.id,uiState.selectedLayerId,editTarget){onDispose{latestAnchor?.let{vm.commitUndoSnapshot(it)}}}
+    CompositionLocalProvider(LocalInspectorQuery provides propertyQuery){
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -688,6 +695,11 @@ private fun PropertiesTab(
             }
         }
 
+        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
+            OutlinedTextField(propertyQuery,{propertyQuery=it.take(80)},label={Text("Find property / section")},singleLine=true,modifier=Modifier.weight(1f))
+            if(propertyQuery.isNotBlank())TextButton(onClick={propertyQuery=""}){Text("CLEAR")}
+        }
+        if(propertyQuery.isNotBlank())Text("Matching sections are expanded automatically.",style=MaterialTheme.typography.labelSmall,color=palette.textSecondary)
         if (editTarget == "PROVIDER") {
             AudioProviderEditorSection(
                 vm = vm,
@@ -1405,6 +1417,7 @@ private fun PropertiesTab(
         }
         Spacer(Modifier.height(16.dp))
     }
+    }
 }
 
 @UnstableApi
@@ -1560,6 +1573,8 @@ internal fun toggleAccordion(sections: MutableMap<String, Boolean>, key: String)
     sections[key] = !(sections[key] ?: (key == "transform"))
 }
 
+private val LocalInspectorQuery=staticCompositionLocalOf{ "" }
+
 @Composable
 internal fun ExpandableSectionHeader(
     title: String,
@@ -1567,6 +1582,9 @@ internal fun ExpandableSectionHeader(
     onToggle: () -> Unit,
     content: @Composable () -> Unit
 ) {
+    val query=LocalInspectorQuery.current
+    if(query.isNotBlank()&&!InspectorSearch.matches(title,query))return
+    val opened=expanded||query.isNotBlank()
     val palette = LocalVexoPalette.current
     Column(
         modifier = Modifier
@@ -1577,15 +1595,15 @@ internal fun ExpandableSectionHeader(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable(onClick = onToggle)
+                .clickable(enabled=query.isBlank(),onClick = onToggle)
                 .padding(horizontal = 10.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(title, style = MaterialTheme.typography.bodyMedium, color = if (expanded) palette.accent else palette.textPrimary, modifier = Modifier.weight(1f))
-            Icon(if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, contentDescription = if (expanded) "Collapse" else "Expand", tint = palette.textSecondary, modifier = Modifier.size(20.dp))
+            Text(title, style = MaterialTheme.typography.bodyMedium, color = if (opened) palette.accent else palette.textPrimary, modifier = Modifier.weight(1f))
+            Icon(if (opened) Icons.Default.ExpandLess else Icons.Default.ExpandMore, contentDescription = if (opened) "Collapse" else "Expand", tint = palette.textSecondary, modifier = Modifier.size(20.dp))
         }
-        if (expanded) {
+        if (opened) {
             Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
                 content()
             }

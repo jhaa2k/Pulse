@@ -492,6 +492,13 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
             comp.copy(layers = comp.layers.map { l -> if (l.common.id == layerId) transform(l) else l })
         }
         val next = p.copy(compositions = updatedComps)
+        if(recordUndo){
+            val old=p.compositions.flatMap{it.layers}.firstOrNull{it.common.id==layerId}
+            val changed=next.compositions.flatMap{it.layers}.firstOrNull{it.common.id==layerId}
+            if(old!=null&&changed!=null && (com.vexo.studio.engine.scene.SceneGraph.referencesOf(old.config)!=com.vexo.studio.engine.scene.SceneGraph.referencesOf(changed.config)||old.common.visible!=changed.common.visible)){
+                if(com.vexo.studio.engine.scene.SceneGraph.resolve(next).hasCycle&&!com.vexo.studio.engine.scene.SceneGraph.resolve(p).hasCycle){_uiState.value=_uiState.value.copy(statusBanner="Circular composition reference blocked");return}
+            }
+        }
         if (recordUndo) {
             commitProjectChange(next)
         } else {
