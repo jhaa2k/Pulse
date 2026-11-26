@@ -41,15 +41,18 @@ fun DeviceLibraryPanel(vm: StudioViewModel, onBack: () -> Unit) {
     var playlists by remember{mutableStateOf(store.read())}
     var saveDialog by remember{mutableStateOf(false)}
     var playlistName by remember{mutableStateOf("")}
+    var renameDialog by remember{mutableStateOf(false)}
+    var deleteDialog by remember{mutableStateOf(false)}
     LaunchedEffect(granted) {
         if(granted) {
             loading=true
-            runCatching { MediaLibrary(context).tracks() }.onSuccess { tracks=it }.onFailure { error=it.message }
+            runCatching { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO){MediaLibrary(context).tracks()} }.onSuccess { tracks=it }.onFailure { error=it.message }
             loading=false
         }
     }
     fun key(t:LibraryTrack)=when(mode) { "Album"->t.album; "Artist"->t.artist; "Folder"->t.folder; "Genre"->t.genre; else->t.title }.ifBlank{"Unknown"}
-    val filtered=tracks.filter { (group==null||if(mode=="Playlist") it.uri in playlists[group.orEmpty()].orEmpty() else key(it)==group) && (it.title.contains(query,true)||it.artist.contains(query,true)||it.album.contains(query,true)) }
+    val ordered=if(mode=="Playlist"&&group!=null){val byUri=tracks.associateBy{it.uri};playlists[group.orEmpty()].orEmpty().mapNotNull{byUri[it]}}else tracks
+    val filtered=ordered.filter { (group==null||if(mode=="Playlist") it.uri in playlists[group.orEmpty()].orEmpty() else key(it)==group) && (it.title.contains(query,true)||it.artist.contains(query,true)||it.album.contains(query,true)) }
     Column(Modifier.fillMaxSize().padding(12.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.SpaceBetween) {
             TextButton(onClick={if(group!=null)group=null else onBack()}){Text("BACK")}
@@ -63,7 +66,11 @@ fun DeviceLibraryPanel(vm: StudioViewModel, onBack: () -> Unit) {
         OutlinedTextField(query,{query=it},label={Text("Search music")},singleLine=true,modifier=Modifier.fillMaxWidth())
         group?.let{Text(it,style=MaterialTheme.typography.titleSmall)}
         if(filtered.isNotEmpty() && (mode!="Playlist" || group!=null)) TextButton(onClick={playlistName="";saveDialog=true}){Text("SAVE SHOWN TRACKS AS PLAYLIST")}
-        if(mode=="Playlist"&&group!=null) TextButton(onClick={store.delete(group!!);playlists=store.read();group=null}){Text("DELETE PLAYLIST")}
+        if(mode=="Playlist"&&group!=null){
+            Row{TextButton(onClick={playlistName=group.orEmpty();renameDialog=true}){Text("RENAME")};TextButton(onClick={deleteDialog=true}){Text("DELETE PLAYLIST")}}
+        }
+        if(renameDialog)AlertDialog(onDismissRequest={renameDialog=false},title={Text("Rename playlist")},text={OutlinedTextField(playlistName,{playlistName=it.take(80)},label={Text("New name")})},confirmButton={TextButton(enabled=playlistName.isNotBlank(),onClick={if(store.rename(group.orEmpty(),playlistName)){group=playlistName.trim();playlists=store.read();renameDialog=false}else error="Playlist name already exists"}){Text("SAVE")}},dismissButton={TextButton(onClick={renameDialog=false}){Text("CANCEL")}})
+        if(deleteDialog)AlertDialog(onDismissRequest={deleteDialog=false},title={Text("Delete playlist?")},text={Text("Audio files remain on your device.")},confirmButton={TextButton(onClick={store.delete(group.orEmpty());playlists=store.read();group=null;deleteDialog=false}){Text("DELETE")}},dismissButton={TextButton(onClick={deleteDialog=false}){Text("CANCEL")}})
         if(saveDialog) AlertDialog(onDismissRequest={saveDialog=false},title={Text("Save playlist")},text={OutlinedTextField(playlistName,{playlistName=it},label={Text("Playlist name")})},confirmButton={TextButton(enabled=playlistName.isNotBlank(),onClick={store.save(playlistName,filtered.map{it.uri});playlists=store.read();saveDialog=false}){Text("SAVE")}},dismissButton={TextButton(onClick={saveDialog=false}){Text("CANCEL")}})
         if(mode=="Playlist"&&group==null){
             LazyColumn(Modifier.weight(1f)){items(playlists.keys.sorted()){name->ListItem(headlineContent={Text(name)},supportingContent={Text(playlists[name].orEmpty().size.toString()+" tracks")},modifier=Modifier.clickable{group=name})}}

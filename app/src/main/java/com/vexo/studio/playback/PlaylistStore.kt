@@ -20,6 +20,11 @@ class PlaylistStore(context: Context) {
         write(map)
     }
     fun delete(name:String){write(read().filterKeys{it!=name})}
+    fun rename(old:String,new:String):Boolean{
+        val clean=new.trim().take(80);val map=read().toMutableMap()
+        if(clean.isBlank()||old !in map||(clean!=old&&clean in map))return false
+        val tracks=map.remove(old)?:return false;map[clean]=tracks;write(map);return true
+    }
     private fun write(map:Map<String,List<String>>){
         val j=JSONObject();map.forEach{(k,v)->j.put(k,JSONArray(v))}
         prefs.edit().putString("lists",j.toString()).apply()

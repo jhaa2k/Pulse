@@ -86,6 +86,11 @@ class VexoPlaybackController(
     private var artworkJob:Job?=null
     private var importJob:Job?=null
     private var importGeneration=0L
+    private val queueStore=ProjectQueueStore(context)
+    private var queueProjectId:String?=null
+    private var lastSavedQueue:List<AudioTrackItem>?=null
+    private var lastQueueSave=0L
+    private var restoringQueue=false
     private val _sleepRemaining=MutableStateFlow(0L)
     val sleepRemaining=_sleepRemaining.asStateFlow()
     private var sleepDeadline=0L
@@ -102,6 +107,7 @@ class VexoPlaybackController(
                 _sleepRemaining.value=left
                 if(left==0L){sleepDeadline=0L;player.pause()}
             }
+            if(now-lastQueueSave>=5000L){lastQueueSave=now;saveQueue()}
             val st=_state.value
             val duration=player.duration
             val remaining=if(duration>0)duration-player.currentPosition else Long.MAX_VALUE
@@ -162,6 +168,7 @@ class VexoPlaybackController(
 
                     override fun onIsPlayingChanged(isPlaying: Boolean) {
                         _state.value = _state.value.copy(isPlaying = isPlaying)
+                        if(!isPlaying)saveQueue()
                     }
 
                     override fun onPlaybackStateChanged(playbackState: Int) {
@@ -174,6 +181,7 @@ class VexoPlaybackController(
                         ringBuffer.resetGeneration()
                         fadeInStartedMs=if(reason==Player.MEDIA_ITEM_TRANSITION_REASON_AUTO)android.os.SystemClock.elapsedRealtime() else 0L
                         updateCurrentTrackMetadata(idx)
+                        saveQueue()
                     }
 
                     override fun onPositionDiscontinuity(
@@ -212,9 +220,23 @@ class VexoPlaybackController(
         _state.value=_state.value.copy(importTotal=0,importCompleted=0)
     }
 
-    fun loadProjectAudio(uri: String?) {
+    private fun saveQueue(){
+        val id=queueProjectId?:return
+        if(restoringQueue||_state.value.importTotal>0)return
+        val q=_state.value.queue
+        val index=player.currentMediaItemIndex
+        runCatching{queueStore.save(id,q,q.getOrNull(index)?.id,player.currentPosition,q!==lastSavedQueue)}.onSuccess{lastSavedQueue=q}
+    }
+    fun forgetProjectQueue(id:String){
+        if(queueProjectId==id){queueProjectId=null;lastSavedQueue=null;cancelAudioImport()}
+        runCatching{queueStore.delete(id)}
+    }
+    fun loadProjectAudio(projectId:String,uri: String?) {
+        if(queueProjectId==projectId)return
+        saveQueue()
         cancelAudioImport()
-        if (uri != null && currentAudioUri() == uri) return
+        restoringQueue=true
+        queueProjectId=projectId;lastSavedQueue=null
         artworkJob?.cancel();artworkJob=null
         player.pause()
         player.clearMediaItems()
@@ -222,16 +244,27 @@ class VexoPlaybackController(
         playbackPositionUs = 0L
         _state.value = _state.value.copy(queue = emptyList(), currentIndex = -1, positionMs = 0L, durationMs = 0L, isPlaying = false,
             trackMeta = TrackMetadataSnapshot(artworkVersion = ++artworkCounter), errorMessage = null)
-        if (!uri.isNullOrBlank()) {
-            importTracks(listOf(Uri.parse(uri)), playFirstImmediately = false)
+        val restored=queueStore.read(projectId)
+        if(restored!=null){
+            val tracks=restored.tracks
+            _state.value=_state.value.copy(queue=tracks,currentIndex=restored.index)
+            if(tracks.isNotEmpty()){
+                player.setMediaItems(tracks.map(::mediaItem),restored.index,restored.positionMs)
+                player.prepare();updateCurrentTrackMetadata(restored.index)
+            }
+            lastSavedQueue=tracks
         }
+        restoringQueue=false
+        if(restored==null&&!uri.isNullOrBlank())importTracks(listOf(Uri.parse(uri)),playFirstImmediately=false)
     }
 
     fun importTracks(uris:List<Uri>,playFirstImmediately:Boolean=true,onImported:(AudioTrackItem)->Unit={}){
         if(uris.isEmpty())return
         cancelAudioImport()
         val generation=importGeneration
-        val input=uris.take(5000)
+        val room=(5000-_state.value.queue.size).coerceAtLeast(0)
+        if(room==0){_state.value=_state.value.copy(errorMessage="Queue is full (5000 tracks)");return}
+        val input=uris.take(room)
         _state.value=_state.value.copy(importTotal=input.size,importCompleted=0,errorMessage=null)
         importJob=artworkScope.launch{
             try{
@@ -253,7 +286,7 @@ class VexoPlaybackController(
                 if(uris.size>input.size)_state.value=_state.value.copy(errorMessage="Import limited to 5000 tracks per batch")
             }catch(cancelled:CancellationException){throw cancelled}
             catch(err:Exception){if(generation==importGeneration)_state.value=_state.value.copy(errorMessage="Audio import failed: "+err.javaClass.simpleName)}
-            finally{if(generation==importGeneration){_state.value=_state.value.copy(importTotal=0,importCompleted=0);importJob=null}}
+            finally{if(generation==importGeneration){_state.value=_state.value.copy(importTotal=0,importCompleted=0);importJob=null;saveQueue()}}
         }
     }
 
@@ -263,19 +296,7 @@ class VexoPlaybackController(
         val updatedQueue = existing + newItems
         val startIndex = if (existing.isEmpty() || playFirstImmediately) existing.size else _state.value.currentIndex
 
-        val mediaItems = updatedQueue.map { item ->
-            MediaItem.Builder()
-                .setUri(Uri.parse(item.uri))
-                .setMediaId(item.id)
-                .setMediaMetadata(
-                    MediaMetadata.Builder()
-                        .setTitle(item.title)
-                        .setArtist(item.artist)
-                        .setAlbumTitle(item.album)
-                        .build()
-                )
-                .build()
-        }
+        val mediaItems = updatedQueue.map(::mediaItem)
 
         _state.value = _state.value.copy(
             queue = updatedQueue,
@@ -296,6 +317,22 @@ class VexoPlaybackController(
             player.prepare()
             updateCurrentTrackMetadata(0)
         }
+    }
+
+    private fun mediaItem(item:AudioTrackItem)=MediaItem.Builder().setUri(Uri.parse(item.uri)).setMediaId(item.id).setMediaMetadata(MediaMetadata.Builder().setTitle(item.title).setArtist(item.artist).setAlbumTitle(item.album).build()).build()
+
+    fun moveQueueItem(from:Int,to:Int){
+        val q=_state.value.queue.toMutableList()
+        if(from !in q.indices||to !in q.indices||from==to)return
+        q.add(to,q.removeAt(from))
+        restoringQueue=true
+        try{_state.value=_state.value.copy(queue=q);player.moveMediaItem(from,to);_state.value=_state.value.copy(currentIndex=player.currentMediaItemIndex)}finally{restoringQueue=false}
+        saveQueue()
+    }
+    fun clearQueue(){
+        cancelAudioImport();restoringQueue=true
+        try{player.pause();player.clearMediaItems();ringBuffer.resetGeneration();_state.value=_state.value.copy(queue=emptyList(),currentIndex=-1,positionMs=0,durationMs=0,trackMeta=TrackMetadataSnapshot(artworkVersion=++artworkCounter))}finally{restoringQueue=false}
+        saveQueue()
     }
 
     fun playIndex(index: Int) {
@@ -336,6 +373,7 @@ class VexoPlaybackController(
         playbackPositionUs = target * 1000L
         player.seekTo(target)
         _state.value = _state.value.copy(positionMs = target)
+        saveQueue()
     }
 
     fun restartTrack() = seekTo(0L)
@@ -404,6 +442,7 @@ class VexoPlaybackController(
         val newIdx = player.currentMediaItemIndex.coerceIn(-1, q.lastIndex)
         _state.value = _state.value.copy(queue = q, currentIndex = newIdx)
         updateCurrentTrackMetadata(newIdx)
+        saveQueue()
     }
 
     fun clearError() {
@@ -432,6 +471,7 @@ class VexoPlaybackController(
 
     fun release() {
         transitionHandler.removeCallbacks(transitionTick)
+        saveQueue()
         cancelAudioImport()
         artworkScope.cancel()
         sessionVisualizer.close()

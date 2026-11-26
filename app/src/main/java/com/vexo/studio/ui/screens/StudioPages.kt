@@ -222,6 +222,12 @@ fun AudioLibraryScreen(
             TextButton(onClick={showEffects=true}) { Text("EQ / FX") }
             TextButton(onClick=vm::applyArtworkPalette) { Text("AUTO PALETTE") }
         }
+        var clearQueue by remember{mutableStateOf(false)}
+        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){
+            Text("Queue is saved per project",style=MaterialTheme.typography.labelSmall,color=palette.textSecondary)
+            TextButton(enabled=playback.queue.isNotEmpty(),onClick={clearQueue=true}){Text("CLEAR QUEUE")}
+        }
+        if(clearQueue)AlertDialog(onDismissRequest={clearQueue=false},title={Text("CLEAR AUDIO QUEUE?")},text={Text("Removes tracks from this project, not from your device.")},confirmButton={TextButton(onClick={vm.clearProjectAudioQueue();clearQueue=false}){Text("CLEAR")}},dismissButton={TextButton(onClick={clearQueue=false}){Text("CANCEL")}})
         val sleep by vm.sleepRemaining.collectAsState()
         StudioChipSelector("Sleep timer" + if(sleep>0) " · "+formatDuration(sleep*1000) else "", listOf(0,15,30,60,120), if(sleep==0L) 0 else ((sleep+59)/60).toInt(), {if(it==0) "Off" else "$it min"}) { vm.setSleepTimer(it) }
         if(playback.importTotal>0){

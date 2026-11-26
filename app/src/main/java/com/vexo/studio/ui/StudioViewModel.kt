@@ -111,7 +111,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
             selectedLayerId = firstComp.layers.firstOrNull()?.common?.id,
             projects = projectRepo.listProjects()
         )
-        playbackController.loadProjectAudio(recovered.audioUri)
+        playbackController.loadProjectAudio(recovered.id,recovered.audioUri)
         viewModelScope.launch(Dispatchers.IO) {
             for(signal in pendingSaves){
                 for(project in latestSave.values.toList()){
@@ -701,7 +701,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
             navDestination = NavDestination.STUDIO,
             statusBanner = "Loaded ${fresh.name}"
         )
-        playbackController.loadProjectAudio(fresh.audioUri)
+        playbackController.loadProjectAudio(fresh.id,fresh.audioUri)
     }
 
     fun openProject(id: String) {
@@ -717,7 +717,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
             navDestination = NavDestination.STUDIO
         )
         synchronized(saveLock){projectRepo.markActive(loaded.id)}
-        playbackController.loadProjectAudio(loaded.audioUri)
+        playbackController.loadProjectAudio(loaded.id,loaded.audioUri)
     }
 
     fun duplicateProject(id: String) {
@@ -737,6 +737,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
 
     fun deleteProject(id: String) {
         synchronized(saveLock) {latestSave.remove(id);projectRepo.deleteProject(id)}
+        playbackController.forgetProjectQueue(id)
         val remaining = projectRepo.listProjects()
         if (_uiState.value.project.id == id) {
             val fallback = remaining.firstOrNull()?.let { projectRepo.loadProject(it.id) }
@@ -750,7 +751,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                 projects = projectRepo.listProjects()
             )
             projectRepo.markActive(fallback.id)
-            playbackController.loadProjectAudio(fallback.audioUri)
+            playbackController.loadProjectAudio(fallback.id,fallback.audioUri)
         } else {
             _uiState.value = _uiState.value.copy(projects = remaining)
         }
@@ -791,6 +792,12 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                 }
             }
         }
+    }
+
+    fun clearProjectAudioQueue(){
+        playbackController.clearQueue()
+        val p=_uiState.value.project
+        commitProjectChange(p.copy(audioUri=null))
     }
 
     fun importAudioTracks(uris: List<Uri>) {
