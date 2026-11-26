@@ -1032,7 +1032,9 @@ private fun PropertiesTab(
                             StudioToggleRow("Loop video",cfg.videoLoop){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.Image).copy(videoLoop=v))}}
                             StudioSlider("Video speed",cfg.videoSpeed,.25f,4f,1f,"x",.05f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.Image).copy(videoSpeed=v))}},onCommit=::endDrag)
                             StudioSlider("Video offset",cfg.videoOffsetMs/1000f,0f,60f,0f,"s",.1f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.Image).copy(videoOffsetMs=(v*1000).toLong()))}},onCommit=::endDrag)
-                            StudioChipSelector("Video sample FPS",listOf(6,12,15,24),cfg.videoSampleFps,{"$it FPS"}){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.Image).copy(videoSampleFps=v))}}
+                            StudioChipSelector("Decode mode",com.vexo.studio.model.VideoDecodeMode.entries,cfg.videoDecodeMode,{if(it==com.vexo.studio.model.VideoDecodeMode.AUTO)"Auto codec" else "Frame sampling"}){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.Image).copy(videoDecodeMode=v))}}
+                            StudioChipSelector("Texture quality",listOf(480,720,1280,1920),cfg.videoTextureLimit,{"$it px"}){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.Image).copy(videoTextureLimit=v))}}
+                            StudioChipSelector("Video sample FPS",listOf(6,12,15,24,30,60),cfg.videoSampleFps,{"$it FPS"}){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.Image).copy(videoSampleFps=v))}}
                         }
                     }
                     StudioChipSelector("Shape Mask", ImageShape.entries, cfg.shape, { it.label }) { sh ->

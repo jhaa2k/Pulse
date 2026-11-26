@@ -429,6 +429,8 @@ sealed interface LayerConfig {
         val videoSpeed: Float = 1f,
         val videoOffsetMs: Long = 0L,
         val videoSampleFps: Int = 12,
+        val videoDecodeMode: VideoDecodeMode = VideoDecodeMode.AUTO,
+        val videoTextureLimit: Int = 1280,
         val creative: CreativeImageConfig = CreativeImageConfig()
     ) : LayerConfig
 
@@ -1040,3 +1042,5 @@ data class CreativeImageConfig(
     val fadeInMs: Long = 0L,
     val fadeOutMs: Long = 0L
 )
+
+@Serializable enum class VideoDecodeMode { AUTO, FRAME_SAMPLING }

@@ -120,7 +120,7 @@ class VexoGlRenderer(
     private var colorBuf: FloatBuffer = allocFloatBuffer(colorScratch.size)
 
     // Caches & simulation state
-    private val videoFrames = VideoFrameTextures(context)
+    private val videoFrames = VideoFrameTextures(context,isExportRenderer)
     private val textureCache = LinkedHashMap<String,Int>(32,.75f,true)
     private val bitmapSizes = mutableMapOf<Int, Pair<Int, Int>>()
     private val bitmapKeyColors=mutableMapOf<Int,Int>()
