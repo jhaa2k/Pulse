@@ -83,11 +83,12 @@ class RealtimeFftEngine(
             AudioProviderEngine.sanitizeFftSize(it.fftSize)
         } ?: 1024
         val windowLen = maxFftSize.coerceIn(256, reusableSampleWindow.size)
-        val hasFreshSamples=ringBuffer.readStereoWindows(
+        val sampleEnd=ringBuffer.readStereoWindowEnd(
             reusableSampleWindow.takeIf{providers.any{it.channelMode==ChannelMode.MIX}},
             leftWindow.takeIf{providers.any{it.channelMode==ChannelMode.LEFT}},
             rightWindow.takeIf{providers.any{it.channelMode==ChannelMode.RIGHT}},
             gen,windowLen)
+        val hasFreshSamples=sampleEnd>=0L
 
         val out = HashMap<Int, AudioProviderSnapshot>(providers.size)
         for (prov in providers) {
@@ -100,7 +101,8 @@ class RealtimeFftEngine(
                 streamGeneration = gen,
                 isPlaying = isPlaying,
                 freezeOnPause = freezeOnPause,
-                sampleLength = if (hasFreshSamples) windowLen else 0
+                sampleLength = if (hasFreshSamples) windowLen else 0,
+                sampleEndFrame=sampleEnd
             )
         }
 

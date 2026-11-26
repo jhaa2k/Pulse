@@ -372,7 +372,8 @@ class VexoVideoExporter(private val context: Context) {
                         deltaMs = deltaMs,
                         streamGeneration = 1,
                         isPlaying = true,
-                        freezeOnPause = false
+                        freezeOnPause = false,
+                        sampleEndFrame=sampleEnd.toLong()
                     )
                 }
 

@@ -1500,6 +1500,7 @@ private fun AudioProviderEditorSection(
         RegisteredSlider("releaseMs", provider.releaseMs, settings.showPropertyHelpHints, { v ->
             onBeginDrag(); vm.updateAudioProvider(provider.index, false) { it.copy(releaseMs = v) }
         }, onEndDrag)
+        StudioChipSelector("FFT hop (samples)",listOf(64,128,256,512,1024,2048,4096).filter{it<=provider.fftSize},provider.hopSize,{"$it"}){v->vm.updateAudioProvider(provider.index){it.copy(hopSize=v)}}
         StudioSlider("Beat Smooth", provider.beatSmooth, 0.1f, 1f, 0.4f, "", 0.01f, onValueChange = { v ->
             onBeginDrag(); vm.updateAudioProvider(provider.index, false) { it.copy(beatSmooth = v) }
         }, onCommit = onEndDrag)

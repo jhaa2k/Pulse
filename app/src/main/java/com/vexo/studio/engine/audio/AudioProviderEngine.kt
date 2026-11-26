@@ -56,8 +56,16 @@ class AudioProviderEngine(initialConfig: AudioProviderConfig) {
     private var peakEnergy = 0f
 
     private var lastStreamGen = -1
+    private var lastAnalysisFrame = -1L
+    private var lastAnalysisRate = -1
+    private var configChanged = true
+    private var staleMs=0f
+    private var lastInputFrame=-1L
 
     fun updateConfig(newConfig: AudioProviderConfig) {
+        if(newConfig==config)return
+        configChanged=true
+        if(newConfig.channelMode!=config.channelMode || newConfig.enabled!=config.enabled || newConfig.sampleProvider!=config.sampleProvider)resetState()
         val cleanSize = sanitizeFftSize(newConfig.fftSize)
         if (cleanSize != fft.size || newConfig.window != fft.windowType) {
             fft = FftProcessor(cleanSize, newConfig.window)
@@ -78,6 +86,8 @@ class AudioProviderEngine(initialConfig: AudioProviderConfig) {
     }
 
     fun resetState() {
+        lastAnalysisFrame=-1L;lastInputFrame=-1L;lastAnalysisRate=-1;staleMs=0f;configChanged=true
+        linearSpectrum.fill(0f)
         mappedBars.fill(0f)
         filteredBars.fill(0f)
         envelopeBars.fill(0f)
@@ -102,7 +112,8 @@ class AudioProviderEngine(initialConfig: AudioProviderConfig) {
         streamGeneration: Int,
         isPlaying: Boolean,
         freezeOnPause: Boolean,
-        sampleLength: Int = samples?.size ?: 0
+        sampleLength: Int = samples?.size ?: 0,
+        sampleEndFrame: Long = -1L
     ): AudioProviderSnapshot {
         if (streamGeneration != lastStreamGen) {
             lastStreamGen = streamGeneration
@@ -114,7 +125,7 @@ class AudioProviderEngine(initialConfig: AudioProviderConfig) {
             return snapshot()
         }
 
-        val dtMs = deltaMs.coerceIn(1f, 250f)
+        val dtMs = if(deltaMs.isFinite())deltaMs.coerceIn(1f,250f) else 16.6667f
         val validLength = if (samples == null) 0 else sampleLength.coerceIn(0, samples.size)
 
         if (samples == null || validLength == 0 || !isPlaying || !config.enabled) {
@@ -123,6 +134,13 @@ class AudioProviderEngine(initialConfig: AudioProviderConfig) {
             return snapshot()
         }
 
+        if(sampleEndFrame>=0){
+            staleMs=if(sampleEndFrame==lastInputFrame)staleMs+dtMs else 0f
+            lastInputFrame=sampleEndFrame
+            if(staleMs>250f){decayEnvelopes(dtMs);configChanged=true;return snapshot()}
+        }
+        val fresh=configChanged||lastAnalysisRate!=sampleRate||sampleEndFrame<0||lastAnalysisFrame<0||sampleEndFrame<lastAnalysisFrame||sampleEndFrame-lastAnalysisFrame>=config.hopSize.coerceIn(1,fft.size)
+        if(fresh){
         val copyCount = minOf(validLength, rawSampleWindow.size)
         if (copyCount < rawSampleWindow.size) {
             rawSampleWindow.fill(0f)
@@ -155,17 +173,34 @@ class AudioProviderEngine(initialConfig: AudioProviderConfig) {
         fft.computeLinearMagnitudes(rawSampleWindow, linearSpectrum)
         if (config.sampleProvider == SampleProviderType.WAVEFORM) {
             for (i in 0 until nOut) {
-                filteredBars[i] = abs(outputWaveform[i]) * config.outputMultiplier
+                mappedBars[i] = abs(outputWaveform[i]) * config.outputMultiplier
             }
+            expandWaveform()
         } else {
             mapFrequencyBins(sampleRate.coerceAtLeast(8000))
         }
-
+        lastAnalysisFrame=sampleEndFrame;lastAnalysisRate=sampleRate;configChanged=false
         applySpatialFilter()
+        val gap=config.startAndEndGap.coerceIn(0,outputBars.size/3)
+        for(i in 0 until gap){mappedBars[i]=0f;mappedBars[mappedBars.lastIndex-i]=0f}
+        }
         applyGeometryAndEnvelopes(dtMs)
         computeBandsAndBeat(sampleRate.coerceAtLeast(8000), dtMs)
 
         return snapshot()
+    }
+
+    private fun expandWaveform(){
+        val n=filteredBars.size
+        val gap=config.startAndEndGap.coerceIn(0,n/3)
+        val active=(n-2*gap).coerceAtLeast(1)
+        val unique=(active/(config.repeatSamples.coerceIn(1,6)*(if(config.mirrorSamples)2 else 1))).coerceAtLeast(1)
+        filteredBars.fill(0f)
+        for(i in 0 until active){
+            val slot=if(config.mirrorSamples&&i>=active/2)active-1-i else i
+            val source=((slot%unique).toFloat()/unique*n).toInt().coerceIn(0,n-1)
+            filteredBars[gap+i]=mappedBars[source]
+        }
     }
 
     private fun mapFrequencyBins(sampleRate: Int) {
@@ -269,12 +304,12 @@ class AudioProviderEngine(initialConfig: AudioProviderConfig) {
         val n = outputBars.size
         val attackCoeff = if (config.attackMs <= 0.5f) 1f else 1f - exp(-dtMs / config.attackMs)
         val releaseCoeff = if (config.releaseMs <= 0.5f) 1f else 1f - exp(-dtMs / config.releaseMs)
-        val smoothBlend = (1f - config.smooth.coerceIn(0.05f, 1f)) * 0.5f
-        val preBlend = config.preSmooth.coerceIn(0f,1f)
+        val smoothBlend = (1f-config.smooth.coerceIn(.05f,1f))*.5f
+        val preBlend = (config.preSmooth.coerceIn(0f,1f)*.8f).pow(dtMs/16.6667f)
 
         for (i in 0 until n) {
             val prev = envelopeBars[i]
-            val target = mappedBars[i].coerceAtLeast(0f)*(1f-preBlend*.8f)+prev*preBlend*.8f
+            val target = mappedBars[i].coerceAtLeast(0f)*(1f-preBlend)+prev*preBlend
             val env = if (target >= prev) {
                 prev + (target - prev) * attackCoeff
             } else {
@@ -302,15 +337,19 @@ class AudioProviderEngine(initialConfig: AudioProviderConfig) {
         for (i in outputBars.indices) {
             envelopeBars[i] *= (1f - releaseCoeff)
             outputBars[i] = envelopeBars[i]
-            peakHoldBars[i] *= 0.92f
+            outputWaveform[i]*=(1f-releaseCoeff)
+            peakHoldTimersMs[i]-=dtMs
+            if(peakHoldTimersMs[i]<=0f)peakHoldBars[i]*=config.peakDecay.coerceIn(.5f,.995f).pow(dtMs/16.6667f)
         }
         beatEnvelope *= (1f - releaseCoeff)
-        beatPulseState *= 0.85f
-        bassEnergy *= 0.9f
-        midEnergy *= 0.9f
-        trebleEnergy *= 0.9f
-        rmsEnergy *= 0.9f
-        peakEnergy *= 0.9f
+        beatPulseState=(beatPulseState-dtMs/180f).coerceAtLeast(0f)
+        if(beatEnvelope<.4f)prevBeatTriggered=false
+        val decay=.9f.pow(dtMs/16.6667f)
+        bassEnergy *= decay
+        midEnergy *= decay
+        trebleEnergy *= decay
+        rmsEnergy *= decay
+        peakEnergy *= decay
     }
 
     private fun computeBandsAndBeat(sampleRate: Int, dtMs: Float) {
@@ -330,14 +369,14 @@ class AudioProviderEngine(initialConfig: AudioProviderConfig) {
         val rawBeatAvg = beatSum / (idx1 - idx0 + 1)
 
         val loVal = config.beatRangeValueLower.coerceAtLeast(0f) * 0.1f
-        val hiVal = config.beatRangeValueHigher.coerceAtLeast(loVal + 0.1f) * 0.08f
+        val hiVal = maxOf(loVal+.01f,config.beatRangeValueHigher.coerceAtLeast(0f)*.08f)
         val normalizedBeat = (((rawBeatAvg - loVal) / (hiVal - loVal)) * config.beatSensitivity)
             .coerceIn(0f, 1.5f)
 
-        val bSmooth = config.beatSmooth.coerceIn(0.05f, 1f)
+        val bSmooth = 1f-(1f-config.beatSmooth.coerceIn(.05f,1f)).pow(dtMs/16.6667f)
         beatEnvelope = beatEnvelope * (1f - bSmooth) + normalizedBeat * bSmooth
 
-        val triggered = beatEnvelope > 0.55f
+        val triggered = beatEnvelope > (if(prevBeatTriggered).4f else .55f)
         if (triggered && !prevBeatTriggered) {
             beatPulseState = 1f
         } else {
@@ -356,9 +395,10 @@ class AudioProviderEngine(initialConfig: AudioProviderConfig) {
             return ln(1.0 + (s / (l - f + 1)) * 18.0).toFloat().coerceIn(0f, 1f)
         }
 
-        bassEnergy = bassEnergy * 0.4f + bandAvg(20f, 250f) * 0.6f
-        midEnergy = midEnergy * 0.4f + bandAvg(250f, 4000f) * 0.6f
-        trebleEnergy = trebleEnergy * 0.4f + bandAvg(4000f, 16000f) * 0.6f
+        val retention=.4f.pow(dtMs/16.6667f)
+        bassEnergy = bassEnergy*retention+bandAvg(20f,250f)*(1f-retention)
+        midEnergy = midEnergy*retention+bandAvg(250f,4000f)*(1f-retention)
+        trebleEnergy = trebleEnergy*retention+bandAvg(4000f,16000f)*(1f-retention)
     }
 
     private fun snapshot(): AudioProviderSnapshot = AudioProviderSnapshot(

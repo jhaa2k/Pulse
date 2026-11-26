@@ -203,10 +203,13 @@ class PcmRingBuffer(capacitySamples: Int = 65536) {
 
     /** All requested channels share the same ending sample and generation. */
     @Synchronized
-    fun readStereoWindows(mix:FloatArray?,left:FloatArray?,right:FloatArray?,expectedGeneration:Int,count:Int):Boolean{
-        if(generation.get()!=expectedGeneration)return false
+    fun readStereoWindows(mix:FloatArray?,left:FloatArray?,right:FloatArray?,expectedGeneration:Int,count:Int):Boolean=readStereoWindowEnd(mix,left,right,expectedGeneration,count)>=0L
+
+    @Synchronized
+    fun readStereoWindowEnd(mix:FloatArray?,left:FloatArray?,right:FloatArray?,expectedGeneration:Int,count:Int):Long{
+        if(generation.get()!=expectedGeneration)return -1L
         val end=writeIndex.get()
-        if(end<=0L)return false
+        if(end<=0L)return -1L
         val take=minOf(end,capacity.toLong(),count.toLong()).toInt().coerceAtLeast(0)
         fun copy(src:FloatArray,dst:FloatArray?){
             if(dst==null)return
@@ -217,7 +220,7 @@ class PcmRingBuffer(capacitySamples: Int = 65536) {
         }
         copy(mixedRing,mix);copy(leftRing,left);copy(rightRing,right)
         lastReadIndex=end
-        return true
+        return end
     }
 
     private fun nextPowerOfTwo(n: Int): Int {
