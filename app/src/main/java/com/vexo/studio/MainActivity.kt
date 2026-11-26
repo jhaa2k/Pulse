@@ -76,6 +76,8 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -154,15 +156,13 @@ private fun VexoRootApp(vm: StudioViewModel) {
         }
     }
 
-    var pendingImage by remember { mutableStateOf<android.net.Uri?>(null) }
-    var pendingImageProject by remember { mutableStateOf("") }
-    var pendingImageLayer by remember { mutableStateOf<String?>(null) }
+    var pendingImage by rememberSaveable { mutableStateOf<android.net.Uri?>(null) }
+    var pendingImageProject by rememberSaveable { mutableStateOf("") }
+    var pendingImageLayer by rememberSaveable { mutableStateOf<String?>(null) }
     val imagePicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri ->
-        if (uri != null) {
-            pendingImage=uri;pendingImageProject=uiState.project.id;pendingImageLayer=uiState.selectedLayerId
-        }
+        if (uri != null) pendingImage = uri
     }
 
     val presetImportPicker = rememberLauncherForActivityResult(
@@ -202,13 +202,14 @@ private fun VexoRootApp(vm: StudioViewModel) {
             }
         }
     Scaffold(
-        containerColor = palette.bg,
+        containerColor = if (settings.glassEnabled && uiState.navDestination != NavDestination.STUDIO) Color.Transparent else palette.bg,
         topBar = {
             if (!uiState.isFullscreenPreview) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(palette.panel)
+                        .statusBarsPadding()
                         .padding(horizontal = 8.dp, vertical = 2.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
@@ -255,7 +256,7 @@ private fun VexoRootApp(vm: StudioViewModel) {
         },
         bottomBar = {
             if (!uiState.isFullscreenPreview) {
-                Column {
+                Column(Modifier.navigationBarsPadding()) {
                 if (uiState.navDestination!=NavDestination.STUDIO && playback.queue.isNotEmpty()) {
                     com.vexo.studio.ui.screens.CompactTransportBar(playback, {vm.playbackController.togglePlayPause()}, {vm.playbackController.previous()}, {vm.playbackController.next()}, {vm.playbackController.seekTo(it)}, {audioPicker.launch(arrayOf("audio/*"))}, Modifier.fillMaxWidth().padding(horizontal=8.dp))
                 }
@@ -299,7 +300,11 @@ private fun VexoRootApp(vm: StudioViewModel) {
                     sceneSnapshot = sceneSnapshot,
                     settings = settings,
                     onPickAudio = { audioPicker.launch(arrayOf("audio/*")) },
-                    onPickImage = { imagePicker.launch(arrayOf("image/*","video/*")) },
+                    onPickImage = {
+                        pendingImageProject = uiState.project.id
+                        pendingImageLayer = uiState.selectedLayerId
+                        imagePicker.launch(arrayOf("image/*", "video/*"))
+                    },
                     onImportPreset = { presetImportPicker.launch(arrayOf("application/json", "application/octet-stream", "*/*")) },
                     onExportPreset = { presetExportPicker.launch("${uiState.project.name}.VEX") }
                 )
@@ -341,7 +346,22 @@ private fun VexoRootApp(vm: StudioViewModel) {
     }
 
     uiState.pendingPreset?.let{tpl->AlertDialog(onDismissRequest={vm.resolvePresetSwitch(false,false)},title={Text("UNSAVED EDITS")},text={Text("Apply "+tpl.name+"? Save the current edits first, or discard them. Music and canvas ratio will stay unchanged.")},confirmButton={TextButton(onClick={vm.resolvePresetSwitch(true,false)}){Text("SAVE & APPLY")}},dismissButton={Row{TextButton(onClick={vm.resolvePresetSwitch(false,true)}){Text("DISCARD & APPLY")};TextButton(onClick={vm.resolvePresetSwitch(false,false)}){Text("CANCEL")}}})}
-    pendingImage?.let{uri->AlertDialog(onDismissRequest={pendingImage=null},title={Text("APPLY IMAGE / VIDEO?")},text={Text("Apply selected media to the current layer, or cancel to keep the original.")},confirmButton={TextButton(onClick={if(uiState.project.id==pendingImageProject&&uiState.selectedLayerId==pendingImageLayer)vm.attachImageToSelectedLayer(uri);pendingImage=null}){Text("APPLY")}},dismissButton={TextButton(onClick={pendingImage=null}){Text("CANCEL")}})}
+    pendingImage?.let { uri ->
+        val targetMatches = uiState.project.id == pendingImageProject &&
+            uiState.selectedLayerId == pendingImageLayer
+        AlertDialog(
+            onDismissRequest = { pendingImage = null },
+            title = { Text("APPLY IMAGE / VIDEO?") },
+            text = { Text(if (targetMatches) "Apply selected media to the current layer, or cancel to keep the original." else "The original selection changed while choosing media. Cancel and select media again for the intended layer.") },
+            confirmButton = {
+                TextButton(enabled = targetMatches, onClick = {
+                    if (targetMatches) vm.attachImageToSelectedLayer(uri)
+                    pendingImage = null
+                }) { Text("APPLY") }
+            },
+            dismissButton = { TextButton(onClick = { pendingImage = null }) { Text("CANCEL") } }
+        )
+    }
     if (showRenameProject) {
         var text by remember { mutableStateOf(uiState.project.name) }
         AlertDialog(
