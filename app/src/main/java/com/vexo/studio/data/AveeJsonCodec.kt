@@ -553,7 +553,10 @@ object AveeJsonCodec {
             common = parseCommon(obj, "Motion Blur Effect"),
             config = LayerConfig.MotionBlurEffect(
                 targetCompositionIndex = target,
-                blurAmountMultiplier = parseMvarfValue(obj.propString("blurAmountMultiplier", "Constant 1 1"), 1f),
+                blurAmountMultiplier = obj.propString("blurAmountMultiplier", "Constant 1 1").toFloatOrNull()?.takeIf { it.isFinite() } ?: parseMvarfValue(obj.propString("blurAmountMultiplier", "Constant 1 1"), 1f),
+                manualMotionX = obj.propFloat("manualMotionX", .025f),
+                manualMotionY = obj.propFloat("manualMotionY", 0f),
+                trailPersistence = obj.propFloat("trailPersistence", .65f),
                 motionSource = MotionSource.fromAvee(obj.propString("motionSource", "EffectTransform")),
                 relativeMotionMode = obj.propBool("relativeMotionMode", true),
                 blendModeContent = BlendMode.fromAvee(obj.propString("blendModeContent", "Add")),
@@ -738,6 +741,8 @@ object AveeJsonCodec {
                 put("TargetImage", propObj("composition:${cfg.targetCompositionIndex}"))
                 put("blurAmountMultiplier", propObj("Constant ${cfg.blurAmountMultiplier} ${cfg.blurAmountMultiplier}"))
                 put("motionSource", propObj(cfg.motionSource.aveeName))
+                put("relativeMotionMode",propObj(if(cfg.relativeMotionMode)1 else 0)); put("manualMotionX",propObj(cfg.manualMotionX)); put("manualMotionY",propObj(cfg.manualMotionY)); put("trailPersistence",propObj(cfg.trailPersistence))
+                put("color",propObj(cfg.colorArgb)); put("blendModeContent",propObj(cfg.blendModeContent.aveeName)); put("showUnblurredContent",propObj(if(cfg.showUnblurredContent)1 else 0)); put("showUnblurredContentUnder",propObj(if(cfg.showUnblurredContentUnder)1 else 0))
             }
             is LayerConfig.MirrorEffect -> {
                 put("TargetImage", propObj("composition:${cfg.targetCompositionIndex}"))

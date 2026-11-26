@@ -87,6 +87,7 @@ class VexoGlRenderer(
     private var particleShader: GlShaderProgram? = null
     private var motionShader: GlShaderProgram? = null
     private val previousMotion=mutableMapOf<String,Pair<Float,Float>>()
+    private val previousMotionTarget=mutableMapOf<String,Int>()
     private var particleUv = allocFloatBuffer(12)
     private val fonts = mutableMapOf<String,Typeface>()
 
@@ -196,7 +197,7 @@ class VexoGlRenderer(
         lastProjectId=null;lastPositionMs=-1L;lastArtworkVersion=-1
         particleShader?.release(); particleShader=null
         motionShader?.release(); motionShader=null
-        previousMotion.clear()
+        previousMotion.clear(); previousMotionTarget.clear()
         fonts.clear()
         colorShader?.release(); colorShader = null
         imageShader?.release(); imageShader = null
@@ -225,6 +226,9 @@ class VexoGlRenderer(
         targetHeight: Int
     ) {
         if (colorShader == null) initGlResources()
+        if (viewportW != targetWidth.coerceAtLeast(16) || viewportH != targetHeight.coerceAtLeast(16)) {
+            fboPool.releaseByPrefix("trail_"); previousMotion.clear(); previousMotionTarget.clear()
+        }
         viewportW = targetWidth.coerceAtLeast(16)
         viewportH = targetHeight.coerceAtLeast(16)
 
@@ -233,7 +237,7 @@ class VexoGlRenderer(
             fboPool.releaseByPrefix("trail_")
             particleSims.clear()
             barDelayHistory.clear()
-            previousMotion.clear()
+            previousMotion.clear(); previousMotionTarget.clear()
         }
         if (lastProjectId != scene.project.id) { fboPool.releaseByPrefix("comp_"); videoFrames.close() }
         lastProjectId = scene.project.id
@@ -253,6 +257,7 @@ class VexoGlRenderer(
             cachedLayerIds=activeLayers.map{it.common.id}.toSet()
             cachedTrails=activeLayers.filter{it.config is LayerConfig.MotionBlurEffect}.map{it.common.id}.toSet()
             previousMotion.keys.retainAll(cachedLayerIds)
+            previousMotionTarget.keys.retainAll(cachedTrails)
             particleSims.keys.retainAll(cachedLayerIds)
             barDelayHistory.keys.removeAll{it.removeSuffix("_segment2") !in cachedLayerIds}
             fboPool.retainSceneBuffers(cachedReachable-displayIndex,cachedTrails)
@@ -1018,7 +1023,7 @@ class VexoGlRenderer(
         GLES20.glUniform4f(img.uniform("uTint"), 1f, 1f, 1f, 1f)
 
         if (cfg.showUnblurredContentUnder) {
-            applyBlendMode(cfg.blendModeContent)
+            applyBlendMode(cfg.unblurredBlendMode ?: cfg.blendModeContent)
             GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, srcTex)
             GLES20.glUniform1f(img.uniform("uOpacity"), opacity)
             drawTexturedQuad(img, 0f, 0f, w.toFloat(), h.toFloat(), flipV = true)
@@ -1057,7 +1062,7 @@ class VexoGlRenderer(
         GLES20.glUniform4f(img.uniform("uTint"),1f,1f,1f,1f)
 
         if (cfg.showUnblurredContent) {
-            applyBlendMode(cfg.blendModeContent)
+            applyBlendMode(cfg.unblurredBlendMode ?: cfg.blendModeContent)
             GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, srcTex)
             GLES20.glUniform1f(img.uniform("uOpacity"), opacity)
             drawTexturedQuad(img, 0f, 0f, w.toFloat(), h.toFloat(), flipV = true)
@@ -1145,14 +1150,18 @@ class VexoGlRenderer(
         GLES20.glUniform1i(img.uniform("uColorKeyEnabled"), 0)
         GLES20.glUniform1f(img.uniform("uSaturation"), 1f)
         GLES20.glUniform4f(img.uniform("uTint"), 1f, 1f, 1f, 1f)
-        val persist = MotionMath.persistence(cfg.trailPersistence,deltaSec)
+        val previousTarget = previousMotionTarget.put(layerId,cfg.targetCompositionIndex)
+        val firstFrame = previousTarget != cfg.targetCompositionIndex || !previousMotion.containsKey(layerId)
+        if(firstFrame) clearBackground(0x00000000)
+        val persist = if(firstFrame) 0f else MotionMath.persistence(cfg.trailPersistence,deltaSec)
         // Decay the entire previous frame, including pixels outside the current source.
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, ensureInternalTex("internalres:white"))
         GLES20.glBlendFuncSeparate(GLES20.GL_ZERO, GLES20.GL_ONE_MINUS_SRC_ALPHA, GLES20.GL_ZERO, GLES20.GL_ONE_MINUS_SRC_ALPHA)
         GLES20.glUniform1f(img.uniform("uOpacity"), 1f - persist)
         drawTexturedQuad(img, 0f, 0f, w.toFloat(), h.toFloat(), flipV = true)
-        val old=previousMotion.put(layerId,x to y) ?: (x to y)
+        val previous=previousMotion.put(layerId,x to y)
+        val old=if(firstFrame) (x to y) else previous ?: (x to y)
         val direction=if(cfg.motionSource==com.vexo.studio.model.MotionSource.MANUAL) cfg.manualMotionX to cfg.manualMotionY
             else if(cfg.relativeMotionMode) (x-old.first) to (y-old.second) else (x-.5f) to (y-.5f)
         val motion=motionShader

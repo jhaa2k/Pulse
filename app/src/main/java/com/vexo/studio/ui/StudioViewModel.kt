@@ -26,6 +26,7 @@ import com.vexo.studio.model.LayerCommon
 import com.vexo.studio.model.LayerConfig
 import com.vexo.studio.model.LayerNode
 import com.vexo.studio.model.LayerType
+import com.vexo.studio.model.BlendMode
 import com.vexo.studio.model.NavDestination
 import com.vexo.studio.model.PauseBehavior
 import com.vexo.studio.model.StudioTab
@@ -458,7 +459,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         val glow = LayerNode(LayerType.BLUR_EFFECT, LayerCommon(name="Glow • " + selected.common.name, blendMode=BlendMode.ADD),
             LayerConfig.BlurEffect(sourceCompositionIndex=idx, blurRadius=5f, blurMultiplier=2f,
                 layer1Scale=1f, layer1ColorArgb=0xAAFFFFFF.toInt(), layer2Scale=1.025f, layer2ColorArgb=0x55FFFFFF,
-                blendModeContent=BlendMode.ADD, showUnblurredContentUnder=false, showUnblurredContent=true))
+                blendModeContent=BlendMode.ADD, showUnblurredContentUnder=false, showUnblurredContent=true, unblurredBlendMode=selected.common.blendMode))
         val next = p.copy(compositions=p.compositions.map { if(it.index==comp.index)it.copy(layers=it.layers.map { l->if(l.common.id==selected.common.id)glow else l }) else it }+bus)
         if(com.vexo.studio.engine.scene.SceneGraph.resolve(next).hasCycle) {
             _uiState.value=state.copy(statusBanner="Glow source would create a composition cycle")

@@ -551,7 +551,8 @@ sealed interface LayerConfig {
         val showUnblurredContent: Boolean = false,
         val showUnblurredContentUnder: Boolean = true,
         val maskImage: String = "internalres:transparent",
-        val measureBlur: MeasureConfig = MeasureConfig()
+        val measureBlur: MeasureConfig = MeasureConfig(),
+        val unblurredBlendMode: BlendMode? = null
     ) : LayerConfig
 
     @Serializable
