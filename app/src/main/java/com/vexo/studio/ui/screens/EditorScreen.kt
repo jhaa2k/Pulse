@@ -871,7 +871,6 @@ private fun PropertiesTab(
                     StudioSlider("Gradient Offset", cfg.colorBlendOffset, 0f, 1f, 0f, "", 0.01f, onValueChange = { v ->
                         beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(colorBlendOffset = v)) }
                     }, onCommit = ::endDrag)
-                    StudioColorPickerRow("Particle Tint",cfg.colorArgb){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.Particles).copy(colorArgb=v))}}
                     StudioColorPickerRow("Color From", cfg.colorFromArgb) { col ->
                         vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(colorFromArgb = col)) }
                     }
@@ -1108,6 +1107,7 @@ private fun PropertiesTab(
                     MeasureBindingControls("Overall Speed",cfg.measureOverallSpeed,uiState.project.audioProviders.map{it.index},::beginDrag,::endDrag){v,undo->vm.updateLayer(layer.common.id,undo){it.copy(config=(it.config as LayerConfig.Particles).copy(measureOverallSpeed=v))}}
                 }
                 ExpandableSectionHeader("Colors", expandedSections["Particles_Colors"] == true, { toggleAccordion(expandedSections, "Particles_Colors") }) {
+                    StudioColorPickerRow("Particle Tint",cfg.colorArgb){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.Particles).copy(colorArgb=v))}}
                     StudioColorPickerRow("Color From", cfg.colorFromArgb) { col ->
                         vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(colorFromArgb = col)) }
                     }
