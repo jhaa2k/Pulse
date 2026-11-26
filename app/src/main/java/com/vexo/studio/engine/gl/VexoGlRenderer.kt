@@ -405,7 +405,7 @@ class VexoGlRenderer(
         if (cfg.segment1 == BarsSegmentType.NONE && cfg.segment2 == BarsSegmentType.NONE) return
         if (cfg.segment2 != BarsSegmentType.NONE) {
             if (cfg.segment1 != BarsSegmentType.NONE) drawBarsLayer(layerId, cfg.copy(segment2 = BarsSegmentType.NONE), audioSnap, opacity, w, h)
-            drawBarsLayer("${layerId}_segment2", cfg.copy(segment1 = cfg.segment2, segment2 = BarsSegmentType.NONE, barWidth = cfg.segment2Width, barHeightMultiplier = cfg.segment2HeightMultiplier, fixedHeight = cfg.segment2FixedHeight, mirror = cfg.segment2Mirror, creativeStyle=cfg.secondaryCreativeStyle, colorFromArgb = cfg.segment2ColorFrom, colorToArgb = cfg.segment2ColorTo), audioSnap, opacity, w, h)
+            drawBarsLayer("${layerId}_segment2", cfg.copy(segment1 = cfg.segment2, segment2 = BarsSegmentType.NONE, barWidth = cfg.segment2Width, barHeightMultiplier = cfg.segment2HeightMultiplier, fixedHeight = cfg.segment2FixedHeight, mirror = cfg.segment2Mirror, creativeStyle=cfg.secondaryCreativeStyle, colorFromArgb = cfg.segment2ColorFrom, colorToArgb = cfg.segment2ColorTo, barStrokeWidth=cfg.segment2StrokeWidth,barStrokeColorArgb=cfg.segment2StrokeColorArgb,barFillOpacity=cfg.segment2FillOpacity), audioSnap, opacity, w, h)
             return
         }
         val rawBars = (if(cfg.signedWaveform) audioSnap?.waveform else audioSnap?.bars) ?: FloatArray(64)
@@ -414,7 +414,7 @@ class VexoGlRenderer(
         val count = delayedBars.size
         if (count == 0) return
         val peaks=if(!cfg.signedWaveform && cfg.showPeaks && audioSnap!=null && audioSnap.peakBars.isNotEmpty()) SpectrumGeometry.resample(audioSnap.peakBars,count) else null
-        if(cfg.creativePath!=com.vexo.studio.model.CreativeSpectrumPath.LEGACY || cfg.creativeStyle!=com.vexo.studio.model.CreativeSpectrumStyle.BARS || cfg.sampleOffset!=0f || cfg.sampleRepeats!=1 || cfg.amplitudeCurve!=1f || cfg.baselineOffset!=0f || cfg.signedWaveform || cfg.curveSubdivisions!=1 || cfg.gradientRepeats!=1 || cfg.customPathEnabled || cfg.pathStretchX!=1f || cfg.pathStretchY!=1f){
+        if(cfg.creativePath!=com.vexo.studio.model.CreativeSpectrumPath.LEGACY || cfg.creativeStyle!=com.vexo.studio.model.CreativeSpectrumStyle.BARS || cfg.sampleOffset!=0f || cfg.sampleRepeats!=1 || cfg.amplitudeCurve!=1f || cfg.baselineOffset!=0f || cfg.signedWaveform || cfg.curveSubdivisions!=1 || cfg.gradientRepeats!=1 || cfg.customPathEnabled || cfg.pathStretchX!=1f || cfg.pathStretchY!=1f || cfg.barStrokeWidth!=0f || cfg.barFillOpacity!=1f || cfg.barTipWidth!=1f || cfg.barGradientMode!=com.vexo.studio.model.SpectrumGradientMode.PATH || cfg.waveDashRatio!=1f || cfg.waveLineGap!=2.5f || cfg.waveRibbonWidth!=1f || cfg.waveCurveTension!=.5f){
             drawCreativeSpectrum(cfg,delayedBars,peaks,opacity,w,h)
             return
         }

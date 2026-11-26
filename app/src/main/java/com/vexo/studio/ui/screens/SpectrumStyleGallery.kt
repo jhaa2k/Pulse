@@ -70,7 +70,7 @@ private fun SpectrumSample(cfg:LayerConfig.Bars,modifier:Modifier){
         val points=ArrayList<MeshVertex>()
         SpectrumStudioMesh.emit(cfg,bars,peaks,240,140){x,y,c->points.add(MeshVertex(x,y,c))}
         if(cfg.segment2!=com.vexo.studio.model.BarsSegmentType.NONE){
-            val second=cfg.copy(segment1=cfg.segment2,segment2=com.vexo.studio.model.BarsSegmentType.NONE,creativeStyle=cfg.secondaryCreativeStyle,barWidth=cfg.segment2Width,barHeightMultiplier=cfg.segment2HeightMultiplier,fixedHeight=cfg.segment2FixedHeight,mirror=cfg.segment2Mirror,colorFromArgb=cfg.segment2ColorFrom,colorToArgb=cfg.segment2ColorTo)
+            val second=cfg.copy(segment1=cfg.segment2,segment2=com.vexo.studio.model.BarsSegmentType.NONE,creativeStyle=cfg.secondaryCreativeStyle,barWidth=cfg.segment2Width,barHeightMultiplier=cfg.segment2HeightMultiplier,fixedHeight=cfg.segment2FixedHeight,mirror=cfg.segment2Mirror,colorFromArgb=cfg.segment2ColorFrom,colorToArgb=cfg.segment2ColorTo,barStrokeWidth=cfg.segment2StrokeWidth,barStrokeColorArgb=cfg.segment2StrokeColorArgb,barFillOpacity=cfg.segment2FillOpacity)
             SpectrumStudioMesh.emit(second,bars,peaks,240,140){x,y,c->points.add(MeshVertex(x,y,c))}
         }
         val grouped=linkedMapOf<Int,Path>()

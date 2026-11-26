@@ -75,7 +75,12 @@ object SpectrumStudioMesh {
             val peak=c.baselineOffset.coerceIn(-1f,1f)*dim*.3f+((peaks?.getOrNull(idx)?:raw).coerceAtLeast(0f).pow(c.amplitudeCurve.coerceIn(.25f,3f))*abs(gain)).coerceIn(0f,hi)*dim*.42f*direction*(if(c.mirror).5f else 1f)
             val phaseColor=t*c.gradientRepeats.coerceIn(1,8)+c.colorBlendOffset
             val blend=if(c.gradientRepeats<=1)phaseColor.coerceIn(0f,1f) else 1f-abs(2f*(phaseColor-floor(phaseColor))-1f)
-            val color=MeasureEvaluator.blendArgb(c.colorFromArgb,c.colorToArgb,blend)
+            val color=MeasureEvaluator.blendArgb(c.colorFromArgb,c.colorToArgb,when(c.barGradientMode){
+                SpectrumGradientMode.PATH->blend
+                SpectrumGradientMode.HEIGHT->0f
+                SpectrumGradientMode.AMPLITUDE->amplitude.coerceIn(0f,1f)
+                SpectrumGradientMode.ALTERNATING->if(i%2==0)0f else 1f
+            })
             samples.add(Sample(origin,tangent,tangent.normal(),size,base,base+length,peak,color,amplitude))
         }
         fun tri(a:P,b:P,d:P,ca:Int,cb:Int=ca,cd:Int=ca){vertex(a.x,a.y,ca);vertex(b.x,b.y,cb);vertex(d.x,d.y,cd)}
@@ -92,31 +97,100 @@ object SpectrumStudioMesh {
             }
         }
         fun alpha(col:Int,f:Float)=(((col ushr 24)*f.coerceIn(0f,1f)).roundToInt() shl 24) or (col and 0xFFFFFF)
+        // Convex fill and inset stroke rings. The ring never covers the interior,
+        // so zero fill opacity leaves a genuine transparent hole.
+        val outline=(c.barStrokeWidth.coerceIn(0f,24f)*dim/720f)
+        val styled=outline>0f || c.barFillOpacity!=1f || c.barTipWidth!=1f || c.barGradientMode==SpectrumGradientMode.HEIGHT
+        fun polygon(s:Sample,points:List<P>){
+            if(points.size<3)return
+            val center=points.reduce{a,b->a+b}*(1f/points.size)
+            fun cross(a:P,b:P)=a.x*b.y-a.y*b.x
+            val area=points.indices.sumOf{ i->cross(points[i]-center,points[(i+1)%points.size]-center).toDouble() }
+            if(abs(area)<.00001)return
+            val orientation=if(area>0)1f else -1f
+            fun inward(i:Int):P{
+                val d=(points[(i+1)%points.size]-points[i]).unit()
+                return P(-d.y*orientation,d.x*orientation)
+            }
+            fun dot(a:P,b:P)=a.x*b.x+a.y*b.y
+            fun fillColor(p:P):Int{
+                val fraction=if(abs(s.tip-s.base)>.0001f)((dot(p-s.origin,s.normal)-s.base)/(s.tip-s.base)).coerceIn(0f,1f) else 0f
+                val col=if(c.barGradientMode==SpectrumGradientMode.HEIGHT)MeasureEvaluator.blendArgb(c.colorFromArgb,c.colorToArgb,fraction) else s.color
+                return alpha(col,c.barFillOpacity)
+            }
+            var inner=points
+            if(outline>0f){
+                val distance=points.indices.minOf{i->dot(center-points[i],inward(i))}.coerceAtLeast(0f)
+                val inset=minOf(outline,distance*.95f)
+                if(inset>0.0001f){
+                    inner=points.indices.map{i->
+                        val a=inward((i+points.size-1)%points.size);val b=inward(i)
+                        val sum=a+b
+                        points[i]+sum*(inset/dot(sum,b).coerceAtLeast(.05f))
+                    }
+                    for(i in points.indices){
+                        val j=(i+1)%points.size
+                        quad(points[i],points[j],inner[i],inner[j],c.barStrokeColorArgb)
+                    }
+                }
+            }
+            if(c.barFillOpacity>0f)for(i in 1 until inner.lastIndex){
+                tri(inner[0],inner[i],inner[i+1],fillColor(inner[0]),fillColor(inner[i]),fillColor(inner[i+1]))
+            }
+        }
         val connected=style in setOf(CreativeSpectrumStyle.LINE,CreativeSpectrumStyle.FILL,CreativeSpectrumStyle.DOUBLE_LINE,CreativeSpectrumStyle.RIBBON,CreativeSpectrumStyle.ZIGZAG,CreativeSpectrumStyle.WAVE_POINTS)
         if(connected&&n>1){
             val segments=if(closed)n else n-1
             val divisions=c.curveSubdivisions.coerceIn(1,8)
             fun sampleAt(index:Int)=samples[if(closed)((index%n)+n)%n else index.coerceIn(0,n-1)]
             fun curve(p0:P,p1:P,p2:P,p3:P,t:Float):P {
-                val t2=t*t;val t3=t2*t
-                return (p1*2f+(p2-p0)*t+(p0*2f-p1*5f+p2*4f-p3)*t2+(p1*3f-p0-p2*3f+p3)*t3)*.5f
+                if(divisions==1)return p1+(p2-p1)*t
+                val t2=t*t;val t3=t2*t;val tension=c.waveCurveTension.coerceIn(0f,1f)
+                return p1*(2f*t3-3f*t2+1f)+(p2-p0)*(tension*(t3-2f*t2+t))+
+                    p2*(-2f*t3+3f*t2)+(p3-p1)*(tension*(t3-t2))
+            }
+            fun at(i:Int,t:Float,offset:(Sample)->Float):P{
+                fun p(index:Int):P{val s=sampleAt(index);return s.p(0f,offset(s))}
+                return curve(p(i-1),p(i),p(i+1),p(i+2),t)
+            }
+            fun color(i:Int,t:Float)=MeasureEvaluator.blendArgb(sampleAt(i).color,sampleAt(i+1).color,t)
+            // Dashes are positioned along normalized path progress, not per mesh triangle.
+            fun waveLine(i:Int,aT:Float,bT:Float,a:P,b:P,ca:Int,cb:Int){
+                val ratio=c.waveDashRatio.coerceIn(.05f,1f)
+                if(ratio>=.999f){line(a,b,stroke,ca,cb);return}
+                val repeat=c.waveDashCount.coerceIn(1,64).toFloat()
+                val start=(i+aT)/segments*repeat;val end=(i+bT)/segments*repeat
+                if(end-start<.000001f)return
+                for(k in floor(start).toInt()..floor(end).toInt()){
+                    val lo=maxOf(start,k.toFloat());val hi=minOf(end,k+ratio)
+                    if(hi<=lo)continue
+                    val f0=(lo-start)/(end-start);val f1=(hi-start)/(end-start)
+                    line(a+(b-a)*f0,a+(b-a)*f1,stroke,MeasureEvaluator.blendArgb(ca,cb,f0),MeasureEvaluator.blendArgb(ca,cb,f1))
+                }
             }
             fun smooth(i:Int, offset:(Sample)->Float){
-                val a=sampleAt(i);val b=sampleAt(i+1)
-                if(divisions==1){line(a.p(0f,offset(a)),b.p(0f,offset(b)),stroke,a.color,b.color);return}
-                val p0=sampleAt(i-1);val p3=sampleAt(i+2)
-                val x0=p0.p(0f,offset(p0));val x1=a.p(0f,offset(a));val x2=b.p(0f,offset(b));val x3=p3.p(0f,offset(p3))
-                var prev=x1
-                for(j in 1..divisions){val t=j.toFloat()/divisions;val next=curve(x0,x1,x2,x3,t);line(prev,next,stroke,MeasureEvaluator.blendArgb(a.color,b.color,(j-1f)/divisions),MeasureEvaluator.blendArgb(a.color,b.color,t));prev=next}
+                for(j in 0 until divisions){
+                    val t0=j.toFloat()/divisions;val t1=(j+1f)/divisions
+                    waveLine(i,t0,t1,at(i,t0,offset),at(i,t1,offset),color(i,t0),color(i,t1))
+                }
+            }
+            fun strip(i:Int,low:(Sample)->Float,high:(Sample)->Float,lowAlpha:Float,highAlpha:Float){
+                for(j in 0 until divisions){
+                    val t0=j.toFloat()/divisions;val t1=(j+1f)/divisions
+                    val a=at(i,t0,low);val b=at(i,t1,low);val d=at(i,t0,high);val e=at(i,t1,high)
+                    val ca=color(i,t0);val cb=color(i,t1)
+                    tri(a,b,d,alpha(ca,lowAlpha),alpha(cb,lowAlpha),alpha(ca,highAlpha))
+                    tri(d,b,e,alpha(ca,highAlpha),alpha(cb,lowAlpha),alpha(cb,highAlpha))
+                }
             }
             for(i in 0 until segments){
                 val a=samples[i];val b=samples[(i+1)%n]
                 val ac=a.p(0f,a.tip);val bc=b.p(0f,b.tip);val ab=a.p(0f,a.base);val bb=b.p(0f,b.base)
                 when(style){
-                    CreativeSpectrumStyle.FILL->{quad(ab,bb,ac,bc,alpha(a.color,c.creativeFillAlpha*.35f),alpha(b.color,c.creativeFillAlpha));line(ac,bc,stroke,a.color,b.color)}
-                    CreativeSpectrumStyle.DOUBLE_LINE->{line(ac,bc,stroke,a.color,b.color);line(a.p(0f,a.tip-stroke*2.5f),b.p(0f,b.tip-stroke*2.5f),stroke,a.color,b.color);if(c.mirror)line(ab,bb,stroke,a.color,b.color)}
-                    CreativeSpectrumStyle.RIBBON->{val aw=a.width*.5f;val bw=b.width*.5f;quad(a.p(0f,a.tip-aw),b.p(0f,b.tip-bw),a.p(0f,a.tip+aw),b.p(0f,b.tip+bw),alpha(a.color,c.creativeFillAlpha),alpha(b.color,c.creativeFillAlpha));line(ac,bc,stroke,a.color,b.color)}
-                    CreativeSpectrumStyle.ZIGZAG->{val pa=if(i%2==0)ac else ab;val pb=if((i+1)%2==0)bc else bb;line(pa,pb,stroke,a.color,b.color)}
+                    CreativeSpectrumStyle.FILL->{strip(i,{it.base},{it.tip},c.creativeFillAlpha*.35f,c.creativeFillAlpha);smooth(i){it.tip}}
+                    CreativeSpectrumStyle.DOUBLE_LINE->{smooth(i){it.tip};smooth(i){it.tip-stroke*c.waveLineGap.coerceIn(.25f,12f)};if(c.mirror)smooth(i){it.base}}
+                    CreativeSpectrumStyle.RIBBON->{val factor=c.waveRibbonWidth.coerceIn(.1f,5f)*.5f;strip(i,{it.tip-it.width*factor},{it.tip+it.width*factor},c.creativeFillAlpha,c.creativeFillAlpha);smooth(i){it.tip}}
+                    CreativeSpectrumStyle.ZIGZAG->{val pa=if(i%2==0)ac else ab;val pb=if((i+1)%2==0)bc else bb;waveLine(i,0f,1f,pa,pb,a.color,b.color)}
                     else->{smooth(i){it.tip};if(c.mirror)smooth(i){it.base}}
                 }
             }
@@ -124,36 +198,64 @@ object SpectrumStudioMesh {
         for(s in samples){
             val q=s.width*.5f;val c0=s.color;val base=s.base;val tip=s.tip
             val radius=(q*c.creativeTipSize.coerceIn(.25f,3f)).coerceAtLeast(stroke*.5f)
-            fun rect(lo:Float,hi:Float,half:Float=q){quad(s.p(-half,lo),s.p(half,lo),s.p(-half,hi),s.p(half,hi),c0)}
+            fun shape(vararg p:P){polygon(s,p.toList())}
+            fun rect(lo:Float,hi:Float,half:Float=q){
+                val top=half*c.barTipWidth.coerceIn(.05f,2f)
+                if(styled)shape(s.p(-half,lo),s.p(half,lo),s.p(top,hi),s.p(-top,hi))
+                else quad(s.p(-half,lo),s.p(half,lo),s.p(-half,hi),s.p(half,hi),c0)
+            }
+            fun dot(at:P,r:Float,hollow:Boolean=false){
+                if(styled&&!hollow){
+                    polygon(s,List(12){j->val a=j*PI.toFloat()/6f;at+P(cos(a),sin(a))*r})
+                } else disk(at,r,c0,hollow)
+            }
+            fun capsule(){
+                val low=minOf(base,tip);val high=maxOf(base,tip)
+                val r=minOf(q,(high-low)*.5f)*c.roundness.coerceIn(0f,1f)
+                if(r<=.001f){rect(base,tip);return}
+                if(!styled){val dir=if(tip>=base)1f else -1f;val a=base+r*dir;val b=tip-r*dir;rect(a,b);disk(s.p(0f,a),r,c0);disk(s.p(0f,b),r,c0);return}
+                // Rounded rectangle contour, with ordered corner arcs.
+                val pts=ArrayList<P>(24)
+                val centers=listOf((q-r) to (low+r),(q-r) to (high-r),(-q+r) to (high-r),(-q+r) to (low+r))
+                for(k in 0..3)for(j in 0..5){
+                    val a=(-90f+k*90f+j*18f)*PI.toFloat()/180f
+                    val point=s.p(centers[k].first+r*cos(a),centers[k].second+r*sin(a))
+                    if(pts.lastOrNull()!=point)pts.add(point)
+                }
+                // Remove zero length edges when the radius reaches half the width/height.
+                val clean=pts.filterIndexed{i,p->i==0||abs(p.x-pts[i-1].x)+abs(p.y-pts[i-1].y)>.0001f}.toMutableList()
+                if(clean.size>2 && abs(clean.first().x-clean.last().x)+abs(clean.first().y-clean.last().y)<.0001f)clean.removeAt(clean.lastIndex)
+                polygon(s,clean)
+            }
             fun localLine(x:Float,y:Float,xx:Float,yy:Float){line(s.p(x,y),s.p(xx,yy),stroke,c0)}
             when(style){
                 CreativeSpectrumStyle.BARS->rect(base,tip)
-                CreativeSpectrumStyle.DOTS->disk(s.p(0f,tip),radius,c0)
+                CreativeSpectrumStyle.DOTS->dot(s.p(0f,tip),radius)
                 CreativeSpectrumStyle.HOLLOW_DOTS->disk(s.p(0f,tip),radius,c0,true)
                 CreativeSpectrumStyle.STEPS,CreativeSpectrumStyle.STACK_DOTS,CreativeSpectrumStyle.STRIPES->{
                     val steps=c.stepCount.coerceIn(2,16);val lit=ceil(s.amplitude.coerceIn(0f,1f)*steps).toInt().coerceIn(0,steps)
                     for(j in 0 until lit){
                         val a=j.toFloat()/lit;val b=(j+.68f)/lit
                         when(style){
-                            CreativeSpectrumStyle.STACK_DOTS->disk(s.p(0f,s.mix((a+b)*.5f)),minOf(radius,abs(tip-base)/(2f*lit)).coerceAtLeast(.35f),c0)
+                            CreativeSpectrumStyle.STACK_DOTS->dot(s.p(0f,s.mix((a+b)*.5f)),minOf(radius,abs(tip-base)/(2f*lit)).coerceAtLeast(.35f))
                             CreativeSpectrumStyle.STRIPES->localLine(-q,s.mix(a),q,s.mix(b))
                             else->rect(s.mix(a),s.mix(b))
                         }
                     }
                 }
                 CreativeSpectrumStyle.OUTLINE->{localLine(-q,base,q,base);localLine(-q,tip,q,tip);localLine(-q,base,-q,tip);localLine(q,base,q,tip)}
-                CreativeSpectrumStyle.TRIANGLE->tri(s.p(-q,base),s.p(q,base),s.p(0f,tip),c0)
-                CreativeSpectrumStyle.DIAMOND->{val mid=s.mix(.5f);tri(s.p(0f,base),s.p(-q,mid),s.p(0f,tip),c0);tri(s.p(0f,base),s.p(0f,tip),s.p(q,mid),c0)}
-                CreativeSpectrumStyle.CAPSULE->{val r=minOf(q,abs(tip-base)*.5f)*c.roundness.coerceIn(0f,1f);if(r<=.001f)rect(base,tip)else{val dir=if(tip>=base)1f else -1f;val a=base+r*dir;val b=tip-r*dir;rect(a,b);disk(s.p(0f,a),r,c0);disk(s.p(0f,b),r,c0)}}
+                CreativeSpectrumStyle.TRIANGLE->if(styled)shape(s.p(-q,base),s.p(q,base),s.p(0f,tip))else tri(s.p(-q,base),s.p(q,base),s.p(0f,tip),c0)
+                CreativeSpectrumStyle.DIAMOND->{val mid=s.mix(.5f);if(styled)shape(s.p(0f,base),s.p(-q,mid),s.p(0f,tip),s.p(q,mid))else{tri(s.p(0f,base),s.p(-q,mid),s.p(0f,tip),c0);tri(s.p(0f,base),s.p(0f,tip),s.p(q,mid),c0)}}
+                CreativeSpectrumStyle.CAPSULE->capsule()
                 CreativeSpectrumStyle.DASH->rect(s.mix(.68f),tip)
-                CreativeSpectrumStyle.LOLLIPOP->{localLine(0f,base,0f,tip);disk(s.p(0f,tip),radius,c0)}
+                CreativeSpectrumStyle.LOLLIPOP->{localLine(0f,base,0f,tip);dot(s.p(0f,tip),radius)}
                 CreativeSpectrumStyle.CROSS->{localLine(0f,tip-radius,0f,tip+radius);localLine(-radius,tip,radius,tip)}
                 CreativeSpectrumStyle.CHEVRON->{localLine(-q,s.mix(.65f),0f,tip);localLine(0f,tip,q,s.mix(.65f))}
-                CreativeSpectrumStyle.TAPERED->quad(s.p(-q,base),s.p(q,base),s.p(-q*.18f,tip),s.p(q*.18f,tip),c0)
+                CreativeSpectrumStyle.TAPERED->{val top=q*.18f*c.barTipWidth.coerceIn(.05f,2f);if(styled)shape(s.p(-q,base),s.p(q,base),s.p(top,tip),s.p(-top,tip))else quad(s.p(-q,base),s.p(q,base),s.p(-top,tip),s.p(top,tip),c0)}
                 CreativeSpectrumStyle.CAPPED->{rect(base,s.mix(.88f),q*.55f);localLine(-q,tip,q,tip)}
-                CreativeSpectrumStyle.WAVE_POINTS->disk(s.p(0f,tip),radius*.65f,c0)
-                CreativeSpectrumStyle.SAWTOOTH->tri(s.p(-q,base),s.p(q,base),s.p(q,tip),c0)
-                CreativeSpectrumStyle.FAN->tri(s.p(0f,base),s.p(-q*1.5f,tip),s.p(q*1.5f,tip),c0)
+                CreativeSpectrumStyle.WAVE_POINTS->dot(s.p(0f,tip),radius*.65f)
+                CreativeSpectrumStyle.SAWTOOTH->if(styled)shape(s.p(-q,base),s.p(q,base),s.p(q,tip))else tri(s.p(-q,base),s.p(q,base),s.p(q,tip),c0)
+                CreativeSpectrumStyle.FAN->if(styled)shape(s.p(0f,base),s.p(-q*1.5f,tip),s.p(q*1.5f,tip))else tri(s.p(0f,base),s.p(-q*1.5f,tip),s.p(q*1.5f,tip),c0)
                 CreativeSpectrumStyle.TICKS->localLine(-q,tip,q,tip)
                 CreativeSpectrumStyle.PEAKS->{localLine(-q,s.peak,q,s.peak);rect(base,s.mix(.2f),q*.4f)}
                 else->if(n==1)rect(base,tip)

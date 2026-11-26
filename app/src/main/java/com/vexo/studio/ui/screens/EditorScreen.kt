@@ -921,6 +921,22 @@ private fun PropertiesTab(
                     StudioSlider("Baseline Offset",cfg.baselineOffset,-1f,1f,0f,"",.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){l->l.copy(config=(l.config as LayerConfig.Bars).copy(baselineOffset=v))}},onCommit=::endDrag)
                     StudioSlider("Steps",cfg.stepCount.toFloat(),2.0f,16.0f,8.0f,"",1.0f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){l->l.copy(config=(l.config as LayerConfig.Bars).copy(stepCount=v.toInt()))}},onCommit=::endDrag)
                 }
+                ExpandableSectionHeader("Bar fill & stroke",expandedSections["bar_paint"]==true,{toggleAccordion(expandedSections,"bar_paint")}){
+                    Text("Stroke and fill apply to solid bars, capsules, steps, dots and polygon segments.",style=MaterialTheme.typography.labelSmall,color=palette.textSecondary)
+                    StudioSlider("Bar Stroke Width",cfg.barStrokeWidth,0f,24f,0f,"px",.25f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.Bars).copy(barStrokeWidth=v))}},onCommit=::endDrag)
+                    StudioColorPickerRow("Bar Stroke Color",cfg.barStrokeColorArgb){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.Bars).copy(barStrokeColorArgb=v))}}
+                    StudioSlider("Bar Fill Opacity",cfg.barFillOpacity,0f,1f,1f,"",.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.Bars).copy(barFillOpacity=v))}},onCommit=::endDrag)
+                    StudioSlider("Bar Tip Width",cfg.barTipWidth,.05f,2f,1f,"x",.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.Bars).copy(barTipWidth=v))}},onCommit=::endDrag)
+                    StudioChipSelector("Gradient Mode",com.vexo.studio.model.SpectrumGradientMode.entries,cfg.barGradientMode,{it.name.replace('_',' ')}){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.Bars).copy(barGradientMode=v))}}
+                }
+                ExpandableSectionHeader("Wave detail",expandedSections["wave_detail"]==true,{toggleAccordion(expandedSections,"wave_detail")}){
+                    Text("Use line, double line, ribbon or fill to customize connected waves.",style=MaterialTheme.typography.labelSmall,color=palette.textSecondary)
+                    StudioSlider("Curve Tension",cfg.waveCurveTension,0f,1f,.5f,"",.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.Bars).copy(waveCurveTension=v,curveSubdivisions=maxOf(2,(it.config as LayerConfig.Bars).curveSubdivisions)))}},onCommit=::endDrag)
+                    StudioSlider("Double Wave Gap",cfg.waveLineGap,.25f,12f,2.5f,"x",.05f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.Bars).copy(waveLineGap=v))}},onCommit=::endDrag)
+                    StudioSlider("Ribbon Thickness",cfg.waveRibbonWidth,.1f,5f,1f,"x",.05f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.Bars).copy(waveRibbonWidth=v))}},onCommit=::endDrag)
+                    StudioSlider("Wave Dash Coverage",cfg.waveDashRatio,.05f,1f,1f,"",.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.Bars).copy(waveDashRatio=v))}},onCommit=::endDrag)
+                    if(cfg.waveDashRatio<.999f)StudioSlider("Wave Dash Count",cfg.waveDashCount.toFloat(),1f,64f,12f,"",1f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.Bars).copy(waveDashCount=v.toInt()))}},onCommit=::endDrag)
+                }
                 ExpandableSectionHeader("Path & geometry", expandedSections["Bars_Pathgeometry"] == true, { toggleAccordion(expandedSections, "Bars_Pathgeometry") }) {
                     StudioSlider("Polygon Sides", cfg.polygonSides.toFloat(), 3f, 24f, 6f, "", 1f, onValueChange = { v ->
                         beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(polygonSides = v.toInt())) }
@@ -982,6 +998,9 @@ private fun PropertiesTab(
                     StudioSlider("Segment 2 Width", cfg.segment2Width, 0.05f, 1.5f, 0.72f, "", 0.01f, onValueChange = { v -> beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(segment2Width = v)) } }, onCommit = ::endDrag)
                     StudioSlider("Segment 2 Height", cfg.segment2HeightMultiplier, -2f, 2f, 1f, "", 0.05f, onValueChange = { v -> beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(segment2HeightMultiplier = v)) } }, onCommit = ::endDrag)
                     StudioSlider("Segment 2 Fixed Height", cfg.segment2FixedHeight, -50f, 50f, 0f, "", 0.5f, onValueChange = { v -> beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(segment2FixedHeight = v)) } }, onCommit = ::endDrag)
+                        StudioSlider("Segment 2 Stroke Width",cfg.segment2StrokeWidth,0f,24f,0f,"px",.25f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.Bars).copy(segment2StrokeWidth=v))}},onCommit=::endDrag)
+                        StudioColorPickerRow("Segment 2 Stroke Color",cfg.segment2StrokeColorArgb){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.Bars).copy(segment2StrokeColorArgb=v))}}
+                        StudioSlider("Segment 2 Fill Opacity",cfg.segment2FillOpacity,0f,1f,1f,"",.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.Bars).copy(segment2FillOpacity=v))}},onCommit=::endDrag)
                         StudioToggleRow("Segment 2 Mirror", cfg.segment2Mirror) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(segment2Mirror = v)) } }
                         StudioColorPickerRow("Segment 2 Color From", cfg.segment2ColorFrom) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(segment2ColorFrom = v)) } }
                         StudioColorPickerRow("Segment 2 Color To", cfg.segment2ColorTo) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(segment2ColorTo = v)) } }

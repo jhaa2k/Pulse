@@ -411,7 +411,20 @@ sealed interface LayerConfig {
         val customPathClosed: Boolean = false,
         val customPathPoints: List<SpectrumPathPoint> = emptyList(),
         val pathStretchX: Float = 1f,
-        val pathStretchY: Float = 1f
+        val pathStretchY: Float = 1f,
+        val barStrokeWidth: Float = 0f,
+        val barStrokeColorArgb: Int = 0xFFFFFFFF.toInt(),
+        val barFillOpacity: Float = 1f,
+        val barTipWidth: Float = 1f,
+        val barGradientMode: SpectrumGradientMode = SpectrumGradientMode.PATH,
+        val segment2StrokeWidth: Float = 0f,
+        val segment2StrokeColorArgb: Int = 0xFFFFFFFF.toInt(),
+        val segment2FillOpacity: Float = 1f,
+        val waveRibbonWidth: Float = 1f,
+        val waveLineGap: Float = 2.5f,
+        val waveCurveTension: Float = .5f,
+        val waveDashRatio: Float = 1f,
+        val waveDashCount: Int = 12
     ) : LayerConfig
 
     @Serializable
@@ -1051,6 +1064,7 @@ data class CreativeImageConfig(
 
 @Serializable data class SpectrumPathPoint(val x: Float, val y: Float)
 @Serializable enum class CreativeSpectrumPath { LEGACY, ARC, SPIRAL, HEART, SINE, CIRCLE, OVAL, TRIANGLE, SQUARE, HEXAGON, STAR, FLOWER, FIGURE_EIGHT, BUTTERFLY, LISSAJOUS, DIAGONAL, ZIGZAG }
+@Serializable enum class SpectrumGradientMode { PATH, HEIGHT, AMPLITUDE, ALTERNATING }
 @Serializable enum class CreativeSpectrumStyle { BARS, DOTS, STEPS, LINE, FILL, OUTLINE, TRIANGLE, DIAMOND, CAPSULE, DASH, DOUBLE_LINE, RIBBON, ZIGZAG, LOLLIPOP, CROSS, CHEVRON, TAPERED, CAPPED, STACK_DOTS, HOLLOW_DOTS, WAVE_POINTS, SAWTOOTH, STRIPES, FAN, TICKS, PEAKS }
 @Serializable enum class ParticleEmitter { LEGACY, POINT, LINE, BOX, RING, DISC }
 @Serializable enum class TextMotion { NONE, FADE, SLIDE, PULSE, REVEAL, BEAT_SCALE }

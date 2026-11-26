@@ -2,7 +2,7 @@ package com.vexo.studio.engine.scene
 import com.vexo.studio.model.*
 import kotlin.random.Random
 
-data class SpectrumStyleRecipe(val name:String,val path:CreativeSpectrumPath,val style:CreativeSpectrumStyle,val count:Int,val radius:Float,val width:Float,val mirror:Boolean,val from:Int,val to:Int, val gain:Float=.9f, val spread:Float=.55f, val turns:Float=2f, val second:CreativeSpectrumStyle?=null, val waveform:Boolean=false, val curve:Int=1, val colors:Int=1){
+data class SpectrumStyleRecipe(val name:String,val path:CreativeSpectrumPath,val style:CreativeSpectrumStyle,val count:Int,val radius:Float,val width:Float,val mirror:Boolean,val from:Int,val to:Int, val gain:Float=.9f, val spread:Float=.55f, val turns:Float=2f, val second:CreativeSpectrumStyle?=null, val waveform:Boolean=false, val curve:Int=1, val colors:Int=1, val strokeWidth:Float=0f, val fill:Float=1f, val gradient:SpectrumGradientMode=SpectrumGradientMode.PATH, val dash:Float=1f, val ribbon:Float=1f){
     fun apply(base:LayerConfig.Bars)=base.copy(
         creativePath=path,creativeStyle=style,shapePath=BarsShapePath.HORIZONTAL_LINE,
         segment1=BarsSegmentType.BARS,segment2=if(second==null)BarsSegmentType.NONE else BarsSegmentType.BARS,secondaryCreativeStyle=second?:CreativeSpectrumStyle.BARS,
@@ -14,6 +14,8 @@ data class SpectrumStyleRecipe(val name:String,val path:CreativeSpectrumPath,val
         minHeightScale=.012f,maxHeightScale=.9f,fixedHeight=0f,flipInput=false,alternatingDirection=false,
         colorFromArgb=from,colorToArgb=to,colorBlendOffset=0f,
         creativeStrokeWidth=3f,creativeTipSize=1f,creativeFillAlpha=.65f,roundness=1f,stepCount=8,
+        barStrokeWidth=strokeWidth,barStrokeColorArgb=to,barFillOpacity=fill,barTipWidth=1f,barGradientMode=gradient,segment2StrokeWidth=0f,segment2StrokeColorArgb=from,segment2FillOpacity=1f,
+        waveRibbonWidth=ribbon,waveLineGap=2.5f,waveCurveTension=.5f,waveDashRatio=dash,waveDashCount=24,
         showPeaks=style==CreativeSpectrumStyle.PEAKS
     )
 }
@@ -66,7 +68,13 @@ object SpectrumStyleLibrary{
         SpectrumStyleRecipe("Analog Oscilloscope",CreativeSpectrumPath.LEGACY,CreativeSpectrumStyle.LINE,192,.25f,.65f,false,0xFFB5FF56.toInt(),0xFF69FFC0.toInt(),1f,waveform=true,curve=4),
         SpectrumStyleRecipe("Circular Oscilloscope",CreativeSpectrumPath.CIRCLE,CreativeSpectrumStyle.LINE,192,.27f,.7f,false,0xFF71E9FF.toInt(),0xFFCE75FF.toInt(),.9f,waveform=true,curve=4,colors=2),
         SpectrumStyleRecipe("Silk Wave",CreativeSpectrumPath.LEGACY,CreativeSpectrumStyle.LINE,112,.25f,.7f,true,0xFFFFB3DA.toInt(),0xFF87DBFF.toInt(),.75f,curve=6,colors=3),
-        SpectrumStyleRecipe("Prism Ring",CreativeSpectrumPath.CIRCLE,CreativeSpectrumStyle.LINE,144,.27f,.7f,false,0xFFFD4A99.toInt(),0xFF4DE6FF.toInt(),.85f,curve=4,colors=4)
+        SpectrumStyleRecipe("Prism Ring",CreativeSpectrumPath.CIRCLE,CreativeSpectrumStyle.LINE,144,.27f,.7f,false,0xFFFD4A99.toInt(),0xFF4DE6FF.toInt(),.85f,curve=4,colors=4),
+        SpectrumStyleRecipe("Hollow Neon Bars",CreativeSpectrumPath.LEGACY,CreativeSpectrumStyle.BARS,48,.25f,.8f,true,0xFF29DEFF.toInt(),0xFFC8FF54.toInt(),1f,strokeWidth=2.5f,fill=0f),
+        SpectrumStyleRecipe("Glass Capsule Ring",CreativeSpectrumPath.CIRCLE,CreativeSpectrumStyle.CAPSULE,72,.28f,.82f,false,0xFFBF54FF.toInt(),0xFF98E8FF.toInt(),.9f,strokeWidth=2f,fill=.25f,gradient=SpectrumGradientMode.HEIGHT),
+        SpectrumStyleRecipe("Heat Meter",CreativeSpectrumPath.LEGACY,CreativeSpectrumStyle.STEPS,40,.25f,.75f,false,0xFF13F0C0.toInt(),0xFFFF5349.toInt(),1.1f,gradient=SpectrumGradientMode.AMPLITUDE),
+        SpectrumStyleRecipe("Dashed Signal Ring",CreativeSpectrumPath.CIRCLE,CreativeSpectrumStyle.LINE,128,.28f,.7f,false,0xFFCBFF55.toInt(),0xFF54FFCF.toInt(),.8f,curve=4,dash=.48f),
+        SpectrumStyleRecipe("Silk Ocean",CreativeSpectrumPath.LEGACY,CreativeSpectrumStyle.FILL,96,.25f,.7f,true,0xFF0E63FF.toInt(),0xFF38F8DA.toInt(),.85f,curve=5),
+        SpectrumStyleRecipe("Wide Neon Ribbon",CreativeSpectrumPath.OVAL,CreativeSpectrumStyle.RIBBON,112,.28f,.8f,false,0xFFFF4F9A.toInt(),0xFF5BC9FF.toInt(),.8f,curve=5,ribbon=3f)
     )
     fun next(used:Set<String>,current:LayerConfig.Bars,random:Random=Random.Default):Pair<SpectrumStyleRecipe,Set<String>>{
         val remaining=recipes.filter{it.name !in used}
