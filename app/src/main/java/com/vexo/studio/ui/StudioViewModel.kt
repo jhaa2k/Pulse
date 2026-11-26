@@ -384,6 +384,46 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         )
     }
 
+    fun availableTemplates(): List<VexoProject> = runCatching {
+        com.vexo.studio.data.BuiltInTemplateRepository.load(app)
+    }.getOrDefault(emptyList()) + VexoTemplates.allTemplates()
+
+    fun applyArtworkPalette() {
+        val bitmap = playbackState.value.trackMeta.artwork
+        if (bitmap == null) {
+            _uiState.value = _uiState.value.copy(statusBanner = "Import a track with album art first")
+            return
+        }
+        val projectId = _uiState.value.project.id
+        viewModelScope.launch {
+            runCatching { com.vexo.studio.engine.scene.ArtworkPaletteExtractor.extract(bitmap) }
+                .onSuccess { colors ->
+                    if (_uiState.value.project.id == projectId) {
+                        commitProjectChange(com.vexo.studio.engine.scene.ArtworkPaletteExtractor.apply(_uiState.value.project, colors))
+                        _uiState.value = _uiState.value.copy(statusBanner = "Album-art palette applied")
+                    }
+                }.onFailure { _uiState.value = _uiState.value.copy(statusBanner = "Palette extraction failed: "+it.message) }
+        }
+    }
+
+    private var sleepJob: kotlinx.coroutines.Job? = null
+    private val _sleepRemaining = MutableStateFlow(0L)
+    val sleepRemaining = _sleepRemaining.asStateFlow()
+    fun setSleepTimer(minutes: Int) {
+        sleepJob?.cancel()
+        val deadline = android.os.SystemClock.elapsedRealtime() + minutes.coerceIn(0,180)*60_000L
+        _sleepRemaining.value = (minutes.coerceIn(0,180)*60L)
+        if (minutes <= 0) return
+        sleepJob = viewModelScope.launch {
+            while (isActive) {
+                val remain = (deadline-android.os.SystemClock.elapsedRealtime()).coerceAtLeast(0L)
+                _sleepRemaining.value = (remain+999)/1000
+                if (remain == 0L) { playbackController.player.pause(); break }
+                delay(minOf(1000L,remain))
+            }
+        }
+    }
+
     fun createNewProject(name: String, template: VexoProject = VexoTemplates.monochromeStudio()) {
         val fresh = template.copy(
             id = UUID.randomUUID().toString(),
@@ -536,8 +576,18 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
 
     fun startVideoExport() {
         val audioUri = playbackController.currentAudioUri() ?: _uiState.value.project.audioUri
+        if (exportState.value.isRunning) return
         if (audioUri.isNullOrBlank()) {
             _uiState.value = _uiState.value.copy(statusBanner = "Import an audio track before exporting video")
+            return
+        }
+        val exp = _uiState.value.project.exportSettings
+        if (exp.trimEndMs > 0L && exp.trimEndMs <= exp.trimStartMs) {
+            _uiState.value = _uiState.value.copy(statusBanner = "Trim end must be after trim start")
+            return
+        }
+        if (android.os.Build.VERSION.SDK_INT < 29 && exp.customOutputUri.isNullOrBlank()) {
+            _uiState.value = _uiState.value.copy(statusBanner = "Choose a custom MP4 destination on Android 7–9")
             return
         }
         if (playbackState.value.isPlaying) {

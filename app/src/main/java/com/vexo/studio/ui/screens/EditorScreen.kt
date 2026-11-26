@@ -757,7 +757,7 @@ private fun PropertiesTab(
         // Section 1: Transform & Blend
         ExpandableSectionHeader(
             title = "General & Transform",
-            expanded = expandedSections["transform"] ?: false,
+            expanded = expandedSections["transform"] ?: true,
             onToggle = { toggleAccordion(expandedSections, "transform") }
         ) {
             StudioToggleRow(
@@ -786,6 +786,8 @@ private fun PropertiesTab(
                 beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(common = it.common.copy(posY = v)) }
             }, ::endDrag)
             StudioToggleRow("Uniform Scale", layer.common.scaleIsUniform) { v -> vm.updateLayer(layer.common.id) { it.copy(common = it.common.copy(scaleIsUniform = v)) } }
+            StudioChipSelector("Anchor X", com.vexo.studio.model.AnchorMode.entries, layer.common.anchorX, { it.name }) { v -> vm.updateLayer(layer.common.id) { it.copy(common=it.common.copy(anchorX=v)) } }
+            StudioChipSelector("Anchor Y", com.vexo.studio.model.AnchorMode.entries, layer.common.anchorY, { it.name }) { v -> vm.updateLayer(layer.common.id) { it.copy(common=it.common.copy(anchorY=v)) } }
             StudioSlider("Pivot X", layer.common.alignmentX, 0f, 1f, 0.5f, "", 0.01f, onValueChange = { v -> beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(common = it.common.copy(alignmentX = v)) } }, onCommit = ::endDrag)
             StudioSlider("Pivot Y", layer.common.alignmentY, 0f, 1f, 0.5f, "", 0.01f, onValueChange = { v -> beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(common = it.common.copy(alignmentY = v)) } }, onCommit = ::endDrag)
             RegisteredSlider("scaleX", layer.common.scaleX, settings.showPropertyHelpHints, { v ->
@@ -828,6 +830,7 @@ private fun PropertiesTab(
                 },
                 onCommit = ::endDrag
             )
+            StudioSlider("Scale Trigger Threshold", layer.common.measureScale.triggerThreshold, 0f, 0.99f, 0f, "", 0.01f, onValueChange = { v -> beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(common=it.common.copy(measureScale=it.common.measureScale.copy(triggerThreshold=v))) } }, onCommit=::endDrag)
             StudioSlider("Scale Amount Y", layer.common.measureScale.amountB, -1f, 2f, 0f, "", 0.01f, onValueChange = { v -> beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(common = it.common.copy(measureScale = it.common.measureScale.copy(amountB = v))) } }, onCommit = ::endDrag)
             StudioChipSelector(
                 label = "Measure Position",
@@ -852,6 +855,7 @@ private fun PropertiesTab(
                 },
                 onCommit = ::endDrag
             )
+            StudioSlider("Position Trigger Threshold", layer.common.measurePos.triggerThreshold, 0f, 0.99f, 0f, "", 0.01f, onValueChange = { v -> beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(common=it.common.copy(measurePos=it.common.measurePos.copy(triggerThreshold=v))) } }, onCommit=::endDrag)
             StudioSlider("Position Amount Y", layer.common.measurePos.amountB, -0.5f, 0.5f, 0f, "", 0.01f, onValueChange = { v -> beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(common = it.common.copy(measurePos = it.common.measurePos.copy(amountB = v))) } }, onCommit = ::endDrag)
             StudioChipSelector(
                 label = "Measure Rotation",
@@ -876,6 +880,18 @@ private fun PropertiesTab(
                 },
                 onCommit = ::endDrag
             )
+        }
+
+        ExpandableSectionHeader("Advanced audio bindings", expandedSections["bindings"] == true, { toggleAccordion(expandedSections, "bindings") }) {
+            val ids = uiState.project.audioProviders.map { it.index }
+            StudioChipSelector("Position Provider", ids, layer.common.measurePos.providerIndex, { "#$it" }) { v -> vm.updateLayer(layer.common.id) { it.copy(common=it.common.copy(measurePos=it.common.measurePos.copy(providerIndex=v))) } }
+            StudioChipSelector("Scale Provider", ids, layer.common.measureScale.providerIndex, { "#$it" }) { v -> vm.updateLayer(layer.common.id) { it.copy(common=it.common.copy(measureScale=it.common.measureScale.copy(providerIndex=v))) } }
+            StudioChipSelector("Rotation Provider", ids, layer.common.measureRot.providerIndex, { "#$it" }) { v -> vm.updateLayer(layer.common.id) { it.copy(common=it.common.copy(measureRot=it.common.measureRot.copy(providerIndex=v))) } }
+            StudioSlider("Rotation Threshold", layer.common.measureRot.triggerThreshold, 0f, .99f, 0f, "", .01f, onValueChange={v -> beginDrag(); vm.updateLayer(layer.common.id,false){it.copy(common=it.common.copy(measureRot=it.common.measureRot.copy(triggerThreshold=v))) }}, onCommit=::endDrag)
+            StudioChipSelector("Opacity Trigger", MeasureWhat.entries.filter { it != MeasureWhat.KEYFRAME }, layer.common.measureOpacity.measureWhat, { it.label }) { v -> vm.updateLayer(layer.common.id) { it.copy(common=it.common.copy(measureOpacity=it.common.measureOpacity.copy(measureWhat=v))) } }
+            StudioChipSelector("Opacity Provider", ids, layer.common.measureOpacity.providerIndex, { "#$it" }) { v -> vm.updateLayer(layer.common.id) { it.copy(common=it.common.copy(measureOpacity=it.common.measureOpacity.copy(providerIndex=v))) } }
+            StudioSlider("Opacity Amount", layer.common.measureOpacity.amountA, -1f, 1f, 0f, "", .01f, onValueChange={v -> beginDrag(); vm.updateLayer(layer.common.id,false){it.copy(common=it.common.copy(measureOpacity=it.common.measureOpacity.copy(amountA=v,amountB=v))) }}, onCommit=::endDrag)
+            StudioSlider("Opacity Threshold", layer.common.measureOpacity.triggerThreshold, 0f, .99f, 0f, "", .01f, onValueChange={v -> beginDrag(); vm.updateLayer(layer.common.id,false){it.copy(common=it.common.copy(measureOpacity=it.common.measureOpacity.copy(triggerThreshold=v))) }}, onCommit=::endDrag)
         }
 
         when (val cfg = layer.config) {
@@ -916,6 +932,9 @@ private fun PropertiesTab(
                     StudioToggleRow("Alternating Dir", cfg.alternatingDirection) { a ->
                         vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(alternatingDirection = a)) }
                     }
+                    StudioSlider("Bar Count (0 = Provider)", cfg.barCount.toFloat(), 0f, 512f, 0f, "", 1f, onValueChange={v -> beginDrag(); vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.Bars).copy(barCount=v.toInt()))}}, onCommit=::endDrag)
+                    StudioSlider("Bar Spacing", cfg.barSpacing, 0f, .95f, 0f, "", .01f, onValueChange={v -> beginDrag(); vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.Bars).copy(barSpacing=v))}}, onCommit=::endDrag)
+                    if (cfg.segment1 == BarsSegmentType.ROUND_BARS) StudioSlider("Roundness", cfg.roundness, 0f, 1f, 1f, "", .01f, onValueChange={v -> beginDrag(); vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.Bars).copy(roundness=v))}}, onCommit=::endDrag)
                     RegisteredSlider("barWidth", cfg.barWidth, settings.showPropertyHelpHints, { v ->
                         beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(barWidth = v)) }
                     }, ::endDrag)
@@ -1383,9 +1402,7 @@ private fun AudioProviderEditorSection(
 }
 
 internal fun toggleAccordion(sections: MutableMap<String, Boolean>, key: String) {
-    val opening = sections[key] != true
-    sections.clear()
-    if (opening) sections[key] = true
+    sections[key] = !(sections[key] ?: (key == "transform"))
 }
 
 @Composable
@@ -1525,7 +1542,7 @@ private fun PresetsTab(
             }
         }
 
-        val builtIns = remember { VexoTemplates.allTemplates() }
+        val builtIns = remember { vm.availableTemplates() }
         var query by rememberSaveable { mutableStateOf("") }
         Text("BUILT-IN PRESETS · ${builtIns.size}", style = MaterialTheme.typography.labelSmall, color = palette.textSecondary)
         OutlinedTextField(value = query, onValueChange = { query = it }, label = { Text("Find a preset") }, singleLine = true, modifier = Modifier.fillMaxWidth())

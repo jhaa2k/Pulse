@@ -231,6 +231,10 @@ private fun VexoRootApp(vm: StudioViewModel) {
         },
         bottomBar = {
             if (!uiState.isFullscreenPreview && uiState.navDestination != NavDestination.STUDIO) {
+                Column {
+                if (playback.queue.isNotEmpty()) {
+                    com.vexo.studio.ui.screens.CompactTransportBar(playback, {vm.playbackController.togglePlayPause()}, {vm.playbackController.previous()}, {vm.playbackController.next()}, {vm.playbackController.seekTo(it)}, {audioPicker.launch(arrayOf("audio/*"))}, Modifier.fillMaxWidth().padding(horizontal=8.dp))
+                }
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)
                         .background(palette.glassPanel, palette.shape).border(1.dp, palette.border, palette.shape)
@@ -261,6 +265,7 @@ private fun VexoRootApp(vm: StudioViewModel) {
                             Text(dest.label, style = MaterialTheme.typography.labelSmall, color = if(active) palette.accent else palette.textSecondary, maxLines = 1)
                         }
                     }
+                }
                 }
             }
         }

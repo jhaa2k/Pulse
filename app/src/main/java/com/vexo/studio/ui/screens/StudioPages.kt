@@ -35,6 +35,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -186,6 +187,11 @@ fun AudioLibraryScreen(
     onImportAudio: () -> Unit
 ) {
     val palette = LocalVexoPalette.current
+    var showLibrary by remember { mutableStateOf(false) }
+    if (showLibrary) {
+        DeviceLibraryPanel(vm, onBack={showLibrary=false})
+        return
+    }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -208,6 +214,12 @@ fun AudioLibraryScreen(
             }
         }
 
+        Row(Modifier.fillMaxWidth(), horizontalArrangement=Arrangement.SpaceBetween) {
+            TextButton(onClick={showLibrary=true}) { Text("DEVICE LIBRARY") }
+            TextButton(onClick=vm::applyArtworkPalette) { Text("AUTO PALETTE") }
+        }
+        val sleep by vm.sleepRemaining.collectAsState()
+        StudioChipSelector("Sleep timer" + if(sleep>0) " · "+formatDuration(sleep*1000) else "", listOf(0,15,30,60,120), if(sleep==0L) 0 else ((sleep+59)/60).toInt(), {if(it==0) "Off" else "$it min"}) { vm.setSleepTimer(it) }
         // Queue controls: shuffle, repeat, volume
         Row(
             modifier = Modifier
@@ -322,7 +334,10 @@ fun TemplatesScreen(
             }
         }
 
-        VexoTemplates.allTemplates().forEach { tpl ->
+        val templates = remember { vm.availableTemplates() }
+        var templateQuery by remember { mutableStateOf("") }
+        OutlinedTextField(value=templateQuery,onValueChange={templateQuery=it},label={Text("Search templates")},singleLine=true,modifier=Modifier.fillMaxWidth())
+        templates.filter { it.name.contains(templateQuery,ignoreCase=true) }.forEach { tpl ->
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -385,13 +400,15 @@ fun ExportScreen(
             label = "Video Bitrate",
             value = exp.videoBitrateMbps.toFloat(),
             min = 2f,
-            max = 32f,
+            max = 80f,
             defaultValue = 12f,
             units = "Mbps",
             step = 1f,
             onValueChange = { v -> vm.updateExportSettings { it.copy(videoBitrateMbps = v.toInt()) } }
         )
 
+        StudioChipSelector("AAC Audio Bitrate", listOf(96,128,192,256,320), exp.audioBitrateKbps, { "$it kbps" }) { v -> vm.updateExportSettings { it.copy(audioBitrateKbps=v) } }
+        Text("H.264 / AAC · Hardware capability is checked before rendering.", style=MaterialTheme.typography.bodySmall, color=palette.textSecondary)
         if (playback.durationMs > 0L) {
             StudioSlider(
                 label = "Trim Start",
