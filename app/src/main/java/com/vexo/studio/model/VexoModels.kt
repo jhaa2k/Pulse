@@ -395,7 +395,11 @@ sealed interface LayerConfig {
         val creativeStyle: CreativeSpectrumStyle = CreativeSpectrumStyle.BARS,
         val pathTurns: Float = 2f,
         val pathSpread: Float = .3f,
-        val stepCount: Int = 8
+        val stepCount: Int = 8,
+        val secondaryCreativeStyle: CreativeSpectrumStyle = CreativeSpectrumStyle.BARS,
+        val creativeStrokeWidth: Float = 2f,
+        val creativeFillAlpha: Float = .65f,
+        val creativeTipSize: Float = 1f
     ) : LayerConfig
 
     @Serializable
@@ -1030,8 +1034,8 @@ data class CreativeImageConfig(
     val apertureY: Float = .5f
 )
 
-@Serializable enum class CreativeSpectrumPath { LEGACY, ARC, SPIRAL, HEART, SINE }
-@Serializable enum class CreativeSpectrumStyle { BARS, DOTS, STEPS }
+@Serializable enum class CreativeSpectrumPath { LEGACY, ARC, SPIRAL, HEART, SINE, CIRCLE, OVAL, TRIANGLE, SQUARE, HEXAGON, STAR, FLOWER, FIGURE_EIGHT, BUTTERFLY, LISSAJOUS, DIAGONAL, ZIGZAG }
+@Serializable enum class CreativeSpectrumStyle { BARS, DOTS, STEPS, LINE, FILL, OUTLINE, TRIANGLE, DIAMOND, CAPSULE, DASH, DOUBLE_LINE, RIBBON, ZIGZAG, LOLLIPOP, CROSS, CHEVRON, TAPERED, CAPPED, STACK_DOTS, HOLLOW_DOTS, WAVE_POINTS, SAWTOOTH, STRIPES, FAN, TICKS, PEAKS }
 @Serializable enum class ParticleEmitter { LEGACY, POINT, LINE, BOX, RING, DISC }
 @Serializable enum class TextMotion { NONE, FADE, SLIDE, PULSE, REVEAL, BEAT_SCALE }
 

@@ -400,19 +400,17 @@ class VexoGlRenderer(
         if (cfg.segment1 == BarsSegmentType.NONE && cfg.segment2 == BarsSegmentType.NONE) return
         if (cfg.segment2 != BarsSegmentType.NONE) {
             if (cfg.segment1 != BarsSegmentType.NONE) drawBarsLayer(layerId, cfg.copy(segment2 = BarsSegmentType.NONE), audioSnap, opacity, w, h)
-            drawBarsLayer("${layerId}_segment2", cfg.copy(segment1 = cfg.segment2, segment2 = BarsSegmentType.NONE, barWidth = cfg.segment2Width, barHeightMultiplier = cfg.segment2HeightMultiplier, fixedHeight = cfg.segment2FixedHeight, mirror = cfg.segment2Mirror, colorFromArgb = cfg.segment2ColorFrom, colorToArgb = cfg.segment2ColorTo), audioSnap, opacity, w, h)
+            drawBarsLayer("${layerId}_segment2", cfg.copy(segment1 = cfg.segment2, segment2 = BarsSegmentType.NONE, barWidth = cfg.segment2Width, barHeightMultiplier = cfg.segment2HeightMultiplier, fixedHeight = cfg.segment2FixedHeight, mirror = cfg.segment2Mirror, creativeStyle=cfg.secondaryCreativeStyle, colorFromArgb = cfg.segment2ColorFrom, colorToArgb = cfg.segment2ColorTo), audioSnap, opacity, w, h)
             return
         }
-        val rawBars = audioSnap?.bars ?: FloatArray(64) { i ->
-            0.08f + 0.14f * kotlin.math.abs(sin(i * 0.22f))
-        }
+        val rawBars = audioSnap?.bars ?: FloatArray(64)
         val sampled = SpectrumGeometry.resample(rawBars, cfg.barCount)
         val delayedBars = applyReactionDelay(layerId, SpectrumFilters.smooth(sampled,cfg.softness), (cfg.reactionDelay + cfg.reactionAccumulatedDelay).coerceIn(0, 9))
         val count = delayedBars.size
         if (count == 0) return
         val peaks=if(cfg.showPeaks && audioSnap!=null && audioSnap.peakBars.isNotEmpty()) SpectrumGeometry.resample(audioSnap.peakBars,count) else null
         if(cfg.creativePath!=com.vexo.studio.model.CreativeSpectrumPath.LEGACY || cfg.creativeStyle!=com.vexo.studio.model.CreativeSpectrumStyle.BARS){
-            drawCreativeSpectrum(cfg,delayedBars,opacity,w,h)
+            drawCreativeSpectrum(cfg,delayedBars,peaks,opacity,w,h)
             return
         }
         if (cfg.segment1 == BarsSegmentType.LINE && count > 1) {
@@ -565,71 +563,16 @@ class VexoGlRenderer(
         drawColorVertices(vIdx / 2, opacity)
     }
 
-    private fun drawCreativeSpectrum(cfg:LayerConfig.Bars,bars:FloatArray,opacity:Float,w:Int,h:Int){
-        val n=bars.size
-        if(n==0)return
-        val steps=if(cfg.creativeStyle==com.vexo.studio.model.CreativeSpectrumStyle.STEPS)cfg.stepCount.coerceIn(2,16) else 1
-        val isDot=cfg.creativeStyle==com.vexo.studio.model.CreativeSpectrumStyle.DOTS
-        val needed=n*steps*(if(isDot)72 else 12)
-        if(vertexScratch.size<needed||colorScratch.size<needed*2){vertexScratch=FloatArray(needed);colorScratch=FloatArray(needed*2);vertexBuf=allocFloatBuffer(needed);colorBuf=allocFloatBuffer(needed*2)}
-        val minDim=minOf(w,h).toFloat()
-        fun point(t:Float):com.vexo.studio.engine.scene.CreativeGeometry.Point{
-            val u=t.coerceIn(0f,1f)
-            if(cfg.creativePath!=com.vexo.studio.model.CreativeSpectrumPath.LEGACY){
-                val p=com.vexo.studio.engine.scene.CreativeGeometry.path(cfg.creativePath,u,cfg.pathTurns,cfg.pathSpread,cfg.circleRadius,cfg.pathGap,cfg.pathAngleDeg)
-                val factor=if(cfg.creativePath==com.vexo.studio.model.CreativeSpectrumPath.SINE)w.toFloat() else minDim
-                return com.vexo.studio.engine.scene.CreativeGeometry.Point(w*.5f+p.x*factor,h*.5f+p.y*minDim)
-            }
-            val a=(u*2f*PI.toFloat()*(1f-cfg.pathGap.coerceIn(0f,.9f))+cfg.pathAngleDeg*PI.toFloat()/180f)
-            val r=cfg.circleRadius*minDim
-            return when(cfg.shapePath){
-                BarsShapePath.CIRCLE,BarsShapePath.SIDED_POLYGON->com.vexo.studio.engine.scene.CreativeGeometry.Point(w*.5f+cos(a)*r,h*.5f+sin(a)*r)
-                BarsShapePath.VERTICAL_LINE->com.vexo.studio.engine.scene.CreativeGeometry.Point(w*.5f,h*(.07f+.86f*u))
-                else->com.vexo.studio.engine.scene.CreativeGeometry.Point(w*(.07f+.86f*u),h*.5f)
-            }
-        }
+    private fun drawCreativeSpectrum(cfg:LayerConfig.Bars,bars:FloatArray,peaks:FloatArray?,opacity:Float,w:Int,h:Int){
         var vi=0;var ci=0
-        for(i in bars.indices){
-            val t=(i+.5f)/n
-            val pt=point(t);val a=point(t-.25f/n);val b=point(t+.25f/n)
-            val dx=b.x-a.x;val dy=b.y-a.y;val len=kotlin.math.sqrt(dx*dx+dy*dy).coerceAtLeast(.001f)
-            val tx=dx/len;val ty=dy/len;val nx=ty;val ny=-tx
-            val width=(len*2f*cfg.barWidth.coerceIn(.05f,1.5f)*(1f-cfg.barSpacing.coerceIn(0f,.95f))).coerceIn(1f,minDim*.1f)
-            val gain=cfg.heightScale*cfg.barHeightMultiplier
-            val raw=bars[if(cfg.flipInput)n-1-i else i]
-            val amplitude=(raw*kotlin.math.abs(gain)).coerceIn(minOf(kotlin.math.abs(cfg.minHeightScale),kotlin.math.abs(cfg.maxHeightScale)),maxOf(kotlin.math.abs(cfg.minHeightScale),kotlin.math.abs(cfg.maxHeightScale)))
-            val height=(amplitude*minDim*.42f+cfg.fixedHeight*2f)*(if(gain<0f)-1f else 1f)*(if(cfg.alternatingDirection&&i%2==1)-1f else 1f)
-            val color=MeasureEvaluator.blendArgb(cfg.colorFromArgb,cfg.colorToArgb,(t+cfg.colorBlendOffset).coerceIn(0f,1f))
-            fun quad(lo:Float,hi:Float){
-                fun v(x:Float,y:Float){
-                    vertexScratch[vi++]=pt.x+tx*x+nx*y;vertexScratch[vi++]=pt.y+ty*x+ny*y
-                    colorScratch[ci++]=((color ushr 16)and 255)/255f;colorScratch[ci++]=((color ushr 8)and 255)/255f;colorScratch[ci++]=(color and 255)/255f;colorScratch[ci++]=((color ushr 24)and 255)/255f
-                }
-                val q=width*.5f
-                v(-q,lo);v(q,lo);v(-q,hi);v(-q,hi);v(q,lo);v(q,hi)
+        com.vexo.studio.engine.scene.SpectrumStudioMesh.emit(cfg,bars,peaks,w,h){x,y,color->
+            if(vi+2>vertexScratch.size||ci+4>colorScratch.size){
+                val cap=maxOf(vi+2,vertexScratch.size*2,1024)
+                vertexScratch=vertexScratch.copyOf(cap);colorScratch=colorScratch.copyOf(cap*2)
+                vertexBuf=allocFloatBuffer(cap);colorBuf=allocFloatBuffer(cap*2)
             }
-            val base=if(cfg.mirror)-height*.5f else 0f
-            when(cfg.creativeStyle){
-                com.vexo.studio.model.CreativeSpectrumStyle.DOTS->{
-                    val cx=pt.x+nx*(base+height);val cy=pt.y+ny*(base+height)
-                    val r=width*.5f
-                    fun dotVertex(x:Float,y:Float){
-                        vertexScratch[vi++]=x;vertexScratch[vi++]=y
-                        colorScratch[ci++]=((color ushr 16)and 255)/255f;colorScratch[ci++]=((color ushr 8)and 255)/255f;colorScratch[ci++]=(color and 255)/255f;colorScratch[ci++]=((color ushr 24)and 255)/255f
-                    }
-                    for(j in 0 until 12){
-                        val a=j*PI.toFloat()/6f;val b=(j+1)*PI.toFloat()/6f
-                        dotVertex(cx,cy);dotVertex(cx+cos(a)*r,cy+sin(a)*r);dotVertex(cx+cos(b)*r,cy+sin(b)*r)
-                    }
-                }
-                com.vexo.studio.model.CreativeSpectrumStyle.STEPS->{
-                    val lit=(amplitude.coerceIn(0f,1f)*steps).toInt().coerceIn(0,steps)
-                    val full=minDim*.42f*(if(height<0f)-1 else 1)
-                    val offset=if(cfg.mirror)-full*.5f else 0f
-                    for(j in 0 until lit){quad(offset+full*j/steps,offset+full*(j+.68f)/steps)}
-                }
-                else->quad(base,base+height)
-            }
+            vertexScratch[vi++]=x;vertexScratch[vi++]=y
+            colorScratch[ci++]=((color ushr 16)and 255)/255f;colorScratch[ci++]=((color ushr 8)and 255)/255f;colorScratch[ci++]=(color and 255)/255f;colorScratch[ci++]=((color ushr 24)and 255)/255f
         }
         drawColorVertices(vi/2,opacity)
     }
