@@ -47,7 +47,12 @@ object StudioFonts{
                 if(italic)Typeface.create(base,Typeface.ITALIC) else base
             }else{
                 val base=Typeface.createFromAsset(context.assets,path)
-                if(staticWeights&&!italic)base else Typeface.create(base,if(italic)Typeface.ITALIC or (if(w>=700&&!staticWeights)Typeface.BOLD else 0) else if(w>=700&&!staticWeights)Typeface.BOLD else Typeface.NORMAL)
+                if (staticWeights && !italic) base else Typeface.create(base, when {
+                    italic && w >= 700 && !staticWeights -> Typeface.BOLD_ITALIC
+                    italic -> Typeface.ITALIC
+                    w >= 700 && !staticWeights -> Typeface.BOLD
+                    else -> Typeface.NORMAL
+                })
             }
         }.getOrDefault(Typeface.create(Typeface.SANS_SERIF,if(w>=700)Typeface.BOLD else Typeface.NORMAL))
         cache.put(cacheKey,result)

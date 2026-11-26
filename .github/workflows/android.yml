@@ -20,6 +20,16 @@ jobs:
         run: chmod +x gradlew
       - name: Run unit tests and lint
         run: ./gradlew testDebugUnitTest lintDebug
+      - name: Print complete lint report on validation failure
+        if: failure()
+        shell: bash
+        run: |
+          report="app/build/reports/lint-results-debug.txt"
+          if [ -f "$report" ]; then
+            cat "$report"
+          else
+            find app/build/intermediates/lint_intermediate_text_report -name lint-results-debug.txt -exec cat {} \; 2>/dev/null || true
+          fi
       - name: Upload test and lint reports
         if: always()
         uses: actions/upload-artifact@v4

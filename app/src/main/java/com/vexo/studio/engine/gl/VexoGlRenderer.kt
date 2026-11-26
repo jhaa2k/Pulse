@@ -1536,7 +1536,12 @@ class VexoGlRenderer(
             color = cfg.colorArgb
             textSize = cfg.fontSize.toFloat().coerceIn(14f, 120f)
             val weight=if(cfg.fontWeight in 100..900)cfg.fontWeight else if(cfg.bold)700 else 400
-            typeface = if(cfg.fontAssetUri.isNullOrBlank())com.vexo.studio.engine.scene.StudioFonts.resolve(context,cfg.fontFamily,weight,cfg.italic) else if(android.os.Build.VERSION.SDK_INT>=28)Typeface.create(resolveTypeface(cfg.fontAssetUri),weight,cfg.italic) else Typeface.create(resolveTypeface(cfg.fontAssetUri),if(cfg.italic)Typeface.ITALIC or (if(weight>=700)Typeface.BOLD else 0) else if(weight>=700)Typeface.BOLD else Typeface.NORMAL)
+            typeface = if(cfg.fontAssetUri.isNullOrBlank())com.vexo.studio.engine.scene.StudioFonts.resolve(context,cfg.fontFamily,weight,cfg.italic) else if(android.os.Build.VERSION.SDK_INT>=28)Typeface.create(resolveTypeface(cfg.fontAssetUri),weight,cfg.italic) else Typeface.create(resolveTypeface(cfg.fontAssetUri), when {
+                cfg.italic && weight >= 700 -> Typeface.BOLD_ITALIC
+                cfg.italic -> Typeface.ITALIC
+                weight >= 700 -> Typeface.BOLD
+                else -> Typeface.NORMAL
+            })
             textAlign = when (cfg.alignment) {
                 -1 -> Paint.Align.LEFT
                 1 -> Paint.Align.RIGHT
