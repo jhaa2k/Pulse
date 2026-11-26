@@ -1982,7 +1982,7 @@ private fun LayerPresetLibrary(vm:StudioViewModel){
     vm.currentSelectedLayer()?.let{LayerPresetSavePanel(vm,it)}
     if(presets.isEmpty())Text("Save a selected layer to reuse its style in another project.",style=MaterialTheme.typography.labelSmall)
     else {
-        OutlinedTextField(query,{query=it.take(80)},label={Text("Find layer preset")},singleLine=true,modifier=Modifier.fillMaxWidth())
+        CompactStudioSearch(query,{query=it.take(80)},"Find layer preset",Modifier.fillMaxWidth())
         presets.filter{it.name.contains(query,true)||it.layer.type.label.contains(query,true)}.forEach{p->
             Row(Modifier.fillMaxWidth().background(palette.panelElevated).padding(6.dp),verticalAlignment=Alignment.CenterVertically){
                 Column(Modifier.weight(1f)){

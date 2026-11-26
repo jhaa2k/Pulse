@@ -19,6 +19,12 @@ class Phase32RoundedGeometryTest{
             assertTrue("Nonconvex contour",cross>=-.05f)
         }
     }
+    @Test fun shortPillBecomesACircleWithNoSquaredCorners(){
+        val p=SpectrumGeometry.roundedContour(32f,32f,32f)
+        assertTrue(p.size>=48)
+        assertTrue(p.all{abs(sqrt(it.first*it.first+it.second*it.second)-32f)<.001f})
+        assertTrue(p.zipWithNext().all{(a,b)->a!=b})
+    }
     @Test fun roundFanFitsAllocatedCapacity(){
         val v=SpectrumGeometry.roundedQuad(-800f,-1200f,800f,-1200f,-800f,1200f,800f,1200f,1f)
         assertTrue(v.size/2<=SpectrumGeometry.MAX_ROUNDED_VERTICES)

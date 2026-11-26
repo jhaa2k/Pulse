@@ -821,7 +821,7 @@ class VexoGlRenderer(
         val rect=if(cfg.kind==ShapeKind.RECTANGLE) ShapeGeometry.roundedSquare(r*.70710678f,cfg.cornerRadius) else null
         val sides = when (cfg.kind) {
             ShapeKind.RECTANGLE -> rect!!.size
-            ShapeKind.ELLIPSE -> 48
+            ShapeKind.ELLIPSE -> SpectrumGeometry.quarterSegments(r)*4
             ShapeKind.POLYGON -> cfg.sides.coerceIn(3, 24)
             ShapeKind.STAR -> cfg.sides.coerceIn(4, 16) * 2
             ShapeKind.LINE -> 2

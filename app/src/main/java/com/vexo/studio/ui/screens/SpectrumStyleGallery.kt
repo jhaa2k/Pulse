@@ -41,7 +41,7 @@ internal fun SpectrumStyleGallery(layerId:String,cfg:LayerConfig.Bars,apply:(Lay
     Text("Shuffle cycles through unique designs. Samples are illustrative; playback uses real audio.",style=MaterialTheme.typography.labelSmall,color=palette.textSecondary)
     if(open)AlertDialog(onDismissRequest={open=false},title={Text("SPECTRUM STYLE GALLERY")},text={
         Column(Modifier.fillMaxWidth()){
-            OutlinedTextField(query,{query=it.take(60)},singleLine=true,label={Text("Search style / shape")},modifier=Modifier.fillMaxWidth())
+            CompactStudioSearch(query,{query=it.take(60)},"Search style / shape",Modifier.fillMaxWidth())
             val recipes=SpectrumStyleLibrary.recipes.filter{it.name.contains(query,true)||it.style.name.contains(query,true)||it.path.name.contains(query,true)}
             LazyColumn(Modifier.heightIn(max=380.dp),verticalArrangement=Arrangement.spacedBy(6.dp)){
                 items(recipes.chunked(2)){row->

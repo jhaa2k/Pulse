@@ -70,9 +70,9 @@ internal fun FullscreenPreviewOrientation(landscape:Boolean,onExit:()->Unit){
         controller?.systemBarsBehavior=WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         controller?.hide(WindowInsetsCompat.Type.systemBars())
         onDispose{
-            if(previous!=null)activity.requestedOrientation=previous
+            if(previous!=null)activity?.requestedOrientation=previous
             controller?.show(WindowInsetsCompat.Type.systemBars())
-            if(behavior!=null)controller.systemBarsBehavior=behavior
+            if(behavior!=null)controller?.systemBarsBehavior=behavior
         }
     }
     LaunchedEffect(activity,landscape){
