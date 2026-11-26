@@ -333,7 +333,7 @@ class VexoGlRenderer(
             is LayerConfig.Text -> drawTextLayer(cfg, scene.trackMeta, opacity, w, h)
             is LayerConfig.Shape -> drawShapeLayer(cfg, opacity, w, h)
             is LayerConfig.Particles -> drawParticlesLayer(c.id, cfg, audioSnap, scene, deltaSec, opacity, w, h)
-            is LayerConfig.BlurEffect -> drawBlurEffect(cfg, opacity, w, h, compTextures)
+            is LayerConfig.BlurEffect -> drawBlurEffect(cfg, scene, trackNorm, opacity, w, h, compTextures)
             is LayerConfig.RgbSplitEffect -> drawRgbSplitEffect(cfg, audioSnap, scene, trackNorm, opacity, w, h, compTextures)
             is LayerConfig.MotionBlurEffect -> drawMotionBlurEffect(c.id, cfg, opacity, w, h, compTextures)
             is LayerConfig.MirrorEffect -> drawMirrorEffect(cfg, opacity, w, h, compTextures)
@@ -735,6 +735,13 @@ class VexoGlRenderer(
         }
 
         val strokeW = cfg.strokeWidth.coerceIn(0f, 32f)
+        if(cfg.kind==ShapeKind.LINE){
+            if(strokeW>0f){val a=cx-r;val b=cx+r;val y0=cy-strokeW*.5f;val y1=cy+strokeW*.5f
+                pushVert(a,y0,cfg.strokeColorArgb);pushVert(b,y0,cfg.strokeColorArgb);pushVert(a,y1,cfg.strokeColorArgb)
+                pushVert(a,y1,cfg.strokeColorArgb);pushVert(b,y0,cfg.strokeColorArgb);pushVert(b,y1,cfg.strokeColorArgb)
+                drawColorVertices(vIdx/2,opacity)}
+            return
+        }
         for (i in 0 until sides) {
             val a0 = (i.toFloat() / sides) * 2f * PI.toFloat() + (if (cfg.kind == ShapeKind.RECTANGLE) PI.toFloat() * 0.25f else 0f)
             val a1 = ((i + 1).toFloat() / sides) * 2f * PI.toFloat() + (if (cfg.kind == ShapeKind.RECTANGLE) PI.toFloat() * 0.25f else 0f)
@@ -847,6 +854,8 @@ class VexoGlRenderer(
 
     private fun drawBlurEffect(
         cfg: LayerConfig.BlurEffect,
+        scene: RenderSceneSnapshot,
+        trackNorm: Float,
         opacity: Float,
         w: Int,
         h: Int,
@@ -873,7 +882,8 @@ class VexoGlRenderer(
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, srcTex)
         GLES20.glUniform1i(shader.uniform("uTex"), 0)
         GLES20.glUniform2f(shader.uniform("uDirection"), 1f / ping.width, 0f)
-        GLES20.glUniform1f(shader.uniform("uRadius"), cfg.blurRadius * cfg.blurMultiplier * 0.5f)
+        val reactive=MeasureEvaluator.evaluateScalar(cfg.measureBlur,scene.audioSnapshots[cfg.measureBlur.providerIndex],scene.totalTimeSec,scene.playingTimeSec,trackNorm,scene.isPlaying)
+        GLES20.glUniform1f(shader.uniform("uRadius"), (cfg.blurRadius + reactive).coerceIn(0f,16f) * cfg.blurMultiplier.coerceIn(0f,8f) * 0.5f)
         drawTexturedQuad(shader, 0f, 0f, ping.width.toFloat(), ping.height.toFloat(), flipV = true)
 
         // Pass 2: Vertical into pong
@@ -903,10 +913,37 @@ class VexoGlRenderer(
             drawTexturedQuad(img, 0f, 0f, w.toFloat(), h.toFloat(), flipV = true)
         }
 
-        applyBlendMode(BlendMode.ADD)
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, pong.textureId)
-        GLES20.glUniform1f(img.uniform("uOpacity"), opacity * 0.85f)
-        drawTexturedQuad(img, 0f, 0f, w.toFloat(), h.toFloat(), flipV = true)
+        applyBlendMode(cfg.blendModeContent)
+        val maskIsComp=cfg.maskImage.startsWith("composition:")
+        val mask=when {
+            maskIsComp -> cfg.maskImage.substringAfter(':').toIntOrNull()?.let{compTextures[it]} ?: 0
+            cfg.maskImage=="internalres:transparent" || cfg.maskImage.isBlank() -> 0
+            cfg.maskImage.startsWith("internalres:") -> ensureInternalTex(cfg.maskImage)
+            else -> ensureUriTex(cfg.maskImage)
+        }
+        GLES20.glUniform1i(img.uniform("uMaskEnabled"),if(mask!=0)1 else 0)
+        GLES20.glUniform1i(img.uniform("uMaskMode"),0)
+        GLES20.glUniform1i(img.uniform("uMaskFlipV"),if(maskIsComp)0 else 1)
+        if(mask!=0){
+            GLES20.glActiveTexture(GLES20.GL_TEXTURE1)
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D,mask)
+            GLES20.glUniform1i(img.uniform("uMaskTex"),1)
+        }
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D,pong.textureId)
+        GLES20.glUniform1f(img.uniform("uOpacity"),opacity)
+        fun glow(scale:Float,argb:Int) {
+            if(scale<=0f)return
+            val factor=scale.coerceIn(.01f,4f)
+            val dx=w*(1f-factor)*.5f;val dy=h*(1f-factor)*.5f
+            GLES20.glUniform4f(img.uniform("uTint"),((argb ushr 16) and 255)/255f,((argb ushr 8) and 255)/255f,(argb and 255)/255f,((argb ushr 24) and 255)/255f)
+            drawTexturedQuad(img,dx,dy,w-dx,h-dy,flipV=true)
+        }
+        glow(cfg.layer1Scale,cfg.layer1ColorArgb)
+        glow(cfg.layer2Scale,cfg.layer2ColorArgb)
+        glow(cfg.layer3Scale,cfg.layer3ColorArgb)
+        GLES20.glUniform1i(img.uniform("uMaskEnabled"),0)
+        GLES20.glUniform4f(img.uniform("uTint"),1f,1f,1f,1f)
 
         if (cfg.showUnblurredContent) {
             applyBlendMode(cfg.blendModeContent)
@@ -928,11 +965,12 @@ class VexoGlRenderer(
     ) {
         val srcTex = compTextures[cfg.targetCompositionIndex] ?: return
         val delta = MeasureEvaluator.evaluatePair(
-            cfg.splitMeasure, audioSnap, scene.totalTimeSec, scene.playingTimeSec, trackNorm, scene.isPlaying
+            cfg.splitMeasure, scene.audioSnapshots[cfg.splitMeasure.providerIndex] ?: audioSnap, scene.totalTimeSec, scene.playingTimeSec, trackNorm, scene.isPlaying
         )
         val offX = (cfg.splitAmountX + delta.x * 0.015f) * cfg.splitMultiplier * 0.4f
         val offY = (cfg.splitAmountY + delta.y * 0.015f) * cfg.splitMultiplier * 0.4f
 
+        if(cfg.showUnblurredContentUnder) drawEffectSource(srcTex,opacity,w,h,BlendMode.ALPHA)
         val shader = rgbSplitShader ?: return
         applyBlendMode(cfg.blendModeContent)
         shader.use()
@@ -954,6 +992,17 @@ class VexoGlRenderer(
         setRgb("uColor2", cfg.splitColor2Argb)
         GLES20.glUniform1f(shader.uniform("uOpacity"), opacity)
         drawTexturedQuad(shader, 0f, 0f, w.toFloat(), h.toFloat(), flipV = true)
+        if(cfg.showUnblurredContent) drawEffectSource(srcTex,opacity,w,h,BlendMode.ALPHA)
+    }
+
+    private fun drawEffectSource(tex:Int,opacity:Float,w:Int,h:Int,mode:BlendMode) {
+        val shader=imageShader ?: return
+        resetImageState(shader)
+        applyBlendMode(mode)
+        GLES20.glUniformMatrix4fv(shader.uniform("uMvp"),1,false,mvpMatrix,0)
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D,tex)
+        GLES20.glUniform1f(shader.uniform("uOpacity"),opacity)
+        drawTexturedQuad(shader,0f,0f,w.toFloat(),h.toFloat(),flipV=true)
     }
 
     private fun drawMotionBlurEffect(
@@ -1044,7 +1093,7 @@ class VexoGlRenderer(
             ((cfg.colorArgb ushr 16) and 0xFF) / 255f,
             ((cfg.colorArgb ushr 8) and 0xFF) / 255f,
             (cfg.colorArgb and 0xFF) / 255f,
-            opacity
+            opacity*((cfg.colorArgb ushr 24) and 255)/255f
         )
         drawTexturedQuad(shader, 0f, 0f, w.toFloat(), h.toFloat(), flipV = true)
     }

@@ -1198,6 +1198,15 @@ private fun PropertiesTab(
                     }
                 }
                 ExpandableSectionHeader("Blur parameters", expandedSections["BlurEffect_Blurparameters"] == true, { toggleAccordion(expandedSections, "BlurEffect_Blurparameters") }) {
+                    StudioChipSelector("Glow Blend",BlendMode.entries,cfg.blendModeContent,{it.label}){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.BlurEffect).copy(blendModeContent=v))}}
+                    StudioSlider("Glow 1 Scale",cfg.layer1Scale,0f,4f,1f,"x",.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.BlurEffect).copy(layer1Scale=v))}},onCommit=::endDrag)
+                    StudioColorPickerRow("Glow 1 Color",cfg.layer1ColorArgb){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.BlurEffect).copy(layer1ColorArgb=v))}}
+                    StudioSlider("Glow 2 Scale",cfg.layer2Scale,0f,4f,0f,"x",.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.BlurEffect).copy(layer2Scale=v))}},onCommit=::endDrag)
+                    StudioColorPickerRow("Glow 2 Color",cfg.layer2ColorArgb){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.BlurEffect).copy(layer2ColorArgb=v))}}
+                    StudioSlider("Glow 3 Scale",cfg.layer3Scale,0f,4f,0f,"x",.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.BlurEffect).copy(layer3Scale=v))}},onCommit=::endDrag)
+                    StudioColorPickerRow("Glow 3 Color",cfg.layer3ColorArgb){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.BlurEffect).copy(layer3ColorArgb=v))}}
+                    StudioChipSelector("Blur Reactivity",MeasureWhat.entries.filter{it!=MeasureWhat.KEYFRAME},cfg.measureBlur.measureWhat,{it.label}){v->vm.updateLayer(layer.common.id){val x=it.config as LayerConfig.BlurEffect;it.copy(config=x.copy(measureBlur=x.measureBlur.copy(measureWhat=v)))}}
+                    StudioSlider("Blur Reactive Amount",cfg.measureBlur.amountA,0f,8f,0f,"",.05f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){val x=it.config as LayerConfig.BlurEffect;it.copy(config=x.copy(measureBlur=x.measureBlur.copy(amountA=v,amountB=v)))}},onCommit=::endDrag)
                     RegisteredSlider("blurRadius", cfg.blurRadius, settings.showPropertyHelpHints, { v ->
                         beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(blurRadius = v)) }
                     }, ::endDrag)
@@ -1210,8 +1219,12 @@ private fun PropertiesTab(
                 ExpandableSectionHeader("Source & blend", expandedSections["RgbSplitEffect_Sourceblend"] == true, { toggleAccordion(expandedSections, "RgbSplitEffect_Sourceblend") }) {
                     StudioChipSelector("Source Composition", uiState.project.compositions.map { it.index }.filter { it != uiState.selectedCompositionIndex }, cfg.targetCompositionIndex, { "Composition $it" }) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(targetCompositionIndex = v)) } }
                     StudioChipSelector("Effect Blend", BlendMode.entries, cfg.blendModeContent, { it.label }) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(blendModeContent = v)) } }
+                    StudioToggleRow("Source Under",cfg.showUnblurredContentUnder){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.RgbSplitEffect).copy(showUnblurredContentUnder=v))}}
+                    StudioToggleRow("Source Above",cfg.showUnblurredContent){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.RgbSplitEffect).copy(showUnblurredContent=v))}}
                 }
                 ExpandableSectionHeader("Channel offsets", expandedSections["RgbSplitEffect_Channeloffsets"] == true, { toggleAccordion(expandedSections, "RgbSplitEffect_Channeloffsets") }) {
+                    StudioChipSelector("RGB Reactivity",MeasureWhat.entries.filter{it!=MeasureWhat.KEYFRAME},cfg.splitMeasure.measureWhat,{it.label}){v->vm.updateLayer(layer.common.id){val x=it.config as LayerConfig.RgbSplitEffect;it.copy(config=x.copy(splitMeasure=x.splitMeasure.copy(measureWhat=v)))}}
+                    StudioSlider("Reactive Threshold",cfg.splitMeasure.triggerThreshold,0f,.99f,0f,"",.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){val x=it.config as LayerConfig.RgbSplitEffect;it.copy(config=x.copy(splitMeasure=x.splitMeasure.copy(triggerThreshold=v)))}},onCommit=::endDrag)
                     StudioSlider("Split Y", cfg.splitAmountY, -0.1f, 0.1f, 0.008f, "", 0.002f, onValueChange = { v ->
                         beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(splitAmountY = v)) }
                     }, onCommit = ::endDrag)
