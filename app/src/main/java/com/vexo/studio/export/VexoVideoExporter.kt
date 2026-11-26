@@ -67,7 +67,7 @@ class VexoVideoExporter(private val context: Context) {
         val fps = settings.fps.coerceIn(24, 60)
         val bitrate = settings.videoBitrateMbps.coerceIn(2, 80) * 1_000_000
 
-        val tempFile = File(context.cacheDir, "vexo_export_${System.currentTimeMillis()}.mp4")
+        val tempFile = File.createTempFile("vexo_export_", ".mp4", context.cacheDir)
 
         var eglDisplay: EGLDisplay = EGL14.EGL_NO_DISPLAY
         var eglContext: EGLContext = EGL14.EGL_NO_CONTEXT
@@ -111,10 +111,9 @@ class VexoVideoExporter(private val context: Context) {
             }
             require(startUs < endUs && endUs <= durationUsRaw) { "Invalid audio trim range" }
             require(channels in 1..2) { "Export currently supports mono or stereo audio" }
-            val totalDurationUs = endUs - startUs
-            val totalFrames = kotlin.math.ceil(totalDurationUs / 1_000_000.0 * fps).toInt().coerceAtLeast(1)
+            val requestedDurationUs = endUs - startUs
 
-            val required=ExportBudget.workingBytes(totalDurationUs,bitrate,settings.audioBitrateKbps.coerceIn(96,320)*1000,sampleRate,channels)
+            val required=ExportBudget.workingBytes(requestedDurationUs,bitrate,settings.audioBitrateKbps.coerceIn(96,320)*1000,sampleRate,channels)
             check(context.cacheDir.usableSpace>=required){"Not enough free cache storage. Need about %.0f MB".format(required/1_000_000.0)}
             // Select supported encoder before spending time decoding audio.
             fun format(mime:String)=MediaFormat.createVideoFormat(mime,width,height).apply{
@@ -125,13 +124,15 @@ class VexoVideoExporter(private val context: Context) {
             }
             val codecList=MediaCodecList(MediaCodecList.REGULAR_CODECS)
             val candidates=if(settings.useHevcIfSupported)listOf(MediaFormat.MIMETYPE_VIDEO_HEVC,MediaFormat.MIMETYPE_VIDEO_AVC) else listOf(MediaFormat.MIMETYPE_VIDEO_AVC)
-            val selected=candidates.firstNotNullOfOrNull{mime->val f=format(mime);runCatching{codecList.findEncoderForFormat(f)}.getOrNull()?.let{Triple(mime,f,it)}}
-                ?:error("No compatible encoder for selected resolution, FPS and bitrate")
-            val (videoMime,videoFormat,encoderName)=selected
-            onProgress(ExportProgress(isRunning=true,progress=.01f,statusText="Decoding audio · "+if(videoMime==MediaFormat.MIMETYPE_VIDEO_HEVC)"HEVC" else "H.264"))
+            val supported = candidates.mapNotNull { mime ->
+                val f = format(mime)
+                runCatching { codecList.findEncoderForFormat(f) }.getOrNull()?.let { Triple(mime, f, it) }
+            }
+            check(supported.isNotEmpty()) { "No compatible encoder for selected resolution, FPS and bitrate. Try a lower resolution, FPS or bitrate." }
+            onProgress(ExportProgress(isRunning=true,progress=.01f,statusText="Decoding audio"))
             // Decode entire trimmed PCM window into disk spool
             extractor.selectTrack(audioTrackIndex)
-            if (startUs > 0) extractor.seekTo(startUs, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
+            if (startUs > 0) extractor.seekTo(startUs, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
 
             val srcMime = srcAudioFormat.getString(MediaFormat.KEY_MIME)!!
             audioDecoder = MediaCodec.createDecoderByType(srcMime).apply {
@@ -146,18 +147,42 @@ class VexoVideoExporter(private val context: Context) {
                 endUs = endUs,
                 channels = channels,
                 sampleRate = sampleRate,
-                target = pcmFile
+                target = pcmFile,
+                onDecoded = { fraction -> onProgress(ExportProgress(isRunning=true, progress=.01f + .09f*fraction, statusText="Decoding audio")) }
             )
             pcmReader = RandomAccessFile(pcmFile, "r")
             extractor.release(); inputExtractor = null
             audioDecoder.stop(); audioDecoder.release(); audioDecoder = null
+            val decodedFrames = pcmDecoded / (channels * 2L)
+            val totalDurationUs = ExportClock.sampleTimeUs(decodedFrames, sampleRate)
+            check(kotlin.math.abs(totalDurationUs - requestedDurationUs) <= maxOf(250_000L, requestedDurationUs / 100)) { "Decoded audio duration differs from selected trim. Check the source audio." }
+            val totalFrames = ExportClock.frameCount(totalDurationUs, fps)
 
             // Configure selected video encoder + EGL surface
-            videoEncoder = MediaCodec.createByCodecName(encoderName).apply {
-                configure(videoFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
-            }
-            encoderSurface = videoEncoder.createInputSurface()
-            videoEncoder.start()
+            var lastEncoderError: Exception? = null
+            val configured = supported.firstNotNullOfOrNull { (mime, videoFormat, encoderName) ->
+                exportContext.ensureActive()
+                var codec: MediaCodec? = null
+                var surface: Surface? = null
+                try {
+                    val candidate = MediaCodec.createByCodecName(encoderName)
+                    codec = candidate
+                    candidate.configure(videoFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+                    val input = candidate.createInputSurface()
+                    surface = input
+                    candidate.start()
+                    Triple(mime, candidate, input)
+                } catch (e: Exception) {
+                    lastEncoderError = e
+                    runCatching { codec?.release() }
+                    runCatching { surface?.release() }
+                    null
+                }
+            } ?: throw IllegalStateException("Unable to start a video encoder. Try lower resolution, FPS or bitrate.", lastEncoderError)
+            val videoMime = configured.first
+            videoEncoder = configured.second
+            encoderSurface = configured.third
+            onProgress(ExportProgress(isRunning=true,progress=.10f,statusText="Rendering · " + if(videoMime==MediaFormat.MIMETYPE_VIDEO_HEVC) "HEVC" else "H.264"))
 
             // Configure AAC Audio Encoder
             val audioOutFormat = MediaFormat.createAudioFormat(
@@ -166,7 +191,7 @@ class VexoVideoExporter(private val context: Context) {
                 channels
             ).apply {
                 setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC)
-                setInteger(MediaFormat.KEY_BIT_RATE, settings.audioBitrateKbps * 1000)
+                setInteger(MediaFormat.KEY_BIT_RATE, settings.audioBitrateKbps.coerceIn(96,320) * 1000)
                 setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 16384)
             }
             audioEncoder = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_AAC).apply {
@@ -217,7 +242,6 @@ class VexoVideoExporter(private val context: Context) {
 
             val videoBufferInfo = MediaCodec.BufferInfo()
             val audioBufferInfo = MediaCodec.BufferInfo()
-            val frameDurationNs = 1_000_000_000L / fps
             val deltaMs = 1000f / fps
             val monoWindow = FloatArray(8192)
             val leftWindow=FloatArray(8192)
@@ -227,7 +251,7 @@ class VexoVideoExporter(private val context: Context) {
             var audioSampleCursor = 0L
             val frameBytes = 2 * channels
             val totalPcmBytes = pcmDecoded
-            val totalMonoSamples = (totalPcmBytes / frameBytes).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+            val totalMonoSamples = totalPcmBytes / frameBytes
             val pcmWindowBytes = ByteArray(monoWindow.size * frameBytes)
             val pcmWindowView = ByteBuffer.wrap(pcmWindowBytes).order(ByteOrder.LITTLE_ENDIAN)
             val audioScratch = ByteArray(65536)
@@ -292,22 +316,23 @@ class VexoVideoExporter(private val context: Context) {
                 }
             }
 
-            fun pumpAudio() {
+            fun pumpAudio(untilUs: Long = totalDurationUs) {
                 if (audioDone) return
-                while (!audioEosSent) {
+                while (!audioEosSent && (audioSampleCursor >= totalPcmBytes || ExportClock.sampleTimeUs(audioSampleCursor / frameBytes, sampleRate) <= untilUs)) {
+                    exportContext.ensureActive()
                     val inIdx = audioEncoder.dequeueInputBuffer(0)
                     if (inIdx < 0) break
                     val inBuf = audioEncoder.getInputBuffer(inIdx) ?: break
                     inBuf.clear()
                     val remainingBytes = totalPcmBytes - audioSampleCursor
                     if (remainingBytes <= 0) {
-                        val ptsUs = (totalPcmBytes / (2.0 * channels * sampleRate) * 1_000_000.0).toLong()
+                        val ptsUs = ExportClock.sampleTimeUs(totalPcmBytes / frameBytes, sampleRate)
                         audioEncoder.queueInputBuffer(inIdx, 0, 0, ptsUs, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
                         audioEosSent = true
                     } else {
                         val toCopy = (minOf(inBuf.remaining().toLong(), remainingBytes, audioScratch.size.toLong()).toInt() / frameBytes) * frameBytes
                         check(toCopy>0) { "AAC input buffer is too small" }
-                        val ptsUs = (audioSampleCursor / (2.0 * channels * sampleRate) * 1_000_000.0).toLong()
+                        val ptsUs = ExportClock.sampleTimeUs(audioSampleCursor / frameBytes, sampleRate)
                         reader.seek(audioSampleCursor)
                         reader.readFully(audioScratch,0,toCopy)
                         inBuf.put(audioScratch,0,toCopy)
@@ -341,10 +366,11 @@ class VexoVideoExporter(private val context: Context) {
             for (frameIdx in 0 until totalFrames) {
                 yield() // Respect coroutine cancellation immediately
 
-                val timeSec = frameIdx.toFloat() / fps
-                val sampleEnd = ((timeSec * sampleRate).toInt()).coerceIn(0, totalMonoSamples)
-                val winStart = (sampleEnd - monoWindow.size).coerceAtLeast(0)
-                val copyLen = sampleEnd - winStart
+                val frameTimeNs = ExportClock.frameTimeNs(frameIdx.toLong(), fps)
+                val timeSec = (frameTimeNs / 1_000_000_000.0).toFloat()
+                val sampleEnd = ExportClock.sampleAtFrame(frameIdx.toLong(), sampleRate, fps).coerceIn(0L, totalMonoSamples)
+                val winStart = (sampleEnd - monoWindow.size).coerceAtLeast(0L)
+                val copyLen = (sampleEnd - winStart).toInt()
                 monoWindow.fill(0f);leftWindow.fill(0f);rightWindow.fill(0f)
                 if (copyLen > 0) {
                     reader.seek(winStart.toLong()*frameBytes)
@@ -380,23 +406,24 @@ class VexoVideoExporter(private val context: Context) {
                 val scene = RenderSceneSnapshot(
                     project = project,
                     audioSnapshots = audioSnapshots,
-                    trackMeta = trackMeta.copy(positionMs = (startUs / 1000L) + (timeSec * 1000L).toLong()),
+                    trackMeta = trackMeta.copy(positionMs = (startUs / 1000L) + frameTimeNs / 1_000_000L),
                     isPlaying = true,
                     totalTimeSec = timeSec,
                     playingTimeSec = timeSec
                 )
 
                 renderer.renderScene(scene, 1f / fps, width, height)
-                EGLExt.eglPresentationTimeANDROID(eglDisplay, eglSurface, frameIdx * frameDurationNs)
+                check(EGLExt.eglPresentationTimeANDROID(eglDisplay, eglSurface, frameTimeNs)) { "Encoder presentation timestamp failed" }
                 check(EGL14.eglSwapBuffers(eglDisplay, eglSurface)) { "Encoder surface swap failed" }
 
-                pumpAudio()
+                pumpAudio(frameTimeNs / 1000L + 250_000L)
                 drainVideo(endOfStream = false)
 
                 if (frameIdx % 4 == 0 || frameIdx == totalFrames - 1) {
-                    val p = ((frameIdx + 1).toFloat() / totalFrames).coerceIn(0f, 0.96f)
+                    val fraction = (frameIdx + 1).toFloat() / totalFrames
+                    val p = .10f + .86f * fraction
                     val elapsedSec = ((System.currentTimeMillis() - exportStartMs) / 1000.0).coerceAtLeast(0.5)
-                    val eta = if (p > 0.02f) ((elapsedSec / p) * (1f - p)).toLong() else 0L
+                    val eta = if (fraction > 0.02f) ((elapsedSec / fraction) * (1f - fraction)).toLong() else 0L
                     onProgress(
                         ExportProgress(
                             isRunning = true,
@@ -409,13 +436,14 @@ class VexoVideoExporter(private val context: Context) {
             }
 
             // Finish encoders
-            drainVideo(endOfStream = true)
+            videoEncoder.signalEndOfInputStream()
             val drainDeadline=android.os.SystemClock.elapsedRealtime()+60_000L
             while (!audioDone || !videoDone) {
                 yield()
                 check(android.os.SystemClock.elapsedRealtime()<drainDeadline) { "Encoder drain timed out" }
                 if (!audioDone) pumpAudio()
                 if (!videoDone) drainVideo(endOfStream = false)
+                if (!audioDone || !videoDone) kotlinx.coroutines.delay(2)
             }
 
             renderer.releaseGlResources(); glRenderer=null
@@ -462,26 +490,27 @@ class VexoVideoExporter(private val context: Context) {
             runCatching { inputExtractor?.release() }
             runCatching { pcmReader?.close() }
             pcmFile.delete()
-            runCatching { audioDecoder?.stop(); audioDecoder?.release() }
-            runCatching { videoEncoder?.stop(); videoEncoder?.release() }
-            runCatching { audioEncoder?.stop(); audioEncoder?.release() }
+            runCatching { audioDecoder?.stop() }; runCatching { audioDecoder?.release() }
+            runCatching { videoEncoder?.stop() }; runCatching { videoEncoder?.release() }
+            runCatching { audioEncoder?.stop() }; runCatching { audioEncoder?.release() }
             runCatching {
                 if (muxerStarted) muxer?.stop()
                 muxer?.release()
             }
-            runCatching { encoderSurface?.release() }
             if (eglDisplay != EGL14.EGL_NO_DISPLAY) {
                 EGL14.eglMakeCurrent(eglDisplay, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_CONTEXT)
                 if (eglSurface != EGL14.EGL_NO_SURFACE) EGL14.eglDestroySurface(eglDisplay, eglSurface)
                 if (eglContext != EGL14.EGL_NO_CONTEXT) EGL14.eglDestroyContext(eglDisplay, eglContext)
                 EGL14.eglTerminate(eglDisplay)
             }
+            runCatching { encoderSurface?.release() }
+            tempFile.delete()
         }
     }
 
     private suspend fun decodeTrimmedPcm(
         extractor: MediaExtractor, decoder: MediaCodec, startUs: Long, endUs: Long,
-        channels: Int, sampleRate: Int, target: File
+        channels: Int, sampleRate: Int, target: File, onDecoded: (Float) -> Unit
     ): Long {
         val info=MediaCodec.BufferInfo()
         val frameBytes=channels*2
@@ -489,6 +518,7 @@ class VexoVideoExporter(private val context: Context) {
         var outputDone=false
         var bytesWritten=0L
         var lastProgress=android.os.SystemClock.elapsedRealtime()
+        var lastReport=0L
         BufferedOutputStream(target.outputStream()).use { output ->
             while(!outputDone) {
                 currentCoroutineContext().ensureActive()
@@ -522,6 +552,11 @@ class VexoVideoExporter(private val context: Context) {
                                 buf.get(chunk);output.write(chunk);bytesWritten+=size
                             }
                         }
+                        val now = android.os.SystemClock.elapsedRealtime()
+                        if (now - lastReport >= 250L) {
+                            lastReport = now
+                            onDecoded((bytesWritten.toDouble() / frameBytes / sampleRate * 1_000_000.0 / (endUs-startUs)).toFloat().coerceIn(0f,1f))
+                        }
                         outputDone=info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM !=0
                     } finally { decoder.releaseOutputBuffer(i,false) }
                     lastProgress=android.os.SystemClock.elapsedRealtime()
@@ -529,6 +564,7 @@ class VexoVideoExporter(private val context: Context) {
             }
         }
         require(bytesWritten>0) {"No decoded audio in selected trim range"}
+        onDecoded(1f)
         return bytesWritten
     }
 
