@@ -753,7 +753,7 @@ class VexoGlRenderer(
             .replace("{Duration}",formatTimeMs(meta.durationMs),ignoreCase=true)
             .replace("{Progress}",if(meta.durationMs>0) ((meta.positionMs*100L/meta.durationMs).coerceIn(0L,100L)).toString()+"%" else "0%",ignoreCase=true)
 
-        val key = "txt_${resolved}_${cfg.fontSize}_${cfg.bold}_${cfg.italic}_${cfg.colorArgb}_${cfg.alignment}_${cfg.letterSpacing}_${cfg.lineSpacing}_${cfg.strokeWidth}_${cfg.strokeColorArgb}_${cfg.shadowRadius}_${cfg.shadowColorArgb}_${cfg.fontAssetUri}"
+        val key = "txt_${resolved}_${cfg.fontSize}_${cfg.bold}_${cfg.italic}_${cfg.colorArgb}_${cfg.alignment}_${cfg.letterSpacing}_${cfg.lineSpacing}_${cfg.strokeWidth}_${cfg.strokeColorArgb}_${cfg.shadowRadius}_${cfg.shadowColorArgb}_${cfg.fontAssetUri}_${cfg.fontFamily}_${cfg.fontWeight}"
         val texId = textureCache[key] ?: run {
             val bmp = renderTextBitmap(resolved, cfg)
             val id = uploadBitmapToGl(bmp)
@@ -1535,7 +1535,8 @@ class VexoGlRenderer(
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = cfg.colorArgb
             textSize = cfg.fontSize.toFloat().coerceIn(14f, 120f)
-            typeface = Typeface.create(resolveTypeface(cfg.fontAssetUri), style)
+            val weight=if(cfg.fontWeight in 100..900)cfg.fontWeight else if(cfg.bold)700 else 400
+            typeface = if(cfg.fontAssetUri.isNullOrBlank())com.vexo.studio.engine.scene.StudioFonts.resolve(context,cfg.fontFamily,weight,cfg.italic) else if(android.os.Build.VERSION.SDK_INT>=28)Typeface.create(resolveTypeface(cfg.fontAssetUri),weight,cfg.italic) else Typeface.create(resolveTypeface(cfg.fontAssetUri),if(cfg.italic)Typeface.ITALIC or (if(weight>=700)Typeface.BOLD else 0) else if(weight>=700)Typeface.BOLD else Typeface.NORMAL)
             textAlign = when (cfg.alignment) {
                 -1 -> Paint.Align.LEFT
                 1 -> Paint.Align.RIGHT

@@ -458,7 +458,9 @@ sealed interface LayerConfig {
         val animationLoop: Boolean = true,
         val animationAmount: Float = .2f,
         val animationAudio: MeasureConfig = MeasureConfig(measureWhat=MeasureWhat.BEAT,amountA=.3f,amountB=.3f),
-        val shadowColorArgb: Int = 0xCC000000.toInt()
+        val shadowColorArgb: Int = 0xCC000000.toInt(),
+        val fontFamily:String="Poppins",
+        val fontWeight:Int=0
     ) : LayerConfig
 
     @Serializable
@@ -685,7 +687,7 @@ data class AppSettings(
     val glassEnabled: Boolean = true,
     val glassOpacity: Float = 0.82f,
     val backdropBlurDp: Float = 24f,
-    val cornerRadiusDp: Float = 0f,
+    val cornerRadiusDp: Float = 12f,
     val controlScale: Float = 1f,
     val uiTextScale: Float = 1f,
     val previewFps: Int = 30,

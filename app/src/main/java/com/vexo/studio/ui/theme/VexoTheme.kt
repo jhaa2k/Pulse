@@ -12,6 +12,8 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.Font
+import com.vexo.studio.R
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -142,45 +144,47 @@ fun VexoTheme(
         extraLarge = palette.shape
     )
 
+    val poppins=FontFamily(Font(R.font.poppins_regular,FontWeight.Normal),Font(R.font.poppins_medium,FontWeight.Medium),Font(R.font.poppins_semibold,FontWeight.SemiBold),Font(R.font.poppins_bold,FontWeight.Bold))
     val typography = Typography(
         titleMedium = TextStyle(
-            fontFamily = FontFamily.SansSerif,
+            fontFamily = poppins,
             fontWeight = FontWeight.SemiBold,
             fontSize = (15 * settings.uiTextScale.coerceIn(0.9f, 1.25f)).sp,
             letterSpacing = 0.2.sp
         ),
         labelMedium = TextStyle(
-            fontFamily = FontFamily.SansSerif,
+            fontFamily = poppins,
             fontWeight = FontWeight.SemiBold,
             fontSize = (11 * settings.uiTextScale.coerceIn(0.9f, 1.25f)).sp,
             letterSpacing = 1.1.sp
         ),
         labelSmall = TextStyle(
-            fontFamily = FontFamily.SansSerif,
+            fontFamily = poppins,
             fontWeight = FontWeight.Medium,
             fontSize = (11 * settings.uiTextScale.coerceIn(0.9f, 1.25f)).sp,
             letterSpacing = 0.45.sp,
             fontFeatureSettings = "tnum"
         ),
         bodyMedium = TextStyle(
-            fontFamily = FontFamily.SansSerif,
+            fontFamily = poppins,
             fontWeight = FontWeight.Normal,
             fontSize = (14 * settings.uiTextScale.coerceIn(0.9f, 1.25f)).sp,
             lineHeight = (20 * settings.uiTextScale.coerceIn(0.9f, 1.25f)).sp
         ),
         bodySmall = TextStyle(
-            fontFamily = FontFamily.SansSerif,
+            fontFamily = poppins,
             fontWeight = FontWeight.Normal,
             fontSize = (12 * settings.uiTextScale.coerceIn(0.9f, 1.25f)).sp,
             lineHeight = (17 * settings.uiTextScale.coerceIn(0.9f, 1.25f)).sp
         )
     )
 
+    val allTypography=typography.copy(displayLarge=typography.displayLarge.copy(fontFamily=poppins),displayMedium=typography.displayMedium.copy(fontFamily=poppins),displaySmall=typography.displaySmall.copy(fontFamily=poppins),headlineLarge=typography.headlineLarge.copy(fontFamily=poppins),headlineMedium=typography.headlineMedium.copy(fontFamily=poppins),headlineSmall=typography.headlineSmall.copy(fontFamily=poppins),titleLarge=typography.titleLarge.copy(fontFamily=poppins),titleSmall=typography.titleSmall.copy(fontFamily=poppins),bodyLarge=typography.bodyLarge.copy(fontFamily=poppins),labelLarge=typography.labelLarge.copy(fontFamily=poppins))
     CompositionLocalProvider(LocalVexoPalette provides palette) {
         MaterialTheme(
             colorScheme = colorScheme,
             shapes = sharpShapes,
-            typography = typography,
+            typography = allTypography,
             content = content
         )
     }

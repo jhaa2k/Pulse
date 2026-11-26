@@ -601,7 +601,7 @@ fun SettingsScreen(
         StudioToggleRow("Live preview diagnostics",settings.showPreviewDiagnostics){v->vm.updateSettings{it.copy(showPreviewDiagnostics=v)}}
         Text("Reports measured render callbacks, CPU submission time and estimated texture/FBO allocation. Not total GPU memory or GPU execution time.",style=MaterialTheme.typography.labelSmall)
         Text("Lower preview resolution reduces GPU load. MP4 export resolution stays unchanged.",style=MaterialTheme.typography.labelSmall)
-        TextButton(onClick = { vm.updateSettings { current -> current.copy(themePreset = ThemePreset.LIME_STUDIO, customAccentArgb = 0xFFC5F84A.toInt(), glassEnabled = true, glassOpacity = 0.82f, backdropBlurDp = 24f, cornerRadiusDp = 0f, controlScale = 1f, uiTextScale = 1f, previewFps = 30, previewScale=1f, showPreviewDiagnostics=false, previewShare = 0.44f, portraitOverlay = false) } }) { Text("RESET INTERFACE SETTINGS") }
+        TextButton(onClick = { vm.updateSettings { current -> current.copy(themePreset = ThemePreset.LIME_STUDIO, customAccentArgb = 0xFFC5F84A.toInt(), glassEnabled = true, glassOpacity = 0.82f, backdropBlurDp = 24f, cornerRadiusDp = 12f, controlScale = 1f, uiTextScale = 1f, previewFps = 30, previewScale=1f, showPreviewDiagnostics=false, previewShare = 0.44f, portraitOverlay = false) } }) { Text("RESET INTERFACE SETTINGS") }
 
         }
         ExpandableSectionHeader("Audio analysis", sections["audio"] == true, { toggleAccordion(sections,"audio") }) {

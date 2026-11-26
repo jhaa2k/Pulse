@@ -1137,8 +1137,12 @@ private fun PropertiesTab(
                     RegisteredSlider("fontSize", cfg.fontSize.toFloat(), settings.showPropertyHelpHints, { v ->
                         beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(fontSize = v.toInt())) }
                     }, ::endDrag)
-                    StudioToggleRow("Bold", cfg.bold) { b ->
-                        vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(bold = b)) }
+                    val fontOptions=com.vexo.studio.engine.scene.StudioFonts.families.map{it.name}
+                    StudioChipSelector("Font Family",fontOptions,cfg.fontFamily,{it}){name->vm.updateLayer(layer.common.id){it.copy(config=cfg.copy(fontFamily=name,fontAssetUri=null))}}
+                    val currentWeight=if(cfg.fontWeight in 100..900)cfg.fontWeight else if(cfg.bold)700 else 400
+                    StudioChipSelector("Font Weight",com.vexo.studio.engine.scene.StudioFonts.weights,currentWeight,{com.vexo.studio.engine.scene.StudioFonts.weightLabel(it)}){weight->vm.updateLayer(layer.common.id){it.copy(config=cfg.copy(fontWeight=weight,bold=weight>=700))}}
+                    StudioToggleRow("Bold", currentWeight>=700) { b ->
+                        vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(bold = b,fontWeight=if(b)700 else 400)) }
                     }
                     StudioToggleRow("Italic", cfg.italic) { i ->
                         vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(italic = i)) }
