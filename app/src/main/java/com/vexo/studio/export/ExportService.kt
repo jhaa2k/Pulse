@@ -51,6 +51,8 @@ class ExportService : Service() {
         if (activeJob?.isActive == true) return START_NOT_STICKY
         activeJob = scope.launch {
             var terminal:ExportProgress?=null
+            var lastNotificationMs = 0L
+            var lastNotificationText = ""
             val exporter = VexoVideoExporter(applicationContext)
             try {
                 exporter.export(
@@ -62,7 +64,14 @@ class ExportService : Service() {
                         _exportState.value = prog
                         val pct = (prog.progress * 100).toInt().coerceIn(0, 100)
                         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-                        nm.notify(NOTIF_ID, buildNotification(pct, prog.statusText, prog.etaSeconds))
+                        val now = android.os.SystemClock.elapsedRealtime()
+                        val stage = prog.statusText.substringBefore(" frame ")
+                        if (now - lastNotificationMs >= 500L || stage != lastNotificationText) {
+                            lastNotificationMs = now
+                            lastNotificationText = stage
+                            // A notification failure must not invalidate an otherwise valid video.
+                            runCatching { nm.notify(NOTIF_ID, buildNotification(pct, prog.statusText, prog.etaSeconds)) }
+                        }
                     }
                 )
             } catch(e:kotlinx.coroutines.CancellationException){
