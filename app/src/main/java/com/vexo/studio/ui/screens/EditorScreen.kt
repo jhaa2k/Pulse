@@ -307,7 +307,7 @@ private fun PreviewBlock(
                     Text(ratio.label,style=MaterialTheme.typography.labelSmall,color=if(active)palette.accentOn else palette.textSecondary,modifier=Modifier.background(if(active)palette.accent else Color.Transparent).clickable{vm.setAspectRatio(ratio)}.padding(horizontal=8.dp,vertical=7.dp))
                 }
             }
-            Text(if(uiState.previewSelectedComposition&&uiState.selectedCompositionIndex!=0)"SELECTED" else "FINAL",style=MaterialTheme.typography.labelSmall,color=if(uiState.previewSelectedComposition)palette.accent else palette.textSecondary,modifier=Modifier.clickable{vm.toggleCompositionPreview()}.padding(horizontal=10.dp,vertical=8.dp))
+            Text(if(uiState.previewSelectedComposition&&uiState.selectedCompositionIndex!=0)"VIEW: SELECTED" else "VIEW: FINAL",style=MaterialTheme.typography.labelSmall,color=if(uiState.previewSelectedComposition)palette.accent else palette.textSecondary,modifier=Modifier.clickable(enabled=uiState.selectedCompositionIndex!=0){vm.toggleCompositionPreview()}.padding(horizontal=10.dp,vertical=8.dp))
             IconButton(onClick=vm::toggleSafeAreaGuides,modifier=Modifier.size(32.dp)){Icon(Icons.Default.GridOn,"Safe area",tint=if(uiState.project.canvas.showSafeAreaGuides)palette.accent else palette.textSecondary,modifier=Modifier.size(16.dp))}
             IconButton(onClick=vm::resetPreviewCamera,modifier=Modifier.size(32.dp)){Icon(Icons.Default.CropFree,"Reset zoom",tint=palette.textSecondary,modifier=Modifier.size(16.dp))}
             IconButton(onClick=vm::toggleFullscreenPreview,modifier=Modifier.size(32.dp)){Icon(Icons.Default.Fullscreen,"Fullscreen",tint=palette.textPrimary,modifier=Modifier.size(18.dp))}
@@ -433,7 +433,7 @@ private fun LayersTab(
             if(uiState.clipboardLayerType!=null)TextButton(onClick=vm::pasteLayer){Text("Paste")}
             TextButton(onClick = { showAddLayerDialog = true }) { Icon(Icons.Default.Add, null, tint = palette.accent); Text("Layer", color = palette.accent) }
         }
-        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),verticalAlignment=Alignment.CenterVertically){
+        Row(Modifier.fillMaxWidth().height(38.dp).horizontalScroll(rememberScrollState()),verticalAlignment=Alignment.CenterVertically){
             TextButton(onClick={timeline=false}){Text("LAYERS",color=if(!timeline)palette.accent else palette.textSecondary)}
             TextButton(onClick={timeline=true;multi=false;selectedIds=emptySet()}){Text("TIMELINE",color=if(timeline)palette.accent else palette.textSecondary)}
             if(!timeline)TextButton(onClick={multi=!multi;selectedIds=emptySet()}){Text(if(multi)"DONE" else "MULTI SELECT")}
@@ -677,7 +677,7 @@ private fun PropertiesTab(
             OutlinedTextField(propertyQuery,{propertyQuery=it.take(80)},label={Text("Find property / section")},singleLine=true,modifier=Modifier.weight(1f))
             if(propertyQuery.isNotBlank())TextButton(onClick={propertyQuery=""}){Text("CLEAR")}
         }
-        if(propertyQuery.isNotBlank())Text("Matching sections are expanded automatically.",style=MaterialTheme.typography.labelSmall,color=palette.textSecondary)
+        if(propertyQuery.isNotBlank())Text("Matching sections only. Open one section at a time.",style=MaterialTheme.typography.labelSmall,color=palette.textSecondary)
         if (editTarget == "PROVIDER") {
             AudioProviderEditorSection(
                 vm = vm,
@@ -1591,7 +1591,7 @@ internal fun ExpandableSectionHeader(
 ) {
     val query=LocalInspectorQuery.current
     if(query.isNotBlank()&&!InspectorSearch.matches(title,query))return
-    val opened=expanded||query.isNotBlank()
+    val opened=expanded
     val palette = LocalVexoPalette.current
     Column(
         modifier = Modifier
@@ -1602,7 +1602,7 @@ internal fun ExpandableSectionHeader(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable(enabled=query.isBlank(),onClick = onToggle)
+                .clickable(onClick = onToggle)
                 .padding(horizontal = 10.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically

@@ -228,7 +228,7 @@ private fun VexoRootApp(vm: StudioViewModel) {
                             NavDestination.entries.forEach { dest -> DropdownMenuItem(text = { Text(dest.label) }, onClick = { showAppMenu = false; vm.navigateTo(dest) }) }
                         }
                     }
-                    IconButton(onClick = vm::saveCurrentProject,modifier=Modifier.size(36.dp)) {
+                    IconButton(onClick = {vm.saveCurrentProject()},modifier=Modifier.size(36.dp)) {
                         Icon(Icons.Default.Save, "Save to project library", tint = if(uiState.unsaved)palette.accent else palette.textSecondary)
                     }
                     Box(
@@ -355,6 +355,7 @@ private fun VexoRootApp(vm: StudioViewModel) {
 
     }
 
+    uiState.pendingPreset?.let{tpl->AlertDialog(onDismissRequest={vm.resolvePresetSwitch(false,false)},title={Text("UNSAVED EDITS")},text={Text("Apply "+tpl.name+"? Save the current edits first, or discard them. Music and canvas ratio will stay unchanged.")},confirmButton={TextButton(onClick={vm.resolvePresetSwitch(true,false)}){Text("SAVE & APPLY")}},dismissButton={Row{TextButton(onClick={vm.resolvePresetSwitch(false,true)}){Text("DISCARD & APPLY")};TextButton(onClick={vm.resolvePresetSwitch(false,false)}){Text("CANCEL")}}})}
     pendingImage?.let{uri->AlertDialog(onDismissRequest={pendingImage=null},title={Text("APPLY IMAGE / VIDEO?")},text={Text("Apply selected media to the current layer, or cancel to keep the original.")},confirmButton={TextButton(onClick={if(uiState.project.id==pendingImageProject&&uiState.selectedLayerId==pendingImageLayer)vm.attachImageToSelectedLayer(uri);pendingImage=null}){Text("APPLY")}},dismissButton={TextButton(onClick={pendingImage=null}){Text("CANCEL")}})}
     if (showRenameProject) {
         var text by remember { mutableStateOf(uiState.project.name) }

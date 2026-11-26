@@ -170,7 +170,7 @@ class VexoPlaybackController(
 
                     override fun onIsPlayingChanged(isPlaying: Boolean) {
                         _state.value = _state.value.copy(isPlaying = isPlaying)
-                        if(!isPlaying)saveQueue()
+                        if(!isPlaying)saveQueue() else startForegroundService()
                     }
 
                     override fun onPlaybackStateChanged(playbackState: Int) {

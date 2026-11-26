@@ -61,7 +61,8 @@ data class StudioUiState(
     val previewPanX: Float = 0f,
     val previewPanY: Float = 0f,
     val statusBanner: String? = null,
-    val unsaved:Boolean=false
+    val unsaved:Boolean=false,
+    val pendingPreset:VexoProject?=null
 )
 
 @UnstableApi
@@ -684,19 +685,28 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     val sleepRemaining=playbackController.sleepRemaining
     fun setSleepTimer(minutes:Int)=playbackController.setSleepTimer(minutes)
 
-    fun saveCurrentProject(){
+    fun saveCurrentProject():Boolean{
         val p=_uiState.value.project.copy(audioUri=playbackController.currentAudioUri())
         runCatching{synchronized(saveLock){latestSave.remove(p.id);projectRepo.saveProject(p)}}.onSuccess{
             _uiState.value=_uiState.value.copy(project=p,projects=projectRepo.listProjects(),unsaved=false,statusBanner="Project saved")
-        }.onFailure{_uiState.value=_uiState.value.copy(statusBanner="Save failed: "+it.message)}
+        }.onFailure{_uiState.value=_uiState.value.copy(statusBanner="Save failed: "+it.message)}.let{return it.isSuccess}
     }
 
     fun applyPreset(template:VexoProject){
+        val state=_uiState.value
+        if(state.unsaved&&state.canUndo){_uiState.value=state.copy(pendingPreset=template);return}
+        applyPresetNow(template)
+    }
+    fun resolvePresetSwitch(save:Boolean,discard:Boolean){
+        val template=_uiState.value.pendingPreset?:return
+        if(!save&&!discard){_uiState.value=_uiState.value.copy(pendingPreset=null);return}
+        if(save&&!saveCurrentProject())return
+        _uiState.value=_uiState.value.copy(pendingPreset=null)
+        applyPresetNow(template)
+    }
+    private fun applyPresetNow(template:VexoProject){
         val current=_uiState.value.project
-        val fresh=template.copy(id=UUID.randomUUID().toString(),updatedAtMs=System.currentTimeMillis(),
-            audioUri=playbackController.currentAudioUri(),
-            canvas=template.canvas.copy(aspectRatio=current.canvas.aspectRatio),
-            exportSettings=current.exportSettings.copy(aspectRatio=current.canvas.aspectRatio,trimStartMs=0L,trimEndMs=0L,customOutputUri=null))
+        val fresh=com.vexo.studio.data.PresetDraft.create(current,template,playbackController.currentAudioUri())
         replaceWithDraft(fresh,true)
     }
 
@@ -764,7 +774,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                 project = fallback,
                 selectedCompositionIndex=comp.index,selectedLayerId=comp.layers.firstOrNull()?.common?.id,
                 selectedProviderIndex=fallback.audioProviders.first().index,canUndo=false,canRedo=false,previewSelectedComposition=false,
-                projects = projectRepo.listProjects()
+                projects = projectRepo.listProjects(),unsaved=remaining.isEmpty()
             )
             projectRepo.autosave(fallback)
             playbackController.loadProjectAudio(fallback.id,fallback.audioUri)
