@@ -96,11 +96,11 @@ class VexoGlRenderer(
 
     @Volatile
     var lastFrameDurationMs: Float = 0f
+        private set
     @Volatile var diagnosticsEnabled=false
     @Volatile var diagnostics=PreviewDiagnostics()
         private set
     private val diagnosticCounter=FrameDiagnosticsCounter()
-        private set
 
     // Reusable buffers (zero per-frame large allocations)
     private val mvpMatrix = FloatArray(16)

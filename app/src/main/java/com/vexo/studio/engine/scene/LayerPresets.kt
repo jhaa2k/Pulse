@@ -19,7 +19,7 @@ object LayerPresets {
         }
         val selected=tracks.filter{it.targetLayerId==layer.common.id&&it.propertyKey.startsWith("transform.")&&it.propertyKey.removePrefix("transform.") in TransformAnimation.keys}.take(6)
         if(selected.any{it.keyframes.size>500||it.keyframes.any{f->!f.value.isFinite()||f.timeMs !in 0L..86400000L}})return null
-        return SavedLayerPreset(name=name.trim().take(60),layer=layer.copy(common=layer.common.copy(locked=false,aveeId=0,extraFields=emptyMap())),tracks=selected)
+        return SavedLayerPreset(name=name.trim().take(60),layer=layer.copy(common=layer.common.copy(locked=false,aveeId=0,extraFields=emptyMap()),config=config),tracks=selected)
     }
     fun instantiate(preset:SavedLayerPreset,providers:Set<Int>,fallback:Int):Pair<LayerNode,List<KeyframeTrack>>{
         fun id(i:Int)=if(i in providers)i else fallback
