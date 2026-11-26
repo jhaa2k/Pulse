@@ -872,6 +872,7 @@ private fun PropertiesTab(
         }
 
         ExpandableSectionHeader("Quick layer tools",expandedSections["quick_tools"]==true,{toggleAccordion(expandedSections,"quick_tools")}){
+            LayerPresetSavePanel(vm,layer)
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())){
                 TextButton(onClick={vm.copyLayer(layer.common.id)}){Text("COPY")}
                 TextButton(enabled=uiState.clipboardLayerType!=null,onClick={vm.pasteLayerStyle(layer.common.id,true)}){Text("PASTE TRANSFORM")}
@@ -1691,6 +1692,7 @@ private fun PresetsTab(
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
+        LayerPresetLibrary(vm)
         Text("VEX PROJECT LIBRARY", style = MaterialTheme.typography.labelMedium, color = palette.accent)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Box(
@@ -1895,4 +1897,43 @@ private fun MotionPresetPanel(vm:StudioViewModel,layer:LayerNode){
         }
     }
     if(confirm)AlertDialog(onDismissRequest={confirm=false},title={Text("APPLY ANIMATION?")},text={Text("Replaces existing keyframes for the affected transform properties. Saved presets use absolute values and the selected duration.")},confirmButton={TextButton(onClick={vm.applyMotionPreset(layer.common.id,if(useSaved)null else recipe,if(useSaved)selectedSaved else null,playback.positionMs,(duration*1000).toLong(),strength);confirm=false}){Text("APPLY")}},dismissButton={TextButton(onClick={confirm=false}){Text("CANCEL")}})
+}
+
+@Composable
+private fun LayerPresetSavePanel(vm:StudioViewModel,layer:LayerNode){
+    var open by remember(layer.common.id){mutableStateOf(false)}
+    var name by remember(layer.common.id){mutableStateOf(layer.common.name)}
+    val supported=com.vexo.studio.engine.scene.SceneGraph.referencesOf(layer.config).isEmpty()
+    TextButton(enabled=supported,onClick={open=true}){Text("SAVE LAYER PRESET")}
+    if(!supported)Text("Composition-dependent layers can be saved in a VEX project instead.",style=MaterialTheme.typography.labelSmall)
+    if(open)AlertDialog(onDismissRequest={open=false},title={Text("SAVE LAYER STYLE")},text={
+        Column{
+            OutlinedTextField(name,{name=it.take(60)},label={Text("Preset name")},singleLine=true)
+            Text("Includes transform, native effects, timing and keyframes. Imported image/video becomes album art; external masks, fonts and textures are not embedded. Same name replaces the saved preset.")
+        }
+    },confirmButton={TextButton(enabled=name.isNotBlank(),onClick={vm.saveLayerPreset(layer.common.id,name);open=false}){Text("SAVE")}},dismissButton={TextButton(onClick={open=false}){Text("CANCEL")}})
+}
+@Composable
+private fun LayerPresetLibrary(vm:StudioViewModel){
+    val palette=LocalVexoPalette.current
+    val presets by vm.layerPresets.collectAsState()
+    var query by rememberSaveable{mutableStateOf("")}
+    var remove by remember{mutableStateOf<String?>(null)}
+    Text("MY LAYER PRESETS · "+presets.size+"/32",style=MaterialTheme.typography.labelMedium,color=palette.accent)
+    vm.currentSelectedLayer()?.let{LayerPresetSavePanel(vm,it)}
+    if(presets.isEmpty())Text("Save a selected layer to reuse its style in another project.",style=MaterialTheme.typography.labelSmall)
+    else {
+        OutlinedTextField(query,{query=it.take(80)},label={Text("Find layer preset")},singleLine=true,modifier=Modifier.fillMaxWidth())
+        presets.filter{it.name.contains(query,true)||it.layer.type.label.contains(query,true)}.forEach{p->
+            Row(Modifier.fillMaxWidth().background(palette.panelElevated).padding(6.dp),verticalAlignment=Alignment.CenterVertically){
+                Column(Modifier.weight(1f)){
+                    Text(p.name,maxLines=1,overflow=TextOverflow.Ellipsis,style=MaterialTheme.typography.bodyMedium)
+                    Text(p.layer.type.label+" · "+p.tracks.sumOf{it.keyframes.size}+" keys",style=MaterialTheme.typography.labelSmall,color=palette.textSecondary)
+                }
+                TextButton(onClick={vm.addSavedLayerPreset(p.id)}){Text("ADD")}
+                IconButton(onClick={remove=p.id},modifier=Modifier.size(32.dp)){Icon(Icons.Default.Delete,"Delete preset",tint=palette.danger,modifier=Modifier.size(16.dp))}
+            }
+        }
+    }
+    remove?.let{id->AlertDialog(onDismissRequest={remove=null},title={Text("DELETE SAVED PRESET?")},text={Text("Existing project layers will not be affected.")},confirmButton={TextButton(onClick={vm.deleteLayerPreset(id);remove=null}){Text("DELETE")}},dismissButton={TextButton(onClick={remove=null}){Text("CANCEL")}})}
 }

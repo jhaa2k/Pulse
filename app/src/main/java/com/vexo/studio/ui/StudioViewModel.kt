@@ -341,6 +341,39 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         commitProjectChange(p.copy(keyframes=tracks))
     }
 
+    private val layerPresetPrefs=app.getSharedPreferences("layer_presets",android.content.Context.MODE_PRIVATE)
+    private val layerPresetSerializer=kotlinx.serialization.builtins.ListSerializer(com.vexo.studio.engine.scene.SavedLayerPreset.serializer())
+    private val _layerPresets=kotlinx.coroutines.flow.MutableStateFlow(runCatching{
+        kotlinx.serialization.json.Json.decodeFromString(layerPresetSerializer,layerPresetPrefs.getString("presets","[]")?:"[]")
+    }.getOrDefault(emptyList()).take(32))
+    val layerPresets=_layerPresets.asStateFlow()
+
+    private fun persistLayerPresets(list:List<com.vexo.studio.engine.scene.SavedLayerPreset>){
+        val encoded=kotlinx.serialization.json.Json.encodeToString(layerPresetSerializer,list)
+        if(encoded.length>2_000_000){_uiState.value=_uiState.value.copy(statusBanner="Layer preset library size limit reached");return}
+        layerPresetPrefs.edit().putString("presets",encoded).apply()
+        _layerPresets.value=list
+    }
+    fun saveLayerPreset(layerId:String,name:String){
+        val p=_uiState.value.project
+        val layer=p.compositions.flatMap{it.layers}.firstOrNull{it.common.id==layerId}?:return
+        val saved=com.vexo.studio.engine.scene.LayerPresets.capture(name,layer,p.keyframes)
+        if(saved==null){_uiState.value=_uiState.value.copy(statusBanner="Standalone presets cannot contain composition references or invalid animation");return}
+        persistLayerPresets((_layerPresets.value.filterNot{it.name.equals(saved.name,true)}+saved).takeLast(32))
+    }
+    fun deleteLayerPreset(id:String){persistLayerPresets(_layerPresets.value.filterNot{it.id==id})}
+    fun addSavedLayerPreset(id:String){
+        val preset=_layerPresets.value.firstOrNull{it.id==id}?:return
+        val p=_uiState.value.project
+        if(p.compositions.sumOf{it.layers.size}>=2048)return
+        val idx=_uiState.value.selectedCompositionIndex
+        if(p.compositions.none{it.index==idx})return
+        val (layer,tracks)=com.vexo.studio.engine.scene.LayerPresets.instantiate(preset,p.audioProviders.map{it.index}.toSet(),p.audioProviders.first().index)
+        if(com.vexo.studio.engine.scene.SceneGraph.referencesOf(layer.config).isNotEmpty())return
+        commitProjectChange(p.copy(compositions=p.compositions.map{if(it.index==idx)it.copy(layers=it.layers+layer) else it},keyframes=p.keyframes+tracks))
+        _uiState.value=_uiState.value.copy(selectedLayerId=layer.common.id,studioTab=StudioTab.PROPERTIES,statusBanner="Layer preset added")
+    }
+
     private data class LayerClipboard(val projectId:String,val layer:LayerNode,val keyframes:List<com.vexo.studio.model.KeyframeTrack>)
     private var layerClipboard:LayerClipboard?=null
 
