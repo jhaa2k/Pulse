@@ -24,6 +24,16 @@ class Phase29SpectrumTest {
             }
         }
     }
+    @Test fun legacyAlternateNestedNamesAndNumericMeasureImport() {
+        val project=com.vexo.studio.data.AveeJsonCodec.importFromText("""{"compositions":[{"elements":[{"objType":"Bars","shapepath":{"v":"Circle","radius":{"v":2}},"segment1":{"v":"Line","barWidth":{"v":0.4}},"colorBlendOffset":{"v":0.25}}]}]}""")
+        val cfg=project.compositions.first().layers.first().config as LayerConfig.Bars
+        assertEquals(BarsSegmentType.LINE,cfg.segment1)
+        assertEquals(BarsShapePath.CIRCLE,cfg.shapePath)
+        assertEquals(.56f,cfg.circleRadius,.001f)
+        assertEquals(.4f,cfg.barWidth,.001f)
+        assertEquals(.25f,cfg.colorBlendOffset,.001f)
+        assertEquals(0xFFFFFFFF.toInt(),com.vexo.studio.data.AveeJsonCodec.parseHsla4fToArgb("NaN 1 1 1"))
+    }
     @Test fun signedWaveformCrossesBaselineAndSmoothCurvesHaveMoreVertices() {
         val c=LayerConfig.Bars(signedWaveform=true,creativeStyle=CreativeSpectrumStyle.LINE,mirror=false,minHeightScale=0f)
         val samples=floatArrayOf(-.6f,.5f,-.3f,.7f)

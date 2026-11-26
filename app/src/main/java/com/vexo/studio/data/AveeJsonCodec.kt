@@ -402,10 +402,10 @@ object AveeJsonCodec {
     }
 
     private fun parseBarsLayer(obj: JsonObject): LayerNode {
-        val seg1Obj = obj["Segment1"] as? JsonObject
-        val seg1Type = BarsSegmentType.fromAvee(seg1Obj?.get("v")?.primitiveString() ?: "Bars")
-        val seg2Obj = obj["Segment2"] as? JsonObject
-        val seg2Type = BarsSegmentType.fromAvee(seg2Obj?.get("v")?.primitiveString() ?: "None")
+        val seg1Obj = obj.rawProp("Segment1") as? JsonObject
+        val seg1Type = BarsSegmentType.fromAvee(obj.propString("Segment1", "Bars"))
+        val seg2Obj = obj.rawProp("Segment2") as? JsonObject
+        val seg2Type = BarsSegmentType.fromAvee(obj.propString("Segment2", "None"))
         return LayerNode(
             type = LayerType.BARS,
             common = parseCommon(obj, "Bars/Segments"),
@@ -420,7 +420,7 @@ object AveeJsonCodec {
                 segment2Mirror = seg2Obj?.propBool("mirror", false) ?: false,
                 segment2ColorFrom = seg2Obj?.propInt("colorFrom", -1) ?: -1,
                 segment2ColorTo = seg2Obj?.propInt("colorTo", -1) ?: -1,
-                pathGap = (obj["ShapePath"] as? JsonObject)?.propFloat("gap", 0f) ?: 0f,
+                pathGap = (obj.rawProp("ShapePath") as? JsonObject)?.propFloat("gap", 0f) ?: 0f,
                 barWidth = seg1Obj?.propFloat("barWidth", 0.6f) ?: 0.6f,
                 barHeightMultiplier = seg1Obj?.propFloat("barHeightMultiplier", 1f) ?: 1f,
                 fixedHeight = seg1Obj?.propFloat("fixedHeight", 0f) ?: 0f,
@@ -435,8 +435,8 @@ object AveeJsonCodec {
                 reactionDelay = obj.propInt("reactionDelay", 0),
                 reactionAccumulatedDelay = obj.propInt("reactionAccumulatedDelay", 0),
                 colorBlendOffset = parseMvarfValue(obj.propString("colorBlendOffset", "Constant 0 0"), 0f),
-                circleRadius = obj.propFloat("circleRadius", ((obj["ShapePath"] as? JsonObject)?.propFloat("radius", 1f) ?: 1f) * 0.28f),
-                polygonSides = obj.propInt("polygonSides", (obj["ShapePath"] as? JsonObject)?.propInt("sides", 6) ?: 6).coerceIn(3, 24),
+                circleRadius = obj.propFloat("circleRadius", ((obj.rawProp("ShapePath") as? JsonObject)?.propFloat("radius", 1f) ?: 1f) * 0.28f),
+                polygonSides = obj.propInt("polygonSides", (obj.rawProp("ShapePath") as? JsonObject)?.propInt("sides", 6) ?: 6).coerceIn(3, 24),
                 pathAngleDeg = obj.propFloat("pathAngleDeg", 0f),
                 alternatingDirection = obj.propBool("alternatingDirection", false)
             )
@@ -787,14 +787,14 @@ object AveeJsonCodec {
 
     private fun parseMvarfValue(raw: String, defaultVal: Float): Float {
         val parts = raw.trim().split(Regex("\\s+"))
-        return parts.getOrNull(1)?.toFloatOrNull() ?: defaultVal
+        return (raw.trim().toFloatOrNull() ?: parts.getOrNull(1)?.toFloatOrNull())?.takeIf { it.isFinite() } ?: defaultVal
     }
 
     private fun parseMvarf2Measure(raw: String): MeasureConfig {
         val parts = raw.trim().split(Regex("\\s+"))
         val what = MeasureWhat.fromAvee(parts.getOrNull(0))
-        val a = parts.getOrNull(1)?.toFloatOrNull() ?: 0.5f
-        val b = parts.getOrNull(2)?.toFloatOrNull() ?: 0.5f
+        val a = parts.getOrNull(1)?.toFloatOrNull()?.takeIf { it.isFinite() } ?: 0.5f
+        val b = parts.getOrNull(2)?.toFloatOrNull()?.takeIf { it.isFinite() } ?: 0.5f
         return MeasureConfig(measureWhat = what, amountA = a, amountB = b)
     }
 
@@ -802,8 +802,9 @@ object AveeJsonCodec {
      * Converts Avee "H S L A" normalized floats (0..1) to Android ARGB Int.
      */
     fun parseHsla4fToArgb(raw: String): Int {
-        val parts = raw.trim().split(Regex("\\s+")).mapNotNull { it.toFloatOrNull() }
-        if (parts.size < 4) return 0xFFFFFFFF.toInt()
+        val tokens = raw.trim().split(Regex("\\s+"))
+        if(tokens.size<4) return 0xFFFFFFFF.toInt()
+        val parts=tokens.take(4).map { it.toFloatOrNull()?.takeIf { v -> v.isFinite() } ?: return 0xFFFFFFFF.toInt() }
         val h = (parts[0].coerceIn(0f, 1f)) * 360f
         val s = parts[1].coerceIn(0f, 1f)
         val l = parts[2].coerceIn(0f, 1f)
@@ -867,8 +868,10 @@ object AveeJsonCodec {
     private fun JsonElement.primitiveFloat(): Float? =
         ((this as? JsonPrimitive)?.floatOrNull ?: (this as? JsonPrimitive)?.content?.toFloatOrNull())?.takeIf { it.isFinite() }
 
+    private fun JsonObject.rawProp(key: String): JsonElement? = this[key] ?: entries.firstOrNull { it.key.equals(key, ignoreCase = true) }?.value
+
     private fun JsonObject.propEl(key: String): JsonElement? {
-        val child = this[key] ?: entries.firstOrNull { it.key.equals(key, ignoreCase = true) }?.value ?: return null
+        val child = rawProp(key) ?: return null
         return if (child is JsonObject && child.containsKey("v")) child["v"] else child
     }
 

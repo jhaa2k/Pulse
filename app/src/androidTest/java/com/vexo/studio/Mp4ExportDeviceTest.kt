@@ -80,6 +80,59 @@ class Mp4ExportDeviceTest {
         }
     }
 
+    @Test fun portraitWaveGlowAndMotionExportProducesVisiblePixels(): Unit = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val wav = File.createTempFile("wave_effect_", ".wav", context.cacheDir)
+        val output = File.createTempFile("wave_effect_", ".mp4", context.cacheDir)
+        try {
+            writeTone(wav,44100,2)
+            val bars = com.vexo.studio.model.LayerNode(
+                com.vexo.studio.model.LayerType.BARS, com.vexo.studio.model.LayerCommon(name="Test waveform"),
+                com.vexo.studio.model.LayerConfig.Bars(
+                    creativePath=com.vexo.studio.model.CreativeSpectrumPath.CIRCLE,
+                    creativeStyle=com.vexo.studio.model.CreativeSpectrumStyle.LINE,
+                    signedWaveform=true,curveSubdivisions=4,barCount=120,mirror=false,
+                    circleRadius=.26f,creativeStrokeWidth=8f,colorFromArgb=0xFFFFFFFF.toInt(),colorToArgb=0xFF69EEFF.toInt()))
+            val glow = com.vexo.studio.model.LayerNode(
+                com.vexo.studio.model.LayerType.BLUR_EFFECT, com.vexo.studio.model.LayerCommon(name="Glow"),
+                com.vexo.studio.model.LayerConfig.BlurEffect(sourceCompositionIndex=1,blurRadius=5f,
+                    blendModeContent=com.vexo.studio.model.BlendMode.ADD,showUnblurredContent=true))
+            val trail = com.vexo.studio.model.LayerNode(
+                com.vexo.studio.model.LayerType.MOTION_BLUR_EFFECT, com.vexo.studio.model.LayerCommon(name="Trail",opacity=.4f),
+                com.vexo.studio.model.LayerConfig.MotionBlurEffect(targetCompositionIndex=1,
+                    motionSource=com.vexo.studio.model.MotionSource.MANUAL,manualMotionX=.02f))
+            val ratio=AspectRatioPreset.RATIO_9_16
+            val project=com.vexo.studio.model.VexoProject(
+                canvas=com.vexo.studio.model.CanvasConfig(aspectRatio=ratio),
+                compositions=listOf(
+                    com.vexo.studio.model.CompositionNode(index=0,layers=listOf(glow,trail)),
+                    com.vexo.studio.model.CompositionNode(index=1,layers=listOf(bars))),
+                exportSettings=com.vexo.studio.model.ExportSettings(aspectRatio=ratio,
+                    resolution=VideoResolution.HD_720,fps=24,videoBitrateMbps=4,
+                    trimEndMs=1000L,customOutputUri=Uri.fromFile(output).toString()))
+            withTimeout(180_000L) {
+                VexoVideoExporter(context).export(project,Uri.fromFile(wav).toString(),
+                    TrackMetadataSnapshot(title="Wave effect",durationMs=2000L)){}
+            }
+            val video=inspectTrack(output,"video/")
+            assertEquals(720,video.width);assertEquals(1280,video.height)
+            assertTrue(inspectTrack(output,"audio/").samples>20)
+            val retriever=MediaMetadataRetriever()
+            try {
+                retriever.setDataSource(output.absolutePath)
+                val frame=checkNotNull(retriever.getFrameAtTime(500_000L,MediaMetadataRetriever.OPTION_CLOSEST))
+                try {
+                    var bright=0
+                    for(y in 0 until frame.height step 4) for(x in 0 until frame.width step 4) {
+                        val color=frame.getPixel(x,y)
+                        if(android.graphics.Color.red(color)>40 || android.graphics.Color.green(color)>40 || android.graphics.Color.blue(color)>40)bright++
+                    }
+                    assertTrue("Wave/effects output must not be entirely black",bright>20)
+                } finally { frame.recycle() }
+            } finally { retriever.release() }
+        } finally { wav.delete();output.delete() }
+    }
+
     private data class Track(val samples: Int, val lastUs: Long, val width: Int, val height: Int)
 
     private fun inspectTrack(file: File, prefix: String): Track {
