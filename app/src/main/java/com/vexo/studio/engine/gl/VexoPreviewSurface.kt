@@ -10,6 +10,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.runtime.rememberUpdatedState
 import android.os.SystemClock
 import androidx.compose.ui.Alignment
@@ -36,7 +41,8 @@ fun VexoPreviewSurface(
     modifier: Modifier = Modifier,
     fillBounds: Boolean = false,
     targetFps: Int = 60,
-    continuousRendering: Boolean = true
+    continuousRendering: Boolean = true,
+    renderScale: Float = 1f
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -59,6 +65,14 @@ fun VexoPreviewSurface(
         }
     }
 
+    var viewSize by remember { mutableStateOf(IntSize.Zero) }
+    LaunchedEffect(viewSize,renderScale){
+        if(viewSize.width>0&&viewSize.height>0){
+            val scale=renderScale.coerceIn(.5f,1f)
+            glView.holder.setFixedSize((viewSize.width*scale).toInt().coerceAtLeast(16),(viewSize.height*scale).toInt().coerceAtLeast(16))
+            glView.requestRender()
+        }
+    }
     LaunchedEffect(continuousRendering, targetFps) {
         glView.renderMode = GLSurfaceView.RENDERMODE_WHEN_DIRTY
         lastRequest[0] = 0L
@@ -69,7 +83,7 @@ fun VexoPreviewSurface(
         if (sceneSnapshot != null) {
             renderer.submitSnapshot(sceneSnapshot)
             val now = SystemClock.elapsedRealtimeNanos()
-            val interval = 1_000_000_000L / targetFps.coerceIn(30, 60)
+            val interval = 1_000_000_000L / targetFps.coerceIn(15, 60)
             if (now - lastRequest[0] >= interval - 2_000_000L) {
                 lastRequest[0] = now
                 glView.requestRender()
@@ -125,7 +139,7 @@ fun VexoPreviewSurface(
         AndroidView(
             factory = { glView },
             update = {},
-            modifier = surfaceModifier
+            modifier = surfaceModifier.onSizeChanged{viewSize=it}
         )
     }
 }

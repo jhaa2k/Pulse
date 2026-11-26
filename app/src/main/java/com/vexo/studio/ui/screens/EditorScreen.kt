@@ -153,6 +153,7 @@ fun EditorScreen(
                 modifier = Modifier.fillMaxSize(),
                 fillBounds = false,
                 targetFps = settings.previewFps,
+                renderScale = settings.previewScale,
                 continuousRendering = playback.isPlaying || settings.pauseBehavior != PauseBehavior.FREEZE
             )
             Row(
@@ -201,6 +202,7 @@ fun EditorScreen(
                     uiState = uiState,
                     sceneSnapshot = sceneSnapshot,
                     targetFps = settings.previewFps,
+                    renderScale = settings.previewScale,
                     continuousRendering = playback.isPlaying || settings.pauseBehavior != PauseBehavior.FREEZE,
                     modifier = Modifier.weight(1f).fillMaxWidth()
                 )
@@ -234,7 +236,7 @@ fun EditorScreen(
         Box(Modifier.fillMaxSize()) {
             PreviewBlock(vm, uiState, sceneSnapshot, settings.previewFps,
                 playback.isPlaying || settings.pauseBehavior != PauseBehavior.FREEZE,
-                modifier = Modifier.fillMaxSize())
+                modifier = Modifier.fillMaxSize(),renderScale=settings.previewScale)
             Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().fillMaxHeight(1f - previewShare).background(palette.panel).clipToBounds()) {
                 CompactTransportBar(playback, { vm.playbackController.togglePlayPause() }, { vm.playbackController.previous() }, { vm.playbackController.next() }, { vm.playbackController.seekTo(it) }, onPickAudio, Modifier.fillMaxWidth())
                 StudioWorkspacePanel(vm, uiState, settings, onPickImage, onImportPreset, onExportPreset, Modifier.weight(1f).fillMaxWidth())
@@ -247,6 +249,7 @@ fun EditorScreen(
                 uiState = uiState,
                 sceneSnapshot = sceneSnapshot,
                 targetFps = settings.previewFps,
+                renderScale = settings.previewScale,
                 continuousRendering = playback.isPlaying || settings.pauseBehavior != PauseBehavior.FREEZE,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -283,7 +286,8 @@ private fun PreviewBlock(
     sceneSnapshot: StateFlow<RenderSceneSnapshot?>,
     targetFps: Int,
     continuousRendering: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    renderScale: Float = 1f
 ) {
     val palette = LocalVexoPalette.current
     Column(modifier=modifier.background(Color.Black).clipToBounds()){
@@ -300,7 +304,7 @@ private fun PreviewBlock(
             IconButton(onClick=vm::resetPreviewCamera,modifier=Modifier.size(32.dp)){Icon(Icons.Default.CropFree,"Reset zoom",tint=palette.textSecondary,modifier=Modifier.size(16.dp))}
             IconButton(onClick=vm::toggleFullscreenPreview,modifier=Modifier.size(32.dp)){Icon(Icons.Default.Fullscreen,"Fullscreen",tint=palette.textPrimary,modifier=Modifier.size(18.dp))}
         }
-        VexoPreviewSurface(aspectRatio=uiState.project.canvas.aspectRatio,sceneSnapshot=sceneSnapshot.collectAsState().value,onTransformGesture=vm::updatePreviewTransform,modifier=Modifier.weight(1f).fillMaxWidth().clipToBounds(),targetFps=targetFps,continuousRendering=continuousRendering)
+        VexoPreviewSurface(aspectRatio=uiState.project.canvas.aspectRatio,sceneSnapshot=sceneSnapshot.collectAsState().value,onTransformGesture=vm::updatePreviewTransform,modifier=Modifier.weight(1f).fillMaxWidth().clipToBounds(),targetFps=targetFps,continuousRendering=continuousRendering,renderScale=renderScale)
     }
 }
 

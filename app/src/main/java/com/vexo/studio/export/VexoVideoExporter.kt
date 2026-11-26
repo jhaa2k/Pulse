@@ -114,7 +114,22 @@ class VexoVideoExporter(private val context: Context) {
             val totalDurationUs = endUs - startUs
             val totalFrames = kotlin.math.ceil(totalDurationUs / 1_000_000.0 * fps).toInt().coerceAtLeast(1)
 
-            // Decode entire trimmed PCM window into short chunks or stream sequentially
+            val required=ExportBudget.workingBytes(totalDurationUs,bitrate,settings.audioBitrateKbps.coerceIn(96,320)*1000,sampleRate,channels)
+            check(context.cacheDir.usableSpace>=required){"Not enough free cache storage. Need about %.0f MB".format(required/1_000_000.0)}
+            // Select supported encoder before spending time decoding audio.
+            fun format(mime:String)=MediaFormat.createVideoFormat(mime,width,height).apply{
+                setInteger(MediaFormat.KEY_COLOR_FORMAT,MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
+                setInteger(MediaFormat.KEY_BIT_RATE,bitrate)
+                setInteger(MediaFormat.KEY_FRAME_RATE,fps)
+                setInteger(MediaFormat.KEY_I_FRAME_INTERVAL,1)
+            }
+            val codecList=MediaCodecList(MediaCodecList.REGULAR_CODECS)
+            val candidates=if(settings.useHevcIfSupported)listOf(MediaFormat.MIMETYPE_VIDEO_HEVC,MediaFormat.MIMETYPE_VIDEO_AVC) else listOf(MediaFormat.MIMETYPE_VIDEO_AVC)
+            val selected=candidates.firstNotNullOfOrNull{mime->val f=format(mime);runCatching{codecList.findEncoderForFormat(f)}.getOrNull()?.let{Triple(mime,f,it)}}
+                ?:error("No compatible encoder for selected resolution, FPS and bitrate")
+            val (videoMime,videoFormat,encoderName)=selected
+            onProgress(ExportProgress(isRunning=true,progress=.01f,statusText="Decoding audio · "+if(videoMime==MediaFormat.MIMETYPE_VIDEO_HEVC)"HEVC" else "H.264"))
+            // Decode entire trimmed PCM window into disk spool
             extractor.selectTrack(audioTrackIndex)
             if (startUs > 0) extractor.seekTo(startUs, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
 
@@ -137,16 +152,7 @@ class VexoVideoExporter(private val context: Context) {
             extractor.release(); inputExtractor = null
             audioDecoder.stop(); audioDecoder.release(); audioDecoder = null
 
-            // Configure H.264 Video Encoder + EGL Surface
-            val videoMime = MediaFormat.MIMETYPE_VIDEO_AVC
-            val videoFormat = MediaFormat.createVideoFormat(videoMime, width, height).apply {
-                setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
-                setInteger(MediaFormat.KEY_BIT_RATE, bitrate)
-                setInteger(MediaFormat.KEY_FRAME_RATE, fps)
-                setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
-            }
-            val encoderName = MediaCodecList(MediaCodecList.REGULAR_CODECS).findEncoderForFormat(videoFormat)
-                ?: error("No H.264 encoder supports ${width}x${height} at $fps fps and selected bitrate")
+            // Configure selected video encoder + EGL surface
             videoEncoder = MediaCodec.createByCodecName(encoderName).apply {
                 configure(videoFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
             }
@@ -421,7 +427,7 @@ class VexoVideoExporter(private val context: Context) {
 
             onProgress(ExportProgress(isRunning = true, progress = 0.98f, statusText = "Verifying & publishing MP4"))
 
-            verifyMp4File(tempFile,width,height,totalDurationUs)
+            verifyMp4File(tempFile,width,height,totalDurationUs,videoMime)
             val publishedUri = publishVideo(tempFile, project.name, settings.customOutputUri)
             tempFile.delete()
 
@@ -524,7 +530,7 @@ class VexoVideoExporter(private val context: Context) {
         return bytesWritten
     }
 
-    private fun verifyMp4File(file: File,width:Int,height:Int,expectedDurationUs:Long) {
+    private fun verifyMp4File(file: File,width:Int,height:Int,expectedDurationUs:Long,videoMime:String) {
         if (!file.exists() || file.length() <= 0L) {
             error("Exported MP4 file is empty")
         }
@@ -532,7 +538,7 @@ class VexoVideoExporter(private val context: Context) {
         try{
             extractor.setDataSource(file.absolutePath)
             val formats=(0 until extractor.trackCount).map{extractor.getTrackFormat(it)}
-            val video=formats.firstOrNull{it.getString(MediaFormat.KEY_MIME)=="video/avc"} ?: error("MP4 has no H.264 track")
+            val video=formats.firstOrNull{it.getString(MediaFormat.KEY_MIME)==videoMime} ?: error("MP4 has no selected video codec track")
             check(formats.any{it.getString(MediaFormat.KEY_MIME)=="audio/mp4a-latm"}){"MP4 has no AAC track"}
             check(video.getInteger(MediaFormat.KEY_WIDTH)==width && video.getInteger(MediaFormat.KEY_HEIGHT)==height){"Export dimensions differ from selection"}
         }finally{extractor.release()}

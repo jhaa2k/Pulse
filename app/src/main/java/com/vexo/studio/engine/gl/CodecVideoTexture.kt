@@ -129,7 +129,7 @@ internal class CodecVideoTexture(context:Context,uri:Uri,limit:Int,private val e
         val target=timeMs.coerceIn(0L,durationMs-1)*1000L
         val c=checkNotNull(codec)
         if(VideoDecodeMath.shouldSeek(lastRequested,target)){
-            c.flush()
+            if(lastRequested>=0)c.flush()
             extractor.seekTo(target,MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
             inputEnd=false;outputEnd=false;lastPts=-1;hasFrame=false
             ready.drainPermits()

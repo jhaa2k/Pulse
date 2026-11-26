@@ -388,7 +388,7 @@ fun ExportScreen(
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Text("OFFLINE VIDEO EXPORT (MP4 H.264 + AAC)", style = MaterialTheme.typography.labelMedium, color = palette.accent)
+        Text("OFFLINE VIDEO EXPORT (MP4 + AAC)", style = MaterialTheme.typography.labelMedium, color = palette.accent)
 
         StudioChipSelector("Aspect Ratio", AspectRatioPreset.entries, exp.aspectRatio, { it.label }) { ratio ->
             vm.updateExportSettings { it.copy(aspectRatio = ratio) }
@@ -411,8 +411,13 @@ fun ExportScreen(
             onValueChange = { v -> vm.updateExportSettings { it.copy(videoBitrateMbps = v.toInt()) } }
         )
 
+        StudioToggleRow("Prefer HEVC (H.265)",exp.useHevcIfSupported){v->vm.updateExportSettings{it.copy(useHevcIfSupported=v)}}
+        Text("HEVC is used only if the device reports support; otherwise H.264 is selected.",style=MaterialTheme.typography.labelSmall,color=palette.textSecondary)
+        val estimatedMs=(if(exp.trimEndMs>exp.trimStartMs)minOf(trackDurMs,exp.trimEndMs) else trackDurMs)-exp.trimStartMs
+        val estimatedBytes=com.vexo.studio.export.ExportBudget.encodedBytes(estimatedMs.coerceAtLeast(0L)*1000L,exp.videoBitrateMbps.coerceIn(2,80)*1_000_000,exp.audioBitrateKbps*1000)
+        Text("Estimated output: %.1f MB".format(estimatedBytes/1_000_000.0),style=MaterialTheme.typography.labelMedium,color=palette.accent)
         StudioChipSelector("AAC Audio Bitrate", listOf(96,128,192,256,320), exp.audioBitrateKbps, { "$it kbps" }) { v -> vm.updateExportSettings { it.copy(audioBitrateKbps=v) } }
-        Text("H.264 / AAC · Hardware capability is checked before rendering.", style=MaterialTheme.typography.bodySmall, color=palette.textSecondary)
+        Text("Video + AAC · Encoder capability and temporary storage are checked before rendering.", style=MaterialTheme.typography.bodySmall, color=palette.textSecondary)
         if (playback.durationMs > 0L) {
             StudioSlider(
                 label = "Trim Start",
@@ -575,8 +580,10 @@ fun SettingsScreen(
         ExpandableSectionHeader("Editor & performance", sections["editor"] == true, { toggleAccordion(sections,"editor") }) {
         StudioToggleRow("Portrait overlay workspace", settings.portraitOverlay) { value -> vm.updateSettings { it.copy(portraitOverlay = value) } }
         StudioSlider("Preview area", settings.previewShare * 100f, 30f, 65f, 44f, "%", 1f, onValueChange = { value -> vm.updateSettings { it.copy(previewShare = value / 100f) } })
-        StudioChipSelector("Preview FPS limit", listOf(30, 60), settings.previewFps, { "$it FPS" }) { fps -> vm.updateSettings { it.copy(previewFps = fps) } }
-        TextButton(onClick = { vm.updateSettings { current -> current.copy(themePreset = ThemePreset.LIME_STUDIO, customAccentArgb = 0xFFC5F84A.toInt(), glassEnabled = true, glassOpacity = 0.82f, backdropBlurDp = 24f, cornerRadiusDp = 8f, controlScale = 1f, uiTextScale = 1f, previewFps = 60, previewShare = 0.44f, portraitOverlay = false) } }) { Text("RESET INTERFACE SETTINGS") }
+        StudioChipSelector("Preview FPS limit", listOf(15, 24, 30, 60), settings.previewFps, { "$it FPS" }) { fps -> vm.updateSettings { it.copy(previewFps = fps) } }
+        StudioChipSelector("Preview render quality",listOf(.5f,.75f,1f),settings.previewScale,{"${(it*100).toInt()}%"}){v->vm.updateSettings{it.copy(previewScale=v)}}
+        Text("Lower preview resolution reduces GPU load. MP4 export resolution stays unchanged.",style=MaterialTheme.typography.labelSmall)
+        TextButton(onClick = { vm.updateSettings { current -> current.copy(themePreset = ThemePreset.LIME_STUDIO, customAccentArgb = 0xFFC5F84A.toInt(), glassEnabled = true, glassOpacity = 0.82f, backdropBlurDp = 24f, cornerRadiusDp = 0f, controlScale = 1f, uiTextScale = 1f, previewFps = 30, previewScale=1f, previewShare = 0.44f, portraitOverlay = false) } }) { Text("RESET INTERFACE SETTINGS") }
 
         }
         ExpandableSectionHeader("Audio analysis", sections["audio"] == true, { toggleAccordion(sections,"audio") }) {
