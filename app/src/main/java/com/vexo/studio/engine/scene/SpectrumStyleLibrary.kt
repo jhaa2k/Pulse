@@ -2,7 +2,7 @@ package com.vexo.studio.engine.scene
 import com.vexo.studio.model.*
 import kotlin.random.Random
 
-data class SpectrumStyleRecipe(val name:String,val path:CreativeSpectrumPath,val style:CreativeSpectrumStyle,val count:Int,val radius:Float,val width:Float,val mirror:Boolean,val from:Int,val to:Int, val gain:Float=.9f, val spread:Float=.55f, val turns:Float=2f, val second:CreativeSpectrumStyle?=null){
+data class SpectrumStyleRecipe(val name:String,val path:CreativeSpectrumPath,val style:CreativeSpectrumStyle,val count:Int,val radius:Float,val width:Float,val mirror:Boolean,val from:Int,val to:Int, val gain:Float=.9f, val spread:Float=.55f, val turns:Float=2f, val second:CreativeSpectrumStyle?=null, val waveform:Boolean=false, val curve:Int=1, val colors:Int=1){
     fun apply(base:LayerConfig.Bars)=base.copy(
         creativePath=path,creativeStyle=style,shapePath=BarsShapePath.HORIZONTAL_LINE,
         segment1=BarsSegmentType.BARS,segment2=if(second==null)BarsSegmentType.NONE else BarsSegmentType.BARS,secondaryCreativeStyle=second?:CreativeSpectrumStyle.BARS,
@@ -10,7 +10,7 @@ data class SpectrumStyleRecipe(val name:String,val path:CreativeSpectrumPath,val
         barCount=count,circleRadius=radius,barWidth=width,mirror=mirror,barSpacing=.12f,
         pathAngleDeg=0f,pathGap=0f,pathTurns=turns,pathSpread=spread,
         heightScale=if(path==CreativeSpectrumPath.LEGACY)gain*1.6f else gain,barHeightMultiplier=1f,
-        sampleOffset=0f,sampleRepeats=1,amplitudeCurve=1f,baselineOffset=0f,
+        sampleOffset=0f,sampleRepeats=1,amplitudeCurve=1f,baselineOffset=0f,signedWaveform=waveform,curveSubdivisions=curve,gradientRepeats=colors,
         minHeightScale=.012f,maxHeightScale=.9f,fixedHeight=0f,flipInput=false,alternatingDirection=false,
         colorFromArgb=from,colorToArgb=to,colorBlendOffset=0f,
         creativeStrokeWidth=3f,creativeTipSize=1f,creativeFillAlpha=.65f,roundness=1f,stepCount=8,
@@ -62,7 +62,11 @@ object SpectrumStyleLibrary{
         SpectrumStyleRecipe("Cyber Polygon",CreativeSpectrumPath.HEXAGON,CreativeSpectrumStyle.DOUBLE_LINE,108,.3f,.8f,false,0xFFBBFF31.toInt(),0xFF44FFD9.toInt(),.9f),
         SpectrumStyleRecipe("Heart Wave",CreativeSpectrumPath.HEART,CreativeSpectrumStyle.LINE,128,.32f,.7f,false,0xFFFF73AC.toInt(),0xFFFFD8E8.toInt(),.7f),
         SpectrumStyleRecipe("Spiral Beacons",CreativeSpectrumPath.SPIRAL,CreativeSpectrumStyle.LOLLIPOP,100,.35f,.7f,false,0xFFFBC453.toInt(),0xFFAC59FF.toInt(),.75f,.4f,3f),
-        SpectrumStyleRecipe("Sub Bass Wall",CreativeSpectrumPath.LEGACY,CreativeSpectrumStyle.CAPPED,24,.25f,.9f,true,0xFFFF6C37.toInt(),0xFFFFE769.toInt(),1.6f)
+        SpectrumStyleRecipe("Sub Bass Wall",CreativeSpectrumPath.LEGACY,CreativeSpectrumStyle.CAPPED,24,.25f,.9f,true,0xFFFF6C37.toInt(),0xFFFFE769.toInt(),1.6f),
+        SpectrumStyleRecipe("Analog Oscilloscope",CreativeSpectrumPath.LEGACY,CreativeSpectrumStyle.LINE,192,.25f,.65f,false,0xFFB5FF56.toInt(),0xFF69FFC0.toInt(),1f,waveform=true,curve=4),
+        SpectrumStyleRecipe("Circular Oscilloscope",CreativeSpectrumPath.CIRCLE,CreativeSpectrumStyle.LINE,192,.27f,.7f,false,0xFF71E9FF.toInt(),0xFFCE75FF.toInt(),.9f,waveform=true,curve=4,colors=2),
+        SpectrumStyleRecipe("Silk Wave",CreativeSpectrumPath.LEGACY,CreativeSpectrumStyle.LINE,112,.25f,.7f,true,0xFFFFB3DA.toInt(),0xFF87DBFF.toInt(),.75f,curve=6,colors=3),
+        SpectrumStyleRecipe("Prism Ring",CreativeSpectrumPath.CIRCLE,CreativeSpectrumStyle.LINE,144,.27f,.7f,false,0xFFFD4A99.toInt(),0xFF4DE6FF.toInt(),.85f,curve=4,colors=4)
     )
     fun next(used:Set<String>,current:LayerConfig.Bars,random:Random=Random.Default):Pair<SpectrumStyleRecipe,Set<String>>{
         val remaining=recipes.filter{it.name !in used}

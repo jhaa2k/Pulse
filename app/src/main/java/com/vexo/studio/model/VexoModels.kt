@@ -403,7 +403,10 @@ sealed interface LayerConfig {
         val sampleOffset: Float = 0f,
         val sampleRepeats: Int = 1,
         val amplitudeCurve: Float = 1f,
-        val baselineOffset: Float = 0f
+        val baselineOffset: Float = 0f,
+        val signedWaveform: Boolean = false,
+        val curveSubdivisions: Int = 1,
+        val gradientRepeats: Int = 1
     ) : LayerConfig
 
     @Serializable

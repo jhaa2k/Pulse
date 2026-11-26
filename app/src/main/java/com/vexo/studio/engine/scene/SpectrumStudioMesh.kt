@@ -58,12 +58,14 @@ object SpectrumStudioMesh {
             val src = (wrapped * bars.size).toInt().coerceIn(0,bars.lastIndex)
             val idx=if(c.flipInput)bars.lastIndex-src else src
             val raw=bars[idx].takeIf{it.isFinite()}?:0f
-            val amplitude=(raw.coerceAtLeast(0f).pow(c.amplitudeCurve.coerceIn(.25f,3f))*abs(gain)).coerceIn(lo,hi)
-            val direction=(if(gain<0f)-1f else 1f)*(if(c.alternatingDirection&&i%2==1)-1f else 1f)
+            val amplitude=((if(c.signedWaveform)abs(raw) else raw.coerceAtLeast(0f)).pow(c.amplitudeCurve.coerceIn(.25f,3f))*abs(gain)).coerceIn(if(c.signedWaveform)0f else lo,hi)
+            val direction=(if(gain<0f)-1f else 1f)*(if(c.alternatingDirection&&i%2==1)-1f else 1f)*(if(c.signedWaveform&&raw<0f)-1f else 1f)
             val length=(amplitude*dim*.42f+c.fixedHeight*2f)*direction
             val base=c.baselineOffset.coerceIn(-1f,1f)*dim*.3f + if(c.mirror)-length*.5f else 0f
             val peak=c.baselineOffset.coerceIn(-1f,1f)*dim*.3f+((peaks?.getOrNull(idx)?:raw).coerceAtLeast(0f).pow(c.amplitudeCurve.coerceIn(.25f,3f))*abs(gain)).coerceIn(0f,hi)*dim*.42f*direction*(if(c.mirror).5f else 1f)
-            val color=MeasureEvaluator.blendArgb(c.colorFromArgb,c.colorToArgb,(t+c.colorBlendOffset).coerceIn(0f,1f))
+            val phaseColor=t*c.gradientRepeats.coerceIn(1,8)+c.colorBlendOffset
+            val blend=if(c.gradientRepeats<=1)phaseColor.coerceIn(0f,1f) else 1f-abs(2f*(phaseColor-floor(phaseColor))-1f)
+            val color=MeasureEvaluator.blendArgb(c.colorFromArgb,c.colorToArgb,blend)
             samples.add(Sample(origin,tangent,tangent.normal(),size,base,base+length,peak,color,amplitude))
         }
         fun tri(a:P,b:P,d:P,ca:Int,cb:Int=ca,cd:Int=ca){vertex(a.x,a.y,ca);vertex(b.x,b.y,cb);vertex(d.x,d.y,cd)}
@@ -83,6 +85,20 @@ object SpectrumStudioMesh {
         val connected=style in setOf(CreativeSpectrumStyle.LINE,CreativeSpectrumStyle.FILL,CreativeSpectrumStyle.DOUBLE_LINE,CreativeSpectrumStyle.RIBBON,CreativeSpectrumStyle.ZIGZAG,CreativeSpectrumStyle.WAVE_POINTS)
         if(connected&&n>1){
             val segments=if(closed)n else n-1
+            val divisions=c.curveSubdivisions.coerceIn(1,8)
+            fun sampleAt(index:Int)=samples[if(closed)((index%n)+n)%n else index.coerceIn(0,n-1)]
+            fun curve(p0:P,p1:P,p2:P,p3:P,t:Float):P {
+                val t2=t*t;val t3=t2*t
+                return (p1*2f+(p2-p0)*t+(p0*2f-p1*5f+p2*4f-p3)*t2+(p1*3f-p0-p2*3f+p3)*t3)*.5f
+            }
+            fun smooth(i:Int, offset:(Sample)->Float){
+                val a=sampleAt(i);val b=sampleAt(i+1)
+                if(divisions==1){line(a.p(0f,offset(a)),b.p(0f,offset(b)),stroke,a.color,b.color);return}
+                val p0=sampleAt(i-1);val p3=sampleAt(i+2)
+                val x0=p0.p(0f,offset(p0));val x1=a.p(0f,offset(a));val x2=b.p(0f,offset(b));val x3=p3.p(0f,offset(p3))
+                var prev=x1
+                for(j in 1..divisions){val t=j.toFloat()/divisions;val next=curve(x0,x1,x2,x3,t);line(prev,next,stroke,MeasureEvaluator.blendArgb(a.color,b.color,(j-1f)/divisions),MeasureEvaluator.blendArgb(a.color,b.color,t));prev=next}
+            }
             for(i in 0 until segments){
                 val a=samples[i];val b=samples[(i+1)%n]
                 val ac=a.p(0f,a.tip);val bc=b.p(0f,b.tip);val ab=a.p(0f,a.base);val bb=b.p(0f,b.base)
@@ -91,7 +107,7 @@ object SpectrumStudioMesh {
                     CreativeSpectrumStyle.DOUBLE_LINE->{line(ac,bc,stroke,a.color,b.color);line(a.p(0f,a.tip-stroke*2.5f),b.p(0f,b.tip-stroke*2.5f),stroke,a.color,b.color);if(c.mirror)line(ab,bb,stroke,a.color,b.color)}
                     CreativeSpectrumStyle.RIBBON->{val aw=a.width*.5f;val bw=b.width*.5f;quad(a.p(0f,a.tip-aw),b.p(0f,b.tip-bw),a.p(0f,a.tip+aw),b.p(0f,b.tip+bw),alpha(a.color,c.creativeFillAlpha),alpha(b.color,c.creativeFillAlpha));line(ac,bc,stroke,a.color,b.color)}
                     CreativeSpectrumStyle.ZIGZAG->{val pa=if(i%2==0)ac else ab;val pb=if((i+1)%2==0)bc else bb;line(pa,pb,stroke,a.color,b.color)}
-                    else->{line(ac,bc,stroke,a.color,b.color);if(c.mirror)line(ab,bb,stroke,a.color,b.color)}
+                    else->{smooth(i){it.tip};if(c.mirror)smooth(i){it.base}}
                 }
             }
         }

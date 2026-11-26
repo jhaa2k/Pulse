@@ -26,10 +26,11 @@ import kotlin.math.*
 internal fun SpectrumStyleGallery(layerId:String,cfg:LayerConfig.Bars,apply:(LayerConfig.Bars)->Unit){
     val palette=LocalVexoPalette.current
     var open by remember{mutableStateOf(false)}
+    var selectedRecipe by remember(layerId){mutableStateOf<String?>(null)}
     var usedText by rememberSaveable(layerId){mutableStateOf("")}
     var query by rememberSaveable{mutableStateOf("")}
     Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){
-        TextButton(onClick={open=true}){Text("STYLE GALLERY (${SpectrumStyleLibrary.recipes.size})")}
+        TextButton(onClick={selectedRecipe=null;open=true}){Text("STYLE GALLERY (${SpectrumStyleLibrary.recipes.size})")}
         TextButton(onClick={
             val used=usedText.split('|').filter{it.isNotBlank()}.toSet()
             val (recipe,next)=SpectrumStyleLibrary.next(used,cfg)
@@ -46,7 +47,7 @@ internal fun SpectrumStyleGallery(layerId:String,cfg:LayerConfig.Bars,apply:(Lay
                 items(recipes.chunked(2)){row->
                     Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(6.dp)){
                         row.forEach{recipe->
-                            Column(Modifier.weight(1f).border(1.dp,palette.border).clickable{apply(recipe.apply(cfg));open=false}.padding(4.dp)){
+                            Column(Modifier.weight(1f).border(if(selectedRecipe==recipe.name)2.dp else 1.dp,if(selectedRecipe==recipe.name)palette.accent else palette.border,palette.shape).clickable{selectedRecipe=recipe.name}.padding(4.dp)){
                                 SpectrumSample(recipe.apply(LayerConfig.Bars()),Modifier.fillMaxWidth().height(82.dp))
                                 Text(recipe.name,style=MaterialTheme.typography.labelMedium,maxLines=1)
                                 Text(recipe.style.name.replace('_',' ')+" · "+recipe.path.name.replace('_',' '),style=MaterialTheme.typography.labelSmall,color=palette.textSecondary,maxLines=2)
@@ -57,14 +58,14 @@ internal fun SpectrumStyleGallery(layerId:String,cfg:LayerConfig.Bars,apply:(Lay
                 }
             }
         }
-    },confirmButton={TextButton(onClick={open=false}){Text("CLOSE")}})
+    },confirmButton={TextButton(enabled=selectedRecipe!=null,onClick={SpectrumStyleLibrary.recipes.firstOrNull{it.name==selectedRecipe}?.let{apply(it.apply(cfg))};open=false}){Text("APPLY")}},dismissButton={TextButton(onClick={open=false;selectedRecipe=null}){Text("CANCEL")}})
 }
 private data class MeshVertex(val x:Float,val y:Float,val argb:Int)
 @Composable
 private fun SpectrumSample(cfg:LayerConfig.Bars,modifier:Modifier){
     val paths=remember(cfg){
         val n=cfg.barCount.coerceIn(16,80)
-        val bars=FloatArray(n){i->(.10f+.22f*abs(sin(i*.41f))+.12f*abs(cos(i*.89f)))*(1f-.45f*i/n)}
+        val bars=FloatArray(n){i->if(cfg.signedWaveform)sin(i*.45f)*(.2f+.13f*cos(i*.09f)) else (.10f+.22f*abs(sin(i*.41f))+.12f*abs(cos(i*.89f)))*(1f-.45f*i/n)}
         val peaks=FloatArray(n){i->bars[i]+.09f}
         val points=ArrayList<MeshVertex>()
         SpectrumStudioMesh.emit(cfg,bars,peaks,240,140){x,y,c->points.add(MeshVertex(x,y,c))}

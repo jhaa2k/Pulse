@@ -7,7 +7,7 @@ import org.junit.Test
 class SpectrumStyleLibraryTest {
  @Test fun catalogHas26DistinctStyles(){
     val all=SpectrumStyleLibrary.recipes
-    assertEquals(44,all.size);assertEquals(26,all.map{it.style}.distinct().size);assertEquals(all.size,all.map{it.name}.distinct().size)
+    assertEquals(48,all.size);assertEquals(26,all.map{it.style}.distinct().size);assertEquals(all.size,all.map{it.name}.distinct().size)
     assertTrue(all.map{it.path}.distinct().size>=14)
  }
  @Test fun shuffleDoesNotRepeatInFirstCycle(){
