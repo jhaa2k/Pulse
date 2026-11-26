@@ -28,7 +28,7 @@ import com.vexo.studio.ui.components.StudioChipSelector
 
 @UnstableApi
 @Composable
-internal fun LayerTimelinePanel(vm:StudioViewModel,ui:StudioUiState,comp:CompositionNode){
+internal fun ColumnScope.LayerTimelinePanel(vm:StudioViewModel,ui:StudioUiState,comp:CompositionNode){
     val palette=LocalVexoPalette.current
     val playback by vm.playbackState.collectAsState()
     var mode by remember{mutableStateOf(TimelineDragMode.MOVE)}
