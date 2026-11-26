@@ -378,7 +378,7 @@ class VexoGlRenderer(
 
         applyBlendMode(c.blendMode)
 
-        when (val cfg = layer.config) {
+        when (val cfg = com.vexo.studio.engine.scene.LayerPropertyAnimation.evaluate(layer,scene.project.keyframes,scene.trackMeta.positionMs)) {
             is LayerConfig.Bars -> drawBarsLayer(c.id, com.vexo.studio.engine.scene.DynamicSpectrum.evaluate(cfg,audioSnap,scene.trackMeta.positionMs), audioSnap, opacity, w, h)
             is LayerConfig.Image -> drawImageLayer(cfg, scene, audioSnap, trackNorm, opacity, w, h, compTextures)
             is LayerConfig.Text -> drawTextLayer(cfg, scene, opacity, w, h)

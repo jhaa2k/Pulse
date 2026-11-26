@@ -311,20 +311,22 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun putTransformKeyframe(layerId:String,key:String,time:Long,value:Float,mode:com.vexo.studio.model.InterpolationType){
-        if(key !in com.vexo.studio.engine.scene.TransformAnimation.keys||!value.isFinite())return
+        if(!value.isFinite())return
         val p=_uiState.value.project
-        if(p.compositions.none{c->c.layers.any{it.common.id==layerId&&!it.common.locked}})return
-        val property="transform."+key
+        val layer=p.compositions.flatMap{it.layers}.firstOrNull{it.common.id==layerId&&!it.common.locked}?:return
+        if(key !in com.vexo.studio.engine.scene.LayerPropertyAnimation.keys(layer))return
+        val property=com.vexo.studio.engine.scene.LayerPropertyAnimation.trackKey(key)
+        val safeValue=com.vexo.studio.engine.scene.LayerPropertyAnimation.clamp(key,value)
         val track=p.keyframes.firstOrNull{it.targetLayerId==layerId&&it.propertyKey==property}
         val t=time.coerceIn(0L,86400000L)
-        val frames=(track?.keyframes.orEmpty().filterNot{it.timeMs==t}+com.vexo.studio.model.Keyframe(t,value,mode)).sortedBy{it.timeMs}
+        val frames=(track?.keyframes.orEmpty().filterNot{it.timeMs==t}+com.vexo.studio.model.Keyframe(t,safeValue,mode)).sortedBy{it.timeMs}
         if(frames.size>500)return
         commitProjectChange(p.copy(keyframes=p.keyframes.filterNot{it.targetLayerId==layerId&&it.propertyKey==property}+com.vexo.studio.model.KeyframeTrack(layerId,property,frames)))
     }
     fun moveTransformKeyframe(layerId:String,key:String,oldTime:Long,newTime:Long){
         val p=_uiState.value.project
         if(p.compositions.none{c->c.layers.any{it.common.id==layerId&&!it.common.locked}})return
-        val property="transform."+key
+        val property=com.vexo.studio.engine.scene.LayerPropertyAnimation.trackKey(key)
         val track=p.keyframes.firstOrNull{it.targetLayerId==layerId&&it.propertyKey==property}?:return
         val frame=track.keyframes.firstOrNull{it.timeMs==oldTime}?:return
         val t=newTime.coerceIn(0L,86400000L)
@@ -337,7 +339,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     fun removeTransformKeyframe(layerId:String,key:String,time:Long?){
         val p=_uiState.value.project
         if(p.compositions.none{c->c.layers.any{it.common.id==layerId&&!it.common.locked}})return
-        val property="transform."+key
+        val property=com.vexo.studio.engine.scene.LayerPropertyAnimation.trackKey(key)
         val tracks=p.keyframes.mapNotNull{t->
             if(t.targetLayerId!=layerId||t.propertyKey!=property)t
             else if(time==null)null else t.copy(keyframes=t.keyframes.filterNot{it.timeMs==time}).takeIf{it.keyframes.isNotEmpty()}

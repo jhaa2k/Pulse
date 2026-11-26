@@ -17,7 +17,8 @@ object LayerPresets {
             is LayerConfig.Particles->c.copy(customImage=c.customImage.takeIf(::internal)?:"internalres:particle_circle_blur4")
             else->c
         }
-        val selected=tracks.filter{it.targetLayerId==layer.common.id&&it.propertyKey.startsWith("transform.")&&it.propertyKey.removePrefix("transform.") in TransformAnimation.keys}.take(6)
+        val supported=LayerPropertyAnimation.keys(layer).map(LayerPropertyAnimation::trackKey).toSet()
+        val selected=tracks.filter{it.targetLayerId==layer.common.id&&it.propertyKey in supported}.take(supported.size)
         if(selected.any{it.keyframes.size>500||it.keyframes.any{f->!f.value.isFinite()||f.timeMs !in 0L..86400000L}})return null
         return SavedLayerPreset(name=name.trim().take(60),layer=layer.copy(common=layer.common.copy(locked=false,aveeId=0,extraFields=emptyMap()),config=config),tracks=selected)
     }
