@@ -534,6 +534,26 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun attachFont(layerId:String,uri:Uri) {
+        runCatching { app.contentResolver.takePersistableUriPermission(uri,android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+        viewModelScope.launch {
+            val target=withContext(Dispatchers.IO) { runCatching {
+                val dir=java.io.File(app.filesDir,"fonts").apply{mkdirs()}
+                val file=java.io.File(dir,UUID.randomUUID().toString()+".ttf")
+                try {
+                    app.contentResolver.openInputStream(uri)?.use{input->file.outputStream().use{output->
+                        val buffer=ByteArray(8192);var total=0L
+                        while(true){val n=input.read(buffer);if(n<0)break;total+=n;require(total<=16L*1024*1024);output.write(buffer,0,n)}
+                    }}?:error("Cannot open font")
+                    android.graphics.Typeface.createFromFile(file)
+                    Uri.fromFile(file).toString()
+                }catch(e:Exception){file.delete();throw e}
+            }}
+            target.onSuccess{path->updateLayer(layerId){l->if(l.config is LayerConfig.Text)l.copy(config=l.config.copy(fontAssetUri=path)) else l}}
+                .onFailure{_uiState.value=_uiState.value.copy(statusBanner="Font import failed: "+it.message)}
+        }
+    }
+
     fun attachImageToSelectedLayer(uri: Uri) {
         val video = app.contentResolver.getType(uri)?.startsWith("video/") == true
         runCatching {

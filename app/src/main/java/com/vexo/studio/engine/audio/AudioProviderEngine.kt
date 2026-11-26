@@ -108,6 +108,7 @@ class AudioProviderEngine(initialConfig: AudioProviderConfig) {
             resetState()
         }
 
+        if(!config.enabled) { resetState();return snapshot() }
         if (!isPlaying && freezeOnPause) {
             return snapshot()
         }
@@ -128,7 +129,7 @@ class AudioProviderEngine(initialConfig: AudioProviderConfig) {
         val offset = validLength - copyCount
         for (i in 0 until copyCount) {
             val s = samples[offset + i]
-            rawSampleWindow[i] = if (s.isFinite()) s.coerceIn(-1f, 1f) else 0f
+            rawSampleWindow[rawSampleWindow.size-copyCount+i] = if (s.isFinite()) s.coerceIn(-1f, 1f) else 0f
         }
 
         // Compute RMS & Peak directly from time-domain window
@@ -150,12 +151,12 @@ class AudioProviderEngine(initialConfig: AudioProviderConfig) {
             outputWaveform[i] = rawSampleWindow[idx]
         }
 
+        fft.computeLinearMagnitudes(rawSampleWindow, linearSpectrum)
         if (config.sampleProvider == SampleProviderType.WAVEFORM) {
             for (i in 0 until nOut) {
-                mappedBars[i] = abs(outputWaveform[i]) * config.outputMultiplier
+                filteredBars[i] = abs(outputWaveform[i]) * config.outputMultiplier
             }
         } else {
-            fft.computeLinearMagnitudes(rawSampleWindow, linearSpectrum)
             mapFrequencyBins(sampleRate.coerceAtLeast(8000))
         }
 
@@ -268,10 +269,11 @@ class AudioProviderEngine(initialConfig: AudioProviderConfig) {
         val attackCoeff = if (config.attackMs <= 0.5f) 1f else 1f - exp(-dtMs / config.attackMs)
         val releaseCoeff = if (config.releaseMs <= 0.5f) 1f else 1f - exp(-dtMs / config.releaseMs)
         val smoothBlend = (1f - config.smooth.coerceIn(0.05f, 1f)) * 0.5f
+        val preBlend = config.preSmooth.coerceIn(0f,1f)
 
         for (i in 0 until n) {
-            val target = mappedBars[i].coerceAtLeast(0f)
             val prev = envelopeBars[i]
+            val target = mappedBars[i].coerceAtLeast(0f)*(1f-preBlend*.8f)+prev*preBlend*.8f
             val env = if (target >= prev) {
                 prev + (target - prev) * attackCoeff
             } else {
@@ -286,7 +288,7 @@ class AudioProviderEngine(initialConfig: AudioProviderConfig) {
             } else {
                 peakHoldTimersMs[i] -= dtMs
                 if (peakHoldTimersMs[i] <= 0f) {
-                    peakHoldBars[i] = (peakHoldBars[i] * config.peakDecay.coerceIn(0.5f, 0.995f))
+                    peakHoldBars[i] = (peakHoldBars[i] * config.peakDecay.coerceIn(0.5f, 0.995f).pow(dtMs/16.6667f))
                 }
             }
 

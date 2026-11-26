@@ -34,9 +34,11 @@ class GlShaderProgram(vertexSrc: String, fragmentSrc: String) {
         GLES20.glUseProgram(programId)
     }
 
-    fun attrib(name: String): Int = GLES20.glGetAttribLocation(programId, name)
+    private val attributes = HashMap<String,Int>()
+    private val uniforms = HashMap<String,Int>()
+    fun attrib(name: String): Int = attributes.getOrPut(name) { GLES20.glGetAttribLocation(programId, name) }
 
-    fun uniform(name: String): Int = GLES20.glGetUniformLocation(programId, name)
+    fun uniform(name: String): Int = uniforms.getOrPut(name) { GLES20.glGetUniformLocation(programId, name) }
 
     fun release() {
         GLES20.glDeleteProgram(programId)
@@ -74,7 +76,8 @@ object VexoShaders {
         varying vec4 vColor;
         uniform float uOpacity;
         void main() {
-            gl_FragColor = vec4(vColor.rgb, vColor.a * uOpacity);
+            float a = vColor.a * uOpacity;
+            gl_FragColor = vec4(vColor.rgb * a, a);
         }
     """
 
@@ -129,11 +132,12 @@ object VexoShaders {
                 tex += texture2D(uTex, sampleUv + vec2(uImageBlurStep.x, -uImageBlurStep.y)) * 0.0625;
                 tex += texture2D(uTex, sampleUv + vec2(-uImageBlurStep.x, uImageBlurStep.y)) * 0.0625;
             }
-            float luma = dot(tex.rgb, vec3(0.299, 0.587, 0.114));
-            vec3 satColor = mix(vec3(luma), tex.rgb, uSaturation);
+            vec3 straightColor = tex.a > 0.0001 ? tex.rgb / tex.a : vec3(0.0);
+            float luma = dot(straightColor, vec3(0.299, 0.587, 0.114));
+            vec3 satColor = mix(vec3(luma), straightColor, uSaturation);
             float alpha = tex.a * uTint.a * uOpacity;
             if (uColorKeyEnabled == 1) {
-                float dist = distance(tex.rgb, uKeyColor);
+                float dist = distance(straightColor, uKeyColor);
                 alpha *= mix(1.0, smoothstep(0.12, 0.32, dist), uImageFxEnabled == 1 ? clamp(uKeyStrength, 0.0, 1.0) : 1.0);
             }
             if (uMaskEnabled == 1) {
@@ -146,10 +150,35 @@ object VexoShaders {
                 else if (uMaskMode == 3) coverage = 1.0 - mask.a;
                 alpha *= coverage;
             }
-            gl_FragColor = vec4(satColor * uTint.rgb, alpha);
+            gl_FragColor = vec4(satColor * uTint.rgb * alpha, alpha);
         }
     """
 
+    const val PARTICLE_VERTEX = """
+        attribute vec2 aPos;
+        attribute vec4 aColor;
+        attribute vec2 aUv;
+        uniform mat4 uMvp;
+        varying vec4 vColor;
+        varying vec2 vUv;
+        void main() {
+            vColor=aColor;
+            vUv=aUv;
+            gl_Position=uMvp*vec4(aPos,0.0,1.0);
+        }
+    """
+    const val PARTICLE_FRAGMENT = """
+        precision mediump float;
+        uniform sampler2D uTex;
+        uniform float uOpacity;
+        varying vec4 vColor;
+        varying vec2 vUv;
+        void main(){
+            vec4 sprite=texture2D(uTex,vUv);
+            float a=vColor.a*uOpacity;
+            gl_FragColor=vec4(sprite.rgb*vColor.rgb*a,sprite.a*a);
+        }
+    """
     const val BLUR_FRAGMENT = """
         precision mediump float;
         varying vec2 vUv;
@@ -184,7 +213,7 @@ object VexoShaders {
             vec3 rgb = r.rgb * uColor0 * 0.5 + g.rgb * uColor1 * 0.5 + b.rgb * uColor2 * 0.5 +
                        vec3(r.r, g.g, b.b) * 0.5;
             float a = max(r.a, max(g.a, b.a)) * uOpacity;
-            gl_FragColor = vec4(rgb, a);
+            gl_FragColor = vec4(rgb * uOpacity, a);
         }
     """
 
@@ -208,7 +237,8 @@ object VexoShaders {
                 uv.y = min(y, 1.0 - y);
                 if (uFlip == 1) uv.y = 1.0 - uv.y;
             }
-            gl_FragColor = texture2D(uTex, clamp(uv, 0.0, 1.0)) * uTint;
+            vec4 src = texture2D(uTex, clamp(uv, 0.0, 1.0));
+            gl_FragColor = vec4(src.rgb * uTint.rgb * uTint.a, src.a * uTint.a);
         }
     """
 }

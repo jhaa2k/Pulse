@@ -83,6 +83,9 @@ class VexoGlRenderer(
     private var blurShader: GlShaderProgram? = null
     private var rgbSplitShader: GlShaderProgram? = null
     private var mirrorShader: GlShaderProgram? = null
+    private var particleShader: GlShaderProgram? = null
+    private var particleUv = allocFloatBuffer(12)
+    private val fonts = mutableMapOf<String,Typeface>()
 
     private var viewportW = 1280
     private var viewportH = 720
@@ -161,11 +164,14 @@ class VexoGlRenderer(
         blurShader = GlShaderProgram(VexoShaders.TEXTURE_VERTEX, VexoShaders.BLUR_FRAGMENT)
         rgbSplitShader = GlShaderProgram(VexoShaders.TEXTURE_VERTEX, VexoShaders.RGB_SPLIT_FRAGMENT)
         mirrorShader = GlShaderProgram(VexoShaders.TEXTURE_VERTEX, VexoShaders.MIRROR_FRAGMENT)
+        particleShader = GlShaderProgram(VexoShaders.PARTICLE_VERTEX,VexoShaders.PARTICLE_FRAGMENT)
         ensureInternalTextures()
     }
 
     fun releaseGlResources() {
         videoFrames.close()
+        particleShader?.release(); particleShader=null
+        fonts.clear()
         colorShader?.release(); colorShader = null
         imageShader?.release(); imageShader = null
         blurShader?.release(); blurShader = null
@@ -287,7 +293,7 @@ class VexoGlRenderer(
         )
 
         val dPos = MeasureEvaluator.evaluatePair(
-            c.measurePos, audioSnap, scene.totalTimeSec, scene.playingTimeSec, trackNorm, scene.isPlaying, keyframePos
+            c.measurePos, scene.audioSnapshots[c.measurePos.providerIndex] ?: audioSnap, scene.totalTimeSec, scene.playingTimeSec, trackNorm, scene.isPlaying, keyframePos
         )
         val dScale = MeasureEvaluator.evaluatePair(
             c.measureScale, scene.audioSnapshots[c.measureScale.providerIndex] ?: audioSnap, scene.totalTimeSec, scene.playingTimeSec, trackNorm, scene.isPlaying
@@ -351,7 +357,8 @@ class VexoGlRenderer(
         val rawBars = audioSnap?.bars ?: FloatArray(64) { i ->
             0.08f + 0.14f * kotlin.math.abs(sin(i * 0.22f))
         }
-        val delayedBars = applyReactionDelay(layerId, SpectrumGeometry.resample(rawBars, cfg.barCount), (cfg.reactionDelay + cfg.reactionAccumulatedDelay).coerceIn(0, 9))
+        val sampled = SpectrumGeometry.resample(rawBars, cfg.barCount)
+        val delayedBars = applyReactionDelay(layerId, SpectrumFilters.smooth(sampled,cfg.softness), (cfg.reactionDelay + cfg.reactionAccumulatedDelay).coerceIn(0, 9))
         val count = delayedBars.size
         if (count == 0) return
         if (cfg.segment1 == BarsSegmentType.LINE && count > 1) {
@@ -569,7 +576,7 @@ class VexoGlRenderer(
         val tint = MeasureEvaluator.blendArgb(cfg.colorArgb, cfg.colorToArgb, colorBlend)
 
         val shader = imageShader ?: return
-        shader.use()
+        resetImageState(shader)
         GLES20.glUniformMatrix4fv(shader.uniform("uMvp"), 1, false, mvpMatrix, 0)
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texId)
@@ -672,7 +679,7 @@ class VexoGlRenderer(
         if (texId == 0) return
 
         val shader = imageShader ?: return
-        shader.use()
+        resetImageState(shader)
         GLES20.glUniformMatrix4fv(shader.uniform("uMvp"), 1, false, mvpMatrix, 0)
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texId)
@@ -683,8 +690,10 @@ class VexoGlRenderer(
         GLES20.glUniform1i(shader.uniform("uColorKeyEnabled"), 0)
         GLES20.glUniform1f(shader.uniform("uOpacity"), opacity)
 
-        val boxW = w * 0.8f
-        val boxH = h * 0.24f
+        val size = bitmapSizes[texId] ?: (1024 to 256)
+        val ratio = size.first.toFloat()/size.second.coerceAtLeast(1)
+        val boxW = minOf(w*.8f,h*.24f*ratio)
+        val boxH = boxW/ratio
         drawTexturedQuad(shader, (w - boxW) * 0.5f, (h - boxH) * 0.5f, (w + boxW) * 0.5f, (h + boxH) * 0.5f, flipV = false)
     }
 
@@ -705,10 +714,10 @@ class VexoGlRenderer(
             ShapeKind.LINE -> 2
         }
 
-        val needed = (sides + 2) * 12
-        if (vertexScratch.size < needed) {
+        val needed = (sides + 2) * 18
+        if (vertexScratch.size < needed || colorScratch.size < (sides + 2)*36) {
             vertexScratch = FloatArray(needed)
-            colorScratch = FloatArray((sides + 2) * 24)
+            colorScratch = FloatArray((sides + 2) * 36)
             vertexBuf = allocFloatBuffer(vertexScratch.size)
             colorBuf = allocFloatBuffer(colorScratch.size)
         }
@@ -725,7 +734,7 @@ class VexoGlRenderer(
             colorScratch[cIdx++] = ((argb ushr 24) and 0xFF) / 255f
         }
 
-        val strokeW = cfg.strokeWidth.coerceIn(1f, 32f)
+        val strokeW = cfg.strokeWidth.coerceIn(0f, 32f)
         for (i in 0 until sides) {
             val a0 = (i.toFloat() / sides) * 2f * PI.toFloat() + (if (cfg.kind == ShapeKind.RECTANGLE) PI.toFloat() * 0.25f else 0f)
             val a1 = ((i + 1).toFloat() / sides) * 2f * PI.toFloat() + (if (cfg.kind == ShapeKind.RECTANGLE) PI.toFloat() * 0.25f else 0f)
@@ -744,6 +753,7 @@ class VexoGlRenderer(
                 pushVert(x1, y1, cfg.gradientEndArgb)
             }
             // Stroke edge quad
+            if(strokeW<=0f) continue
             val x0i = cx + cos(a0) * (r0 - strokeW)
             val y0i = cy + sin(a0) * (r0 - strokeW)
             val x1i = cx + cos(a1) * (r1 - strokeW)
@@ -779,44 +789,60 @@ class VexoGlRenderer(
         )
         val count = sim.activeCount
         if (count <= 0) return
-
-        val needed = count * 12
+        val copies=(if(cfg.mirrorX)2 else 1)*(if(cfg.mirrorY)2 else 1)
+        val needed = count * copies * 12
         if (vertexScratch.size < needed) {
             vertexScratch = FloatArray(needed)
-            colorScratch = FloatArray(count * 24)
+            colorScratch = FloatArray(count * copies * 24)
             vertexBuf = allocFloatBuffer(vertexScratch.size)
             colorBuf = allocFloatBuffer(colorScratch.size)
         }
-
+        if(particleUv.capacity()<needed)particleUv=allocFloatBuffer(needed)
+        particleUv.clear()
         val minDim = minOf(w, h).toFloat()
         var vIdx = 0
         var cIdx = 0
 
-        for (i in 0 until count) {
-            val px = sim.outX[i] * w
-            val py = sim.outY[i] * h
-            val half = sim.outSize[i] * minDim * 0.5f
-            val col = MeasureEvaluator.blendArgb(cfg.colorFromArgb, cfg.colorToArgb, sim.outProgress[i])
-            val r = ((col ushr 16) and 0xFF) / 255f
-            val g = ((col ushr 8) and 0xFF) / 255f
-            val b = (col and 0xFF) / 255f
-            val a = (((col ushr 24) and 0xFF) / 255f) * sim.outAlpha[i]
-
-            val x0 = px - half; val y0 = py - half
-            val x1 = px + half; val y1 = py + half
-            vertexScratch[vIdx++] = x0; vertexScratch[vIdx++] = y0
-            vertexScratch[vIdx++] = x1; vertexScratch[vIdx++] = y0
-            vertexScratch[vIdx++] = x0; vertexScratch[vIdx++] = y1
-            vertexScratch[vIdx++] = x0; vertexScratch[vIdx++] = y1
-            vertexScratch[vIdx++] = x1; vertexScratch[vIdx++] = y0
-            vertexScratch[vIdx++] = x1; vertexScratch[vIdx++] = y1
-
-            repeat(6) {
-                colorScratch[cIdx++] = r; colorScratch[cIdx++] = g
-                colorScratch[cIdx++] = b; colorScratch[cIdx++] = a
+        val spriteUv=floatArrayOf(0f,0f,1f,0f,0f,1f,0f,1f,1f,0f,1f,1f)
+        for(i in 0 until count){
+            val col=MeasureEvaluator.blendArgb(cfg.colorFromArgb,cfg.colorToArgb,sim.outProgress[i])
+            val r=((col ushr 16) and 255)/255f*((cfg.colorArgb ushr 16) and 255)/255f
+            val green=((col ushr 8) and 255)/255f*((cfg.colorArgb ushr 8) and 255)/255f
+            val b=(col and 255)/255f*(cfg.colorArgb and 255)/255f
+            val a=((col ushr 24) and 255)/255f*sim.outAlpha[i]*((cfg.colorArgb ushr 24) and 255)/255f
+            val half=sim.outSize[i]*minDim*.5f
+            val length=half*(1f+cfg.trailLength.coerceIn(0f,1f)*4f)
+            for(mx in 0 until if(cfg.mirrorX)2 else 1) for(my in 0 until if(cfg.mirrorY)2 else 1){
+                val px=(if(mx==1)1f-sim.outX[i] else sim.outX[i])*w
+                val py=(if(my==1)1f-sim.outY[i] else sim.outY[i])*h
+                val angle=if(cfg.velocityAngle||cfg.trailLength>0f) kotlin.math.atan2(sim.outVy[i]*(if(my==1)-1 else 1)*h,sim.outVx[i]*(if(mx==1)-1 else 1)*w) else 0f
+                val ca=cos(angle);val sa=sin(angle)
+                fun point(x:Float,y:Float){
+                    vertexScratch[vIdx++]=px+x*ca-y*sa;vertexScratch[vIdx++]=py+x*sa+y*ca
+                    colorScratch[cIdx++]=r;colorScratch[cIdx++]=green;colorScratch[cIdx++]=b;colorScratch[cIdx++]=a
+                }
+                point(-length,-half);point(half,-half);point(-length,half)
+                point(-length,half);point(half,-half);point(half,half)
+                particleUv.put(spriteUv)
             }
         }
-        drawColorVertices(vIdx / 2, opacity)
+        val tex=if(cfg.customImage.startsWith("internalres:"))ensureInternalTex(cfg.customImage) else ensureUriTex(cfg.customImage)
+        val shader=particleShader ?: return
+        shader.use()
+        GLES20.glUniformMatrix4fv(shader.uniform("uMvp"),1,false,mvpMatrix,0)
+        GLES20.glUniform1f(shader.uniform("uOpacity"),opacity)
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D,if(tex!=0)tex else ensureInternalTex("internalres:particle_circle_blur4"))
+        GLES20.glUniform1i(shader.uniform("uTex"),0)
+        vertexBuf.clear();vertexBuf.put(vertexScratch,0,vIdx);vertexBuf.position(0)
+        colorBuf.clear();colorBuf.put(colorScratch,0,cIdx);colorBuf.position(0)
+        particleUv.position(0)
+        val pos=shader.attrib("aPos");val color=shader.attrib("aColor");val uv=shader.attrib("aUv")
+        GLES20.glEnableVertexAttribArray(pos);GLES20.glVertexAttribPointer(pos,2,GLES20.GL_FLOAT,false,0,vertexBuf)
+        GLES20.glEnableVertexAttribArray(color);GLES20.glVertexAttribPointer(color,4,GLES20.GL_FLOAT,false,0,colorBuf)
+        GLES20.glEnableVertexAttribArray(uv);GLES20.glVertexAttribPointer(uv,2,GLES20.GL_FLOAT,false,0,particleUv)
+        GLES20.glDrawArrays(GLES20.GL_TRIANGLES,0,vIdx/2)
+        GLES20.glDisableVertexAttribArray(pos);GLES20.glDisableVertexAttribArray(color);GLES20.glDisableVertexAttribArray(uv)
     }
 
     private fun drawBlurEffect(
@@ -863,7 +889,7 @@ class VexoGlRenderer(
         GLES20.glViewport(0, 0, w, h)
 
         val img = imageShader ?: return
-        img.use()
+        resetImageState(img)
         GLES20.glUniformMatrix4fv(img.uniform("uMvp"), 1, false, mvpMatrix, 0)
         GLES20.glUniform1i(img.uniform("uShape"), 0)
         GLES20.glUniform1i(img.uniform("uColorKeyEnabled"), 0)
@@ -944,7 +970,7 @@ class VexoGlRenderer(
         GLES20.glGetIntegerv(GLES20.GL_FRAMEBUFFER_BINDING, savedFbo, 0)
 
         val img = imageShader ?: return
-        img.use()
+        resetImageState(img)
 
         // Accumulate into trail FBO
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, trailFbo.fboId)
@@ -1110,13 +1136,13 @@ class VexoGlRenderer(
         GLES20.glEnable(GLES20.GL_BLEND)
         when (mode) {
             BlendMode.ALPHA, BlendMode.PRE_MUL_ALPHA ->
-                GLES20.glBlendFuncSeparate(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA, GLES20.GL_ONE, GLES20.GL_ONE_MINUS_SRC_ALPHA)
+                GLES20.glBlendFuncSeparate(GLES20.GL_ONE, GLES20.GL_ONE_MINUS_SRC_ALPHA, GLES20.GL_ONE, GLES20.GL_ONE_MINUS_SRC_ALPHA)
             BlendMode.ADD, BlendMode.ADD_ALPHA ->
-                GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE)
+                GLES20.glBlendFuncSeparate(GLES20.GL_ONE, GLES20.GL_ONE, GLES20.GL_ONE, GLES20.GL_ONE_MINUS_SRC_ALPHA)
             BlendMode.SCREEN ->
-                GLES20.glBlendFunc(GLES20.GL_ONE, GLES20.GL_ONE_MINUS_SRC_COLOR)
+                GLES20.glBlendFuncSeparate(GLES20.GL_ONE, GLES20.GL_ONE_MINUS_SRC_COLOR, GLES20.GL_ONE, GLES20.GL_ONE_MINUS_SRC_ALPHA)
             BlendMode.MULTIPLY ->
-                GLES20.glBlendFunc(GLES20.GL_DST_COLOR, GLES20.GL_ONE_MINUS_SRC_ALPHA)
+                GLES20.glBlendFuncSeparate(GLES20.GL_DST_COLOR, GLES20.GL_ONE_MINUS_SRC_ALPHA, GLES20.GL_ONE, GLES20.GL_ONE_MINUS_SRC_ALPHA)
             BlendMode.OVERWRITE -> Unit
         }
     }
@@ -1135,6 +1161,7 @@ class VexoGlRenderer(
         val d = delayFrames.coerceIn(0, 9)
         if (d == 0) return current
         val q = barDelayHistory.getOrPut(layerId) { ArrayDeque() }
+        if(q.firstOrNull()?.size != current.size) q.clear()
         q.addLast(current.copyOf())
         while (q.size > d + 1) q.removeFirst()
         return q.first()
@@ -1242,6 +1269,39 @@ class VexoGlRenderer(
         }.getOrNull()
     }
 
+    private fun resolveTypeface(uri: String?): Typeface {
+        if(uri.isNullOrBlank()) return Typeface.SANS_SERIF
+        fonts[uri]?.let { return it }
+        val result=runCatching {
+            val file=java.io.File.createTempFile("vexo_font",".ttf",context.cacheDir)
+            try {
+                context.contentResolver.openInputStream(Uri.parse(uri))?.use { input ->
+                    file.outputStream().use { output ->
+                        val buffer=ByteArray(8192);var total=0L
+                        while(true){val n=input.read(buffer);if(n<0)break;total+=n;require(total<=16L*1024*1024);output.write(buffer,0,n)}
+                    }
+                } ?: error("Font unavailable")
+                Typeface.createFromFile(file)
+            } finally {file.delete()}
+        }.getOrDefault(Typeface.SANS_SERIF)
+        if(fonts.size>=16)fonts.clear()
+        fonts[uri]=result
+        return result
+    }
+
+    private fun resetImageState(shader: GlShaderProgram) {
+        shader.use()
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
+        GLES20.glUniform1i(shader.uniform("uTex"),0)
+        GLES20.glUniform1i(shader.uniform("uMaskEnabled"),0)
+        GLES20.glUniform1i(shader.uniform("uImageFxEnabled"),0)
+        GLES20.glUniform1i(shader.uniform("uShape"),0)
+        GLES20.glUniform1i(shader.uniform("uColorKeyEnabled"),0)
+        GLES20.glUniform1f(shader.uniform("uSaturation"),1f)
+        GLES20.glUniform4f(shader.uniform("uTint"),1f,1f,1f,1f)
+        GLES20.glUniform1f(shader.uniform("uOpacity"),1f)
+    }
+
     private fun renderTextBitmap(text: String, cfg: LayerConfig.Text): Bitmap {
         val w = 1024
         val h = 256
@@ -1256,7 +1316,7 @@ class VexoGlRenderer(
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = cfg.colorArgb
             textSize = cfg.fontSize.toFloat().coerceIn(14f, 120f)
-            typeface = Typeface.create(Typeface.SANS_SERIF, style)
+            typeface = Typeface.create(resolveTypeface(cfg.fontAssetUri), style)
             textAlign = when (cfg.alignment) {
                 -1 -> Paint.Align.LEFT
                 1 -> Paint.Align.RIGHT

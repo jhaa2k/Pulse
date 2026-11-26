@@ -43,6 +43,8 @@ class ParticleSimulator(maxPool: Int = 3000) {
     val outSize = FloatArray(capacity)
     val outAlpha = FloatArray(capacity)
     val outProgress = FloatArray(capacity)
+    val outVx = FloatArray(capacity)
+    val outVy = FloatArray(capacity)
 
     fun reset(seed: Int) {
         active.fill(false)
@@ -83,7 +85,7 @@ class ParticleSimulator(maxPool: Int = 3000) {
 
         val angleRad = Math.toRadians(cfg.vectorAngleDeg.toDouble()).toFloat()
         val fovScale = 1f / tan(Math.toRadians((cfg.perspectiveFov.coerceIn(20f, 150f) * 0.5).toDouble())).toFloat()
-        val depth = cfg.perspectiveDepth.coerceIn(100f, 2000f)
+        val depth = cfg.perspectiveDepth.coerceIn(0f, 2000f)
 
         var currentCount = 0
         for (i in 0 until limit) {
@@ -123,11 +125,11 @@ class ParticleSimulator(maxPool: Int = 3000) {
 
             val p = (age[i] / life[i]).coerceIn(0f, 1f)
             val zCoord = (depth + z[i]).coerceAtLeast(10f)
-            if (zCoord < cfg.nearCameraFadeOutDistance) {
+            if (depth>0f && zCoord < cfg.nearCameraFadeOutDistance) {
                 continue
             }
 
-            val persp = (depth / zCoord) * fovScale * 0.55f
+            val persp = if(depth<=0f)1f else (depth / zCoord) * fovScale * 0.55f
             val sx = 0.5f + (x[i] - 0.5f) * persp
             val sy = 0.5f + (y[i] - 0.5f) * persp
 
@@ -138,14 +140,15 @@ class ParticleSimulator(maxPool: Int = 3000) {
                 else -> 1f
             }.coerceIn(0f, 1f)
 
-            val sz = (cfg.startSize + (cfg.endSize + sizeRand[i] - cfg.startSize) * p) *
-                cfg.particleScale * persp * 0.012f
+            val size = if(p<fadeTime) cfg.startSize+(cfg.fadeInSize-cfg.startSize)*(p/fadeTime) else cfg.fadeInSize+(cfg.endSize+sizeRand[i]-cfg.fadeInSize)*((p-fadeTime)/(1f-fadeTime))
+            val sz = size * cfg.particleScale * persp * 0.012f
 
             outX[currentCount] = sx
             outY[currentCount] = sy
             outSize[currentCount] = sz.coerceIn(0.002f, 0.25f)
             outAlpha[currentCount] = alphaEnv
             outProgress[currentCount] = p
+            outVx[currentCount]=vx[i];outVy[currentCount]=vy[i]
             currentCount++
         }
         activeCount = currentCount

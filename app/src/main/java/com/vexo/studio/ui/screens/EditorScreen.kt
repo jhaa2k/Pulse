@@ -935,6 +935,7 @@ private fun PropertiesTab(
                     StudioSlider("Bar Count (0 = Provider)", cfg.barCount.toFloat(), 0f, 512f, 0f, "", 1f, onValueChange={v -> beginDrag(); vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.Bars).copy(barCount=v.toInt()))}}, onCommit=::endDrag)
                     StudioSlider("Bar Spacing", cfg.barSpacing, 0f, .95f, 0f, "", .01f, onValueChange={v -> beginDrag(); vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.Bars).copy(barSpacing=v))}}, onCommit=::endDrag)
                     if (cfg.segment1 == BarsSegmentType.ROUND_BARS) StudioSlider("Roundness", cfg.roundness, 0f, 1f, 1f, "", .01f, onValueChange={v -> beginDrag(); vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.Bars).copy(roundness=v))}}, onCommit=::endDrag)
+                    StudioSlider("Spectrum Softness",cfg.softness.toFloat(),0f,20f,2f,"",1f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.Bars).copy(softness=v.toInt()))}},onCommit=::endDrag)
                     RegisteredSlider("barWidth", cfg.barWidth, settings.showPropertyHelpHints, { v ->
                         beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(barWidth = v)) }
                     }, ::endDrag)
@@ -1054,6 +1055,13 @@ private fun PropertiesTab(
                     }
                     StudioToggleRow("Italic", cfg.italic) { i ->
                         vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(italic = i)) }
+                    }
+                    val fontPicker = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
+                        if(uri!=null) vm.attachFont(layer.common.id,uri)
+                    }
+                    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){
+                        TextButton(onClick={fontPicker.launch(arrayOf("font/*","application/octet-stream","application/x-font-ttf","application/x-font-opentype"))}){Text("IMPORT FONT")}
+                        if(cfg.fontAssetUri!=null) TextButton(onClick={vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.Text).copy(fontAssetUri=null))}}){Text("RESET FONT")}
                     }
                     StudioChipSelector("Text Alignment", listOf(-1, 0, 1), cfg.alignment, { when(it) { -1 -> "Left"; 1 -> "Right"; else -> "Center" } }) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(alignment = v)) } }
                     StudioSlider("Letter Spacing", cfg.letterSpacing, 0f, 0.5f, 0.04f, "", 0.01f, onValueChange = { v ->
