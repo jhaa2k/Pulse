@@ -40,7 +40,9 @@
                 "amountA": 0.8,
                 "amountB": 0.3,
                 "triggerThreshold": 0.4
-              }
+              },
+              "splitAmountX": 0,
+              "splitAmountY": 0
             }
           }
         ]

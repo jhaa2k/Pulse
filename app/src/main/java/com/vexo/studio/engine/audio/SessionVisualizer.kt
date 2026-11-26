@@ -53,7 +53,7 @@ class SessionVisualizer(private val context: Context) : Closeable {
             val v = Visualizer(sessionId)
             visualizer = v
             val range = Visualizer.getCaptureSizeRange()
-            v.captureSize = 1024.coerceIn(range[0], range[1])
+            check(v.setCaptureSize(1024.coerceIn(range[0], range[1])) == Visualizer.SUCCESS)
             val status = v.setDataCaptureListener(object : Visualizer.OnDataCaptureListener {
                 override fun onWaveFormDataCapture(effect: Visualizer, waveform: ByteArray, samplingRate: Int) {
                     synchronized(lock) {
@@ -79,7 +79,7 @@ class SessionVisualizer(private val context: Context) : Closeable {
         generation++
         val old = visualizer
         visualizer = null
-        runCatching { old?.enabled = false }
+        runCatching { old?.setEnabled(false) }
         runCatching { old?.release() }
         wave = FloatArray(0); bins = FloatArray(0); _frames.value = null
     }

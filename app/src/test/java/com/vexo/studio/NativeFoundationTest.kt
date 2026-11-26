@@ -26,6 +26,17 @@ class NativeFoundationTest {
         assertTrue(mesh.all { it.isFinite() })
         assertTrue(mesh.indices.filter{it%2==0}.all{mesh[it] in -.001f..10.001f})
     }
+    @Test fun bundledTemplatesDecode() {
+        val dir = java.io.File("src/main/assets/templates").takeIf { it.isDirectory }
+            ?: java.io.File("app/src/main/assets/templates")
+        val files = dir.listFiles { f -> f.extension == "json" }.orEmpty()
+        assertEquals(5, files.size)
+        files.forEach { f ->
+            val p = com.vexo.studio.data.NativeVexCodec.decode(f.readText())
+            assertTrue(p.compositions.any { it.index == 0 })
+            assertTrue(p.compositions.flatMap { it.layers }.any { it.type == com.vexo.studio.model.LayerType.BARS })
+        }
+    }
     @Test fun beatGateRejectsQuietAudio() {
         val snap=AudioProviderSnapshot(floatArrayOf(),floatArrayOf(),.2f,0f,.2f,0f,0f,0f,0f)
         val result=MeasureEvaluator.evaluatePair(MeasureConfig(MeasureWhat.BASS,1f,1f,triggerThreshold=.5f),snap,0f,0f,0f,true)
