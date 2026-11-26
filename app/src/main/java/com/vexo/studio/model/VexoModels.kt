@@ -424,7 +424,18 @@ sealed interface LayerConfig {
         val waveLineGap: Float = 2.5f,
         val waveCurveTension: Float = .5f,
         val waveDashRatio: Float = 1f,
-        val waveDashCount: Int = 12
+        val waveDashCount: Int = 12,
+        val gradientSpeed: Float = 0f,
+        val reactiveSource: SpectrumReactiveSource = SpectrumReactiveSource.BEAT,
+        val reactiveStroke: Float = 0f,
+        val reactiveColorMix: Float = 0f,
+        val reactiveColorArgb: Int = 0xFFFFFFFF.toInt(),
+        val peakMarkerStyle: SpectrumPeakStyle = SpectrumPeakStyle.LINE,
+        val peakMarkerWidth: Float = 1f,
+        val peakMarkerThickness: Float = 1f,
+        val peakMarkerOffset: Float = 0f,
+        val peakMarkerColorArgb: Int? = null,
+        val gradientCycle: Boolean = false
     ) : LayerConfig
 
     @Serializable
@@ -1064,6 +1075,8 @@ data class CreativeImageConfig(
 
 @Serializable data class SpectrumPathPoint(val x: Float, val y: Float)
 @Serializable enum class CreativeSpectrumPath { LEGACY, ARC, SPIRAL, HEART, SINE, CIRCLE, OVAL, TRIANGLE, SQUARE, HEXAGON, STAR, FLOWER, FIGURE_EIGHT, BUTTERFLY, LISSAJOUS, DIAGONAL, ZIGZAG }
+@Serializable enum class SpectrumReactiveSource { BEAT, BASS, MID, TREBLE, RMS, PEAK }
+@Serializable enum class SpectrumPeakStyle { LINE, DOT, DIAMOND }
 @Serializable enum class SpectrumGradientMode { PATH, HEIGHT, AMPLITUDE, ALTERNATING }
 @Serializable enum class CreativeSpectrumStyle { BARS, DOTS, STEPS, LINE, FILL, OUTLINE, TRIANGLE, DIAMOND, CAPSULE, DASH, DOUBLE_LINE, RIBBON, ZIGZAG, LOLLIPOP, CROSS, CHEVRON, TAPERED, CAPPED, STACK_DOTS, HOLLOW_DOTS, WAVE_POINTS, SAWTOOTH, STRIPES, FAN, TICKS, PEAKS }
 @Serializable enum class ParticleEmitter { LEGACY, POINT, LINE, BOX, RING, DISC }

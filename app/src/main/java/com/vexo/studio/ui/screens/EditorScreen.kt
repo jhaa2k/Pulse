@@ -936,6 +936,24 @@ private fun PropertiesTab(
                     StudioSlider("Bar Tip Width",cfg.barTipWidth,.05f,2f,1f,"x",.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.Bars).copy(barTipWidth=v))}},onCommit=::endDrag)
                     StudioChipSelector("Gradient Mode",com.vexo.studio.model.SpectrumGradientMode.entries,cfg.barGradientMode,{it.name.replace('_',' ')}){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.Bars).copy(barGradientMode=v))}}
                 }
+                ExpandableSectionHeader("Dynamic spectrum",expandedSections["dynamic_spectrum"]==true,{toggleAccordion(expandedSections,"dynamic_spectrum")}){
+                    Text("Gradient animation follows the audio playhead. Reactive controls use the selected spectrum provider.",style=MaterialTheme.typography.labelSmall,color=palette.textSecondary)
+                    StudioSlider("Gradient Speed",cfg.gradientSpeed,-2f,2f,0f,"/s",.05f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.Bars).copy(gradientSpeed=v))}},onCommit=::endDrag)
+                    StudioToggleRow("Cycle Gradient",cfg.gradientCycle){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.Bars).copy(gradientCycle=v))}}
+                    StudioChipSelector("Reactive Source",com.vexo.studio.model.SpectrumReactiveSource.entries,cfg.reactiveSource,{it.name}){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.Bars).copy(reactiveSource=v))}}
+                    StudioSlider("Reactive Stroke",cfg.reactiveStroke,0f,16f,0f,"px",.25f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.Bars).copy(reactiveStroke=v))}},onCommit=::endDrag)
+                    StudioSlider("Reactive Color Mix",cfg.reactiveColorMix,0f,1f,0f,"",.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.Bars).copy(reactiveColorMix=v))}},onCommit=::endDrag)
+                    StudioColorPickerRow("Reactive Color",cfg.reactiveColorArgb){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.Bars).copy(reactiveColorArgb=v))}}
+                }
+                ExpandableSectionHeader("Peak marker detail",expandedSections["peak_detail"]==true,{toggleAccordion(expandedSections,"peak_detail")}){
+                    StudioToggleRow("Peak Hold Markers",cfg.showPeaks){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.Bars).copy(showPeaks=v))}}
+                    StudioChipSelector("Peak Shape",com.vexo.studio.model.SpectrumPeakStyle.entries,cfg.peakMarkerStyle,{it.name}){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.Bars).copy(peakMarkerStyle=v))}}
+                    StudioSlider("Peak Width",cfg.peakMarkerWidth,.2f,3f,1f,"x",.05f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.Bars).copy(peakMarkerWidth=v))}},onCommit=::endDrag)
+                    StudioSlider("Peak Thickness",cfg.peakMarkerThickness,.25f,5f,1f,"x",.05f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.Bars).copy(peakMarkerThickness=v))}},onCommit=::endDrag)
+                    StudioSlider("Peak Offset",cfg.peakMarkerOffset,-32f,32f,0f,"px",.5f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.Bars).copy(peakMarkerOffset=v))}},onCommit=::endDrag)
+                    StudioColorPickerRow("Peak Color",cfg.peakMarkerColorArgb?:cfg.colorToArgb){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.Bars).copy(peakMarkerColorArgb=v))}}
+                    TextButton(onClick={vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.Bars).copy(peakMarkerColorArgb=null))}}){Text("USE GRADIENT COLOR")}
+                }
                 ExpandableSectionHeader("Wave detail",expandedSections["wave_detail"]==true,{toggleAccordion(expandedSections,"wave_detail")}){
                     Text("Use line, double line, ribbon or fill to customize connected waves.",style=MaterialTheme.typography.labelSmall,color=palette.textSecondary)
                     StudioSlider("Curve Tension",cfg.waveCurveTension,0f,1f,.5f,"",.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.Bars).copy(waveCurveTension=v,curveSubdivisions=maxOf(2,(it.config as LayerConfig.Bars).curveSubdivisions)))}},onCommit=::endDrag)

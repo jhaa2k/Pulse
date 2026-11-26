@@ -379,7 +379,7 @@ class VexoGlRenderer(
         applyBlendMode(c.blendMode)
 
         when (val cfg = layer.config) {
-            is LayerConfig.Bars -> drawBarsLayer(c.id, cfg, audioSnap, opacity, w, h)
+            is LayerConfig.Bars -> drawBarsLayer(c.id, com.vexo.studio.engine.scene.DynamicSpectrum.evaluate(cfg,audioSnap,scene.trackMeta.positionMs), audioSnap, opacity, w, h)
             is LayerConfig.Image -> drawImageLayer(cfg, scene, audioSnap, trackNorm, opacity, w, h, compTextures)
             is LayerConfig.Text -> drawTextLayer(cfg, scene, opacity, w, h)
             is LayerConfig.Shape -> {
@@ -414,7 +414,7 @@ class VexoGlRenderer(
         val count = delayedBars.size
         if (count == 0) return
         val peaks=if(!cfg.signedWaveform && cfg.showPeaks && audioSnap!=null && audioSnap.peakBars.isNotEmpty()) SpectrumGeometry.resample(audioSnap.peakBars,count) else null
-        if(cfg.creativePath!=com.vexo.studio.model.CreativeSpectrumPath.LEGACY || cfg.creativeStyle!=com.vexo.studio.model.CreativeSpectrumStyle.BARS || cfg.sampleOffset!=0f || cfg.sampleRepeats!=1 || cfg.amplitudeCurve!=1f || cfg.baselineOffset!=0f || cfg.signedWaveform || cfg.curveSubdivisions!=1 || cfg.gradientRepeats!=1 || cfg.customPathEnabled || cfg.pathStretchX!=1f || cfg.pathStretchY!=1f || cfg.barStrokeWidth!=0f || cfg.barFillOpacity!=1f || cfg.barTipWidth!=1f || cfg.barGradientMode!=com.vexo.studio.model.SpectrumGradientMode.PATH || cfg.waveDashRatio!=1f || cfg.waveLineGap!=2.5f || cfg.waveRibbonWidth!=1f || cfg.waveCurveTension!=.5f){
+        if(cfg.creativePath!=com.vexo.studio.model.CreativeSpectrumPath.LEGACY || cfg.creativeStyle!=com.vexo.studio.model.CreativeSpectrumStyle.BARS || cfg.sampleOffset!=0f || cfg.sampleRepeats!=1 || cfg.amplitudeCurve!=1f || cfg.baselineOffset!=0f || cfg.signedWaveform || cfg.curveSubdivisions!=1 || cfg.gradientRepeats!=1 || cfg.customPathEnabled || cfg.pathStretchX!=1f || cfg.pathStretchY!=1f || cfg.barStrokeWidth!=0f || cfg.barFillOpacity!=1f || cfg.barTipWidth!=1f || cfg.barGradientMode!=com.vexo.studio.model.SpectrumGradientMode.PATH || cfg.waveDashRatio!=1f || cfg.waveLineGap!=2.5f || cfg.waveRibbonWidth!=1f || cfg.waveCurveTension!=.5f || cfg.gradientCycle || cfg.peakMarkerStyle!=com.vexo.studio.model.SpectrumPeakStyle.LINE || cfg.peakMarkerWidth!=1f || cfg.peakMarkerThickness!=1f || cfg.peakMarkerOffset!=0f || cfg.peakMarkerColorArgb!=null || cfg.reactiveStroke!=0f){
             drawCreativeSpectrum(cfg,delayedBars,peaks,opacity,w,h)
             return
         }
@@ -424,16 +424,8 @@ class VexoGlRenderer(
         }
         val minDim = minOf(w, h).toFloat()
 
-        // Ensure vertex scratch capacity (each bar = 6 vertices = 12 floats pos + 24 floats color)
-        val vertsPerBar = (if (cfg.segment1 == BarsSegmentType.ROUND_BARS) SpectrumGeometry.MAX_ROUNDED_VERTICES else 6)*(if(peaks!=null)2 else 1)
-        val neededVerts = count * vertsPerBar * 2
-        if (vertexScratch.size < neededVerts || colorScratch.size < count * vertsPerBar * 4) {
-            vertexScratch = FloatArray(neededVerts)
-            colorScratch = FloatArray(count * vertsPerBar * 4)
-            vertexBuf = allocFloatBuffer(vertexScratch.size)
-            colorBuf = allocFloatBuffer(colorScratch.size)
-        }
-
+        // Grow according to actual rounded contour complexity, not worst-case per-bar capacity.
+        ensureColorCapacity(count*6)
         var vIdx = 0
         var cIdx = 0
 
@@ -454,6 +446,7 @@ class VexoGlRenderer(
 
             if (cfg.segment1 == BarsSegmentType.ROUND_BARS && cfg.roundness > 0f) {
                 val mesh = SpectrumGeometry.roundedQuad(x0,y0,x1,y1,x2,y2,x3,y3,cfg.roundness)
+                ensureColorCapacity(vIdx/2+mesh.size/2)
                 for (i in mesh.indices step 2) {
                     vertexScratch[vIdx++] = mesh[i]
                     vertexScratch[vIdx++] = mesh[i+1]
@@ -464,6 +457,7 @@ class VexoGlRenderer(
                 }
                 return
             }
+            ensureColorCapacity(vIdx/2+6)
             // Tri 1: 0, 1, 2
             vertexScratch[vIdx++] = x0; vertexScratch[vIdx++] = y0
             vertexScratch[vIdx++] = x1; vertexScratch[vIdx++] = y1
@@ -568,14 +562,18 @@ class VexoGlRenderer(
         drawColorVertices(vIdx / 2, opacity)
     }
 
+    private fun ensureColorCapacity(vertices:Int){
+        if(vertices*2<=vertexScratch.size && vertices*4<=colorScratch.size)return
+        val capacity=maxOf(vertices,vertexScratch.size/2*2,colorScratch.size/4*2,256)
+        vertexScratch=vertexScratch.copyOf(capacity*2)
+        colorScratch=colorScratch.copyOf(capacity*4)
+        vertexBuf=allocFloatBuffer(capacity*2);colorBuf=allocFloatBuffer(capacity*4)
+    }
+
     private fun drawCreativeSpectrum(cfg:LayerConfig.Bars,bars:FloatArray,peaks:FloatArray?,opacity:Float,w:Int,h:Int){
         var vi=0;var ci=0
         com.vexo.studio.engine.scene.SpectrumStudioMesh.emit(cfg,bars,peaks,w,h){x,y,color->
-            if(vi+2>vertexScratch.size||ci+4>colorScratch.size){
-                val cap=maxOf(vi+2,vertexScratch.size*2,1024)
-                vertexScratch=vertexScratch.copyOf(cap);colorScratch=colorScratch.copyOf(cap*2)
-                vertexBuf=allocFloatBuffer(cap);colorBuf=allocFloatBuffer(cap*2)
-            }
+            ensureColorCapacity(vi/2+1)
             vertexScratch[vi++]=x;vertexScratch[vi++]=y
             colorScratch[ci++]=((color ushr 16)and 255)/255f;colorScratch[ci++]=((color ushr 8)and 255)/255f;colorScratch[ci++]=(color and 255)/255f;colorScratch[ci++]=((color ushr 24)and 255)/255f
         }
@@ -763,14 +761,6 @@ class VexoGlRenderer(
             val bmp = renderTextBitmap(resolved, cfg)
             val id = uploadBitmapToGl(bmp)
             bmp.recycle()
-            if (textureCache.size > 48) {
-                val oldestKey = textureCache.keys.firstOrNull { it.startsWith("txt_") }
-                if (oldestKey != null) {
-                    val oldId = textureCache.remove(oldestKey) ?: 0
-                    bitmapSizes.remove(oldId);bitmapKeyColors.remove(oldId)
-                    if (oldId != 0) GLES20.glDeleteTextures(1, intArrayOf(oldId), 0)
-                }
-            }
             textureCache[key] = id
             id
         }
@@ -1413,7 +1403,7 @@ class VexoGlRenderer(
         val iterator=textureCache.entries.iterator()
         while(iterator.hasNext() && (bytes>48L*1024*1024 || textureCache.size>48)){
             val entry=iterator.next()
-            if(entry.key.startsWith("internalres:"))continue
+            if(entry.key in setOf("internalres:white","internalres:vignette80","internalres:particle_circle_blur4"))continue
             val id=entry.value;val size=bitmapSizes.remove(id);bitmapKeyColors.remove(id)
             if(size!=null)bytes-=size.first.toLong()*size.second*4L
             GLES20.glDeleteTextures(1,intArrayOf(id),0);iterator.remove()

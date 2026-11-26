@@ -75,7 +75,7 @@ object SpectrumStudioMesh {
             val base=c.baselineOffset.coerceIn(-1f,1f)*dim*.3f + if(c.mirror)-length*.5f else 0f
             val peak=c.baselineOffset.coerceIn(-1f,1f)*dim*.3f+((peaks?.getOrNull(idx)?:raw).coerceAtLeast(0f).pow(c.amplitudeCurve.coerceIn(.25f,3f))*abs(gain)).coerceIn(0f,hi)*dim*.42f*direction*(if(c.mirror).5f else 1f)
             val phaseColor=t*c.gradientRepeats.coerceIn(1,8)+c.colorBlendOffset
-            val blend=if(c.gradientRepeats<=1)phaseColor.coerceIn(0f,1f) else 1f-abs(2f*(phaseColor-floor(phaseColor))-1f)
+            val blend=if(c.gradientRepeats<=1 && !c.gradientCycle)phaseColor.coerceIn(0f,1f) else 1f-abs(2f*(phaseColor-floor(phaseColor))-1f)
             val color=MeasureEvaluator.blendArgb(c.colorFromArgb,c.colorToArgb,when(c.barGradientMode){
                 SpectrumGradientMode.PATH->blend
                 SpectrumGradientMode.HEIGHT->0f
@@ -221,6 +221,21 @@ object SpectrumStudioMesh {
                 polygon(s,contour)
             }
             fun localLine(x:Float,y:Float,xx:Float,yy:Float){line(s.p(x,y),s.p(xx,yy),stroke,c0)}
+            fun peakMarker(){
+                val center=s.p(0f,s.peak+c.peakMarkerOffset.coerceIn(-32f,32f)*dim/720f)
+                val half=q*c.peakMarkerWidth.coerceIn(.2f,3f)
+                val thick=stroke*c.peakMarkerThickness.coerceIn(.25f,5f)
+                val col=c.peakMarkerColorArgb?:c0
+                when(c.peakMarkerStyle){
+                    SpectrumPeakStyle.LINE->line(center-s.tangent*half,center+s.tangent*half,thick,col)
+                    SpectrumPeakStyle.DOT->disk(center,maxOf(.35f,half*.5f)*c.peakMarkerThickness.coerceIn(.25f,5f),col)
+                    SpectrumPeakStyle.DIAMOND->{
+                        val a=center-s.tangent*half;val b=center+s.normal*thick
+                        val d=center+s.tangent*half;val e=center-s.normal*thick
+                        tri(a,b,d,col);tri(a,d,e,col)
+                    }
+                }
+            }
             when(style){
                 CreativeSpectrumStyle.BARS->rect(base,tip)
                 CreativeSpectrumStyle.DOTS->dot(s.p(0f,tip),radius)
@@ -250,10 +265,10 @@ object SpectrumStudioMesh {
                 CreativeSpectrumStyle.SAWTOOTH->if(styled)shape(s.p(-q,base),s.p(q,base),s.p(q,tip))else tri(s.p(-q,base),s.p(q,base),s.p(q,tip),c0)
                 CreativeSpectrumStyle.FAN->if(styled)shape(s.p(0f,base),s.p(-q*1.5f,tip),s.p(q*1.5f,tip))else tri(s.p(0f,base),s.p(-q*1.5f,tip),s.p(q*1.5f,tip),c0)
                 CreativeSpectrumStyle.TICKS->localLine(-q,tip,q,tip)
-                CreativeSpectrumStyle.PEAKS->{localLine(-q,s.peak,q,s.peak);rect(base,s.mix(.2f),q*.4f)}
+                CreativeSpectrumStyle.PEAKS->{peakMarker();rect(base,s.mix(.2f),q*.4f)}
                 else->if(n==1)rect(base,tip)
             }
-            if(c.showPeaks&&peaks!=null&&style!=CreativeSpectrumStyle.PEAKS)localLine(-q,s.peak,q,s.peak)
+            if(c.showPeaks&&peaks!=null&&style!=CreativeSpectrumStyle.PEAKS)peakMarker()
         }
     }
 }
