@@ -90,6 +90,8 @@ class VexoPlaybackController(
     private var queueProjectId:String?=null
     private var lastSavedQueue:List<AudioTrackItem>?=null
     private var lastQueueSave=0L
+    private var lastSavedPosition=-1L
+    private var lastSavedId:String?=null
     private var restoringQueue=false
     private val _sleepRemaining=MutableStateFlow(0L)
     val sleepRemaining=_sleepRemaining.asStateFlow()
@@ -225,7 +227,10 @@ class VexoPlaybackController(
         if(restoringQueue||_state.value.importTotal>0)return
         val q=_state.value.queue
         val index=player.currentMediaItemIndex
-        runCatching{queueStore.save(id,q,q.getOrNull(index)?.id,player.currentPosition,q!==lastSavedQueue)}.onSuccess{lastSavedQueue=q}
+        val selected=q.getOrNull(index)?.id
+        val pos=player.currentPosition.coerceAtLeast(0L)
+        if(q===lastSavedQueue&&selected==lastSavedId&&pos==lastSavedPosition)return
+        runCatching{queueStore.save(id,q,selected,pos,q!==lastSavedQueue)}.onSuccess{lastSavedQueue=q;lastSavedId=selected;lastSavedPosition=pos}
     }
     fun forgetProjectQueue(id:String){
         if(queueProjectId==id){queueProjectId=null;lastSavedQueue=null;cancelAudioImport()}
@@ -236,7 +241,7 @@ class VexoPlaybackController(
         saveQueue()
         cancelAudioImport()
         restoringQueue=true
-        queueProjectId=projectId;lastSavedQueue=null
+        queueProjectId=projectId;lastSavedQueue=null;lastSavedPosition=-1L;lastSavedId=null
         artworkJob?.cancel();artworkJob=null
         player.pause()
         player.clearMediaItems()

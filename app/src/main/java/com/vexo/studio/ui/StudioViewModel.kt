@@ -776,7 +776,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun exportPresetToUri(uri: Uri) {
-        val project = _uiState.value.project.copy(audioUri = playbackController.currentAudioUri() ?: _uiState.value.project.audioUri)
+        val project = _uiState.value.project.copy(audioUri = playbackController.currentAudioUri())
         viewModelScope.launch(Dispatchers.IO) {
             runCatching {
                 app.contentResolver.openOutputStream(uri, "wt")?.use { out ->
@@ -887,7 +887,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
 
     fun startVideoExport() {
         if(playbackState.value.importTotal>0){_uiState.value=_uiState.value.copy(statusBanner="Finish audio import before exporting");return}
-        val audioUri = playbackController.currentAudioUri() ?: _uiState.value.project.audioUri
+        val audioUri = playbackController.currentAudioUri()
         if (exportState.value.isRunning) return
         if (audioUri.isNullOrBlank()) {
             _uiState.value = _uiState.value.copy(statusBanner = "Import an audio track before exporting video")

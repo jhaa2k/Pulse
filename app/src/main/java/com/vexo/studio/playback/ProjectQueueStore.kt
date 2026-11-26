@@ -33,7 +33,7 @@ internal class ProjectQueueStore(private val context:Context){
         val editor=prefs(id).edit()
         if(includeTracks){
             val encoded=Json.encodeToString(serializer,tracks.take(5000))
-            if(encoded.length>4_000_000)return
+            require(encoded.length<=4_000_000){"Queue exceeds save limit"}
             editor.putString("tracks",encoded)
         }
         editor.putString("selected",currentId).putLong("position",position.coerceAtLeast(0)).apply()

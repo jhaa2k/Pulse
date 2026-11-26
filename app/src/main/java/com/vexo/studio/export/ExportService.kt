@@ -33,30 +33,32 @@ class ExportService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_CANCEL) {
-            activeJob?.cancel()
-            _exportState.value=ExportProgress(statusText="Cancelled")
-            if(activeJob==null){stopForeground(STOP_FOREGROUND_REMOVE);stopSelf()}
+            if(activeJob!=null){_exportState.value=_exportState.value.copy(isRunning=true,statusText="Cancelling export…");activeJob?.cancel()}
+            else {pendingRequest=null;_exportState.value=ExportProgress(statusText="Cancelled");busy.set(false);stopForeground(STOP_FOREGROUND_REMOVE);stopSelf()}
             return START_NOT_STICKY
         }
 
-        if (activeJob?.isActive == true) return START_NOT_STICKY
+        if (activeJob?.isCompleted == false) return START_NOT_STICKY
         ensureChannel()
         val req = pendingRequest ?: run {
+            busy.set(false)
             stopSelf()
             return START_NOT_STICKY
         }
         pendingRequest = null
 
-        startForeground(NOTIF_ID, buildNotification(0, "Starting export...", 0L))
+        try{startForeground(NOTIF_ID, buildNotification(0, "Starting export...", 0L))}catch(e:Exception){_exportState.value=ExportProgress(statusText="Cannot start foreground export",errorMessage=e.message);busy.set(false);stopSelf();return START_NOT_STICKY}
         if (activeJob?.isActive == true) return START_NOT_STICKY
         activeJob = scope.launch {
+            var terminal:ExportProgress?=null
             val exporter = VexoVideoExporter(applicationContext)
             try {
                 exporter.export(
                     project = req.project,
                     audioUriStr = req.audioUri,
                     trackMeta = req.trackMeta,
-                    onProgress = { prog ->
+                    onProgress = progress@{ prog ->
+                        if(!prog.isRunning){terminal=prog;return@progress}
                         _exportState.value = prog
                         val pct = (prog.progress * 100).toInt().coerceIn(0, 100)
                         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -64,12 +66,13 @@ class ExportService : Service() {
                     }
                 )
             } catch(e:kotlinx.coroutines.CancellationException){
-                _exportState.value=ExportProgress(statusText="Cancelled")
+                terminal=terminal?.takeIf{it.publishedUri!=null}?:ExportProgress(statusText="Cancelled")
             } catch(e:Exception){
-                _exportState.value=ExportProgress(statusText="Export failed",errorMessage=e.message)
+                terminal=ExportProgress(statusText="Export failed",errorMessage=e.message)
             } finally {
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
+                _exportState.value=terminal?:ExportProgress(statusText="Export finished")
             }
         }
         return START_NOT_STICKY
@@ -77,6 +80,8 @@ class ExportService : Service() {
 
     override fun onDestroy() {
         scope.cancel()
+        val job=activeJob
+        if(job==null||job.isCompleted)busy.set(false)else job.invokeOnCompletion{busy.set(false)}
         renderDispatcher.close()
         super.onDestroy()
     }
@@ -122,26 +127,27 @@ class ExportService : Service() {
         @Volatile
         var pendingRequest: ExportRequest? = null
 
+        private val busy=java.util.concurrent.atomic.AtomicBoolean(false)
         private val _exportState = MutableStateFlow(ExportProgress())
         val exportState: StateFlow<ExportProgress> = _exportState.asStateFlow()
 
         fun startExport(context: Context, request: ExportRequest) {
-            if(_exportState.value.isRunning)return
+            if(!busy.compareAndSet(false,true))return
             pendingRequest = request
             _exportState.value=ExportProgress(isRunning=true,statusText="Preparing export")
             val intent = Intent(context, ExportService::class.java)
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(intent) else context.startService(intent)
-            }catch(e:Exception){pendingRequest=null;_exportState.value=ExportProgress(statusText="Cannot start export",errorMessage=e.message)}
+            }catch(e:Exception){pendingRequest=null;busy.set(false);_exportState.value=ExportProgress(statusText="Cannot start export",errorMessage=e.message)}
         }
 
         fun cancelExport(context: Context) {
             val intent = Intent(context, ExportService::class.java).apply { action = ACTION_CANCEL }
-            context.startService(intent)
+            runCatching{context.startService(intent)}
         }
 
         fun resetStatus() {
-            _exportState.value = ExportProgress()
+            if(!busy.get())_exportState.value = ExportProgress()
         }
     }
 }

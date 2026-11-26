@@ -429,6 +429,7 @@ class VexoVideoExporter(private val context: Context) {
             onProgress(ExportProgress(isRunning = true, progress = 0.98f, statusText = "Verifying & publishing MP4"))
 
             verifyMp4File(tempFile,width,height,totalDurationUs,videoMime)
+            currentCoroutineContext().ensureActive()
             val publishedUri = publishVideo(tempFile, project.name, settings.customOutputUri)
             tempFile.delete()
 
@@ -556,13 +557,15 @@ class VexoVideoExporter(private val context: Context) {
         }
     }
 
-    private fun publishVideo(tempFile: File, projectName: String, customSafUri: String?): String {
+    private suspend fun publishVideo(tempFile: File, projectName: String, customSafUri: String?): String {
         val safeName = projectName.replace(Regex("[^A-Za-z0-9_-]"), "_").ifBlank { "Vexo_Export" }
         val fileName = "${safeName}_${System.currentTimeMillis()}.mp4"
 
         if (!customSafUri.isNullOrBlank()) {
             val uri = Uri.parse(customSafUri)
-            context.contentResolver.openOutputStream(uri)?.use { out ->
+            // A user-selected document may already exist. Do not delete it on failure or interrupt its final copy.
+            currentCoroutineContext().ensureActive()
+            context.contentResolver.openOutputStream(uri,"wt")?.use { out ->
                 tempFile.inputStream().use { it.copyTo(out) }
             } ?: error("Cannot write to selected SAF destination")
             return uri.toString()
@@ -581,11 +584,15 @@ class VexoVideoExporter(private val context: Context) {
 
         try {
             context.contentResolver.openOutputStream(uri)?.use { out ->
-                tempFile.inputStream().use { it.copyTo(out) }
+                tempFile.inputStream().use { input ->
+                    val buffer=ByteArray(256*1024)
+                    while(true){currentCoroutineContext().ensureActive();val n=input.read(buffer);if(n<0)break;out.write(buffer,0,n)}
+                }
             } ?: error("Failed writing video stream to MediaStore")
+            currentCoroutineContext().ensureActive()
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 val done = ContentValues().apply { put(MediaStore.Video.Media.IS_PENDING, 0) }
-                context.contentResolver.update(uri, done, null, null)
+                check(context.contentResolver.update(uri, done, null, null)>0){"Failed to finalize MediaStore video"}
             }
             return uri.toString()
         } catch (e: Exception) {
