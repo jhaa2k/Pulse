@@ -778,15 +778,16 @@ private fun PropertiesTab(
             RegisteredSlider("posY", layer.common.posY, settings.showPropertyHelpHints, { v ->
                 beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(common = it.common.copy(posY = v)) }
             }, ::endDrag)
-            StudioToggleRow("Uniform Scale", layer.common.scaleIsUniform) { v -> vm.updateLayer(layer.common.id) { it.copy(common = it.common.copy(scaleIsUniform = v)) } }
+            StudioToggleRow("Uniform Scale", layer.common.scaleIsUniform) { v -> vm.updateLayer(layer.common.id) { it.copy(common = it.common.copy(scaleIsUniform = v,scaleY=if(v)it.common.scaleX else it.common.scaleY)) } }
             StudioChipSelector("Anchor X", com.vexo.studio.model.AnchorMode.entries, layer.common.anchorX, { it.name }) { v -> vm.updateLayer(layer.common.id) { it.copy(common=it.common.copy(anchorX=v)) } }
             StudioChipSelector("Anchor Y", com.vexo.studio.model.AnchorMode.entries, layer.common.anchorY, { it.name }) { v -> vm.updateLayer(layer.common.id) { it.copy(common=it.common.copy(anchorY=v)) } }
             StudioSlider("Pivot X", layer.common.alignmentX, 0f, 1f, 0.5f, "", 0.01f, onValueChange = { v -> beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(common = it.common.copy(alignmentX = v)) } }, onCommit = ::endDrag)
             StudioSlider("Pivot Y", layer.common.alignmentY, 0f, 1f, 0.5f, "", 0.01f, onValueChange = { v -> beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(common = it.common.copy(alignmentY = v)) } }, onCommit = ::endDrag)
             RegisteredSlider("scaleX", layer.common.scaleX, settings.showPropertyHelpHints, { v ->
-                beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(common = it.common.copy(scaleX = v)) }
+                beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(common = it.common.copy(scaleX = v,scaleY=if(it.common.scaleIsUniform)v else it.common.scaleY)) }
             }, ::endDrag)
-            RegisteredSlider("scaleY", layer.common.scaleY, settings.showPropertyHelpHints, { v ->
+            if(layer.common.scaleIsUniform)Text("Scale Y follows Scale X",style=MaterialTheme.typography.labelSmall,color=palette.textSecondary)
+            else RegisteredSlider("scaleY", layer.common.scaleY, settings.showPropertyHelpHints, { v ->
                 beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(common = it.common.copy(scaleY = v)) }
             }, ::endDrag)
             RegisteredSlider("rotationDeg", layer.common.rotationDeg, settings.showPropertyHelpHints, { v ->
@@ -1650,7 +1651,8 @@ private fun AssetsTab(
             )
         }
 
-        if (selected?.type == LayerType.IMAGE) {
+        if (selected?.type == LayerType.IMAGE && selected.common.locked)Text("Unlock this layer before replacing its media.",style=MaterialTheme.typography.labelSmall,color=palette.danger)
+        if (selected?.type == LayerType.IMAGE && !selected.common.locked) {
             val cfg = selected.config as LayerConfig.Image
             Text("BUILT-IN TEXTURES", style = MaterialTheme.typography.labelSmall, color = palette.textSecondary)
             listOf(

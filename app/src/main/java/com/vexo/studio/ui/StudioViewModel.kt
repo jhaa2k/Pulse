@@ -798,12 +798,17 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                     Uri.fromFile(file).toString()
                 }catch(e:Exception){file.delete();throw e}
             }}
-            target.onSuccess{path->updateLayer(layerId){l->if(l.config is LayerConfig.Text)l.copy(config=l.config.copy(fontAssetUri=path)) else l}}
+            target.onSuccess{path->
+                val editable=_uiState.value.project.compositions.any{c->c.layers.any{it.common.id==layerId&&!it.common.locked&&it.config is LayerConfig.Text}}
+                if(editable)updateLayer(layerId){l->if(l.config is LayerConfig.Text&&!l.common.locked)l.copy(config=l.config.copy(fontAssetUri=path)) else l}
+                else {runCatching{Uri.parse(path).path?.let{java.io.File(it).delete()}};_uiState.value=_uiState.value.copy(statusBanner="Font target is locked or missing")}
+            }
                 .onFailure{_uiState.value=_uiState.value.copy(statusBanner="Font import failed: "+it.message)}
         }
     }
 
     fun attachLayerAsset(layerId:String,uri:Uri,role:String){
+        if(_uiState.value.project.compositions.none{c->c.layers.any{it.common.id==layerId&&!it.common.locked}}){_uiState.value=_uiState.value.copy(statusBanner="Unlock the target layer before importing assets");return}
         runCatching{app.contentResolver.takePersistableUriPermission(uri,android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)}
         updateLayer(layerId){layer->layer.copy(config=when(val c=layer.config){
             is LayerConfig.Image -> if(role=="mask")c.copy(maskImage=uri.toString()) else c
@@ -819,6 +824,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
             app.contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         val selected = currentSelectedLayer()
+        if(selected?.type==LayerType.IMAGE&&selected.common.locked){_uiState.value=_uiState.value.copy(statusBanner="Unlock the image layer before replacing media");return}
         if (selected != null && selected.type == LayerType.IMAGE) {
             val cfg = selected.config as LayerConfig.Image
             updateLayer(selected.common.id) {
