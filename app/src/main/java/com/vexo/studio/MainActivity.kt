@@ -204,6 +204,7 @@ private fun VexoRootApp(vm: StudioViewModel) {
         }
     Scaffold(
         containerColor = if (settings.glassEnabled && uiState.navDestination != NavDestination.STUDIO) Color.Transparent else palette.bg,
+        contentColor = palette.textPrimary,
         topBar = {
             if (!uiState.isFullscreenPreview) {
                 Row(

@@ -2,6 +2,8 @@ package com.vexo.studio.ui.theme
 
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
@@ -214,7 +216,9 @@ fun VexoTheme(
         )
     )
 
-    fun compact(style: TextStyle)=style.copy(fontFamily=poppins,fontSize=style.fontSize*.94f,lineHeight=style.lineHeight*.94f)
+    fun compact(style: TextStyle)=style.copy(fontFamily=poppins,
+        fontSize=if(style.fontSize==TextUnit.Unspecified)style.fontSize else style.fontSize*.94f,
+        lineHeight=if(style.lineHeight==TextUnit.Unspecified)style.lineHeight else style.lineHeight*.94f)
     val baseTypography=typography.copy(displayLarge=typography.displayLarge.copy(fontFamily=poppins),displayMedium=typography.displayMedium.copy(fontFamily=poppins),displaySmall=typography.displaySmall.copy(fontFamily=poppins),headlineLarge=typography.headlineLarge.copy(fontFamily=poppins),headlineMedium=typography.headlineMedium.copy(fontFamily=poppins),headlineSmall=typography.headlineSmall.copy(fontFamily=poppins),titleLarge=typography.titleLarge.copy(fontFamily=poppins),titleSmall=typography.titleSmall.copy(fontFamily=poppins),bodyLarge=typography.bodyLarge.copy(fontFamily=poppins),labelLarge=typography.labelLarge.copy(fontFamily=poppins))
     val allTypography=baseTypography.copy(displayLarge=compact(baseTypography.displayLarge),displayMedium=compact(baseTypography.displayMedium),displaySmall=compact(baseTypography.displaySmall),headlineLarge=compact(baseTypography.headlineLarge),headlineMedium=compact(baseTypography.headlineMedium),headlineSmall=compact(baseTypography.headlineSmall),titleLarge=compact(baseTypography.titleLarge),titleMedium=compact(baseTypography.titleMedium),titleSmall=compact(baseTypography.titleSmall),bodyLarge=compact(baseTypography.bodyLarge),bodyMedium=compact(baseTypography.bodyMedium),bodySmall=compact(baseTypography.bodySmall),labelLarge=compact(baseTypography.labelLarge),labelMedium=compact(baseTypography.labelMedium),labelSmall=compact(baseTypography.labelSmall))
     CompositionLocalProvider(LocalVexoPalette provides palette) {
@@ -222,7 +226,7 @@ fun VexoTheme(
             colorScheme = colorScheme,
             shapes = sharpShapes,
             typography = allTypography,
-            content = content
+            content = { CompositionLocalProvider(LocalContentColor provides palette.textPrimary, content = content) }
         )
     }
 }
