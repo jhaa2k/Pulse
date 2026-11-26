@@ -18,7 +18,8 @@ data class AudioProviderSnapshot(
     val mid: Float,
     val treble: Float,
     val rms: Float,
-    val peak: Float
+    val peak: Float,
+    val peakBars: FloatArray = FloatArray(0)
 )
 
 /**
@@ -369,7 +370,8 @@ class AudioProviderEngine(initialConfig: AudioProviderConfig) {
         mid = midEnergy,
         treble = trebleEnergy,
         rms = rmsEnergy,
-        peak = peakEnergy
+        peak = peakEnergy,
+        peakBars = peakHoldBars.copyOf()
     )
 
     companion object {

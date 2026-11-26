@@ -936,6 +936,7 @@ private fun PropertiesTab(
                     StudioSlider("Bar Spacing", cfg.barSpacing, 0f, .95f, 0f, "", .01f, onValueChange={v -> beginDrag(); vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.Bars).copy(barSpacing=v))}}, onCommit=::endDrag)
                     if (cfg.segment1 == BarsSegmentType.ROUND_BARS) StudioSlider("Roundness", cfg.roundness, 0f, 1f, 1f, "", .01f, onValueChange={v -> beginDrag(); vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.Bars).copy(roundness=v))}}, onCommit=::endDrag)
                     StudioSlider("Spectrum Softness",cfg.softness.toFloat(),0f,20f,2f,"",1f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.Bars).copy(softness=v.toInt()))}},onCommit=::endDrag)
+                    if(cfg.segment1!=BarsSegmentType.LINE) StudioToggleRow("Peak Hold Markers",cfg.showPeaks){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.Bars).copy(showPeaks=v))}}
                     RegisteredSlider("barWidth", cfg.barWidth, settings.showPropertyHelpHints, { v ->
                         beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(barWidth = v)) }
                     }, ::endDrag)
@@ -1015,6 +1016,10 @@ private fun PropertiesTab(
                     if (cfg.colorKeyEnabled) StudioSlider("Key Strength", cfg.transparencyStrength, 0f, 1f, 1f, "", 0.01f, onValueChange = { v -> beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(transparencyStrength = v)) } }, onCommit = ::endDrag)
                     StudioToggleRow("Color Key Chroma", cfg.colorKeyEnabled) { k ->
                         vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(colorKeyEnabled = k)) }
+                    }
+                    if(cfg.colorKeyEnabled){
+                        StudioColorPickerRow("Key Color",cfg.colorKeyArgb){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.Image).copy(colorKeyArgb=v,autoDetectColorKey=false))}}
+                        StudioSlider("Key Strength",cfg.transparencyStrength,0f,1f,1f,"",.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.Image).copy(transparencyStrength=v))}},onCommit=::endDrag)
                     }
                 }
                 ExpandableSectionHeader("Color & opacity", expandedSections["Image_Coloropacity"] == true, { toggleAccordion(expandedSections, "Image_Coloropacity") }) {

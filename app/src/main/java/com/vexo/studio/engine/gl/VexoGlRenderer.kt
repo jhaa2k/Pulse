@@ -373,6 +373,7 @@ class VexoGlRenderer(
         val delayedBars = applyReactionDelay(layerId, SpectrumFilters.smooth(sampled,cfg.softness), (cfg.reactionDelay + cfg.reactionAccumulatedDelay).coerceIn(0, 9))
         val count = delayedBars.size
         if (count == 0) return
+        val peaks=if(cfg.showPeaks && audioSnap!=null && audioSnap.peakBars.isNotEmpty()) SpectrumGeometry.resample(audioSnap.peakBars,count) else null
         if (cfg.segment1 == BarsSegmentType.LINE && count > 1) {
             drawConnectedSpectrum(cfg, delayedBars, opacity, w, h)
             return
@@ -380,7 +381,7 @@ class VexoGlRenderer(
         val minDim = minOf(w, h).toFloat()
 
         // Ensure vertex scratch capacity (each bar = 6 vertices = 12 floats pos + 24 floats color)
-        val vertsPerBar = if (cfg.segment1 == BarsSegmentType.ROUND_BARS) 48 else 6
+        val vertsPerBar = (if (cfg.segment1 == BarsSegmentType.ROUND_BARS) 48 else 6)*(if(peaks!=null)2 else 1)
         val neededVerts = count * vertsPerBar * 2
         if (vertexScratch.size < neededVerts || colorScratch.size < count * vertsPerBar * 4) {
             vertexScratch = FloatArray(neededVerts)
@@ -451,6 +452,8 @@ class VexoGlRenderer(
             )
             val altDir = if (cfg.alternatingDirection && i % 2 == 1) -1f else 1f
             val magPx = (amp * minDim * 0.42f + cfg.fixedHeight * 2f) * altDir
+            val peakPx=peaks?.getOrNull(srcIdx)?.let{v->(v*kotlin.math.abs(signedGain)).coerceIn(0f,kotlin.math.abs(cfg.maxHeightScale))*minDim*.42f*(if(signedGain<0f)-1f else 1f)*altDir}
+            val marker=maxOf(1f,minDim*.0025f)
 
             when (cfg.shapePath) {
                 BarsShapePath.HORIZONTAL_LINE, BarsShapePath.LETTER -> {
@@ -468,6 +471,7 @@ class VexoGlRenderer(
                         cx + bw * 0.5f, botY,
                         gradColor, barColor0
                     )
+                    if(peakPx!=null){val yy=cy-peakPx*(if(cfg.mirror).5f else 1f);emitQuad(cx-bw*.5f,yy-marker,cx+bw*.5f,yy-marker,cx-bw*.5f,yy,cx+bw*.5f,yy,gradColor,gradColor)}
                 }
                 BarsShapePath.VERTICAL_LINE -> {
                     val slotH = (h * 0.86f) / count
@@ -477,6 +481,7 @@ class VexoGlRenderer(
                     val leftX = if (cfg.mirror) cx - magPx * 0.5f else cx
                     val rightX = if (cfg.mirror) cx + magPx * 0.5f else cx + magPx
                     emitQuad(leftX, cy - bh * 0.5f, rightX, cy - bh * 0.5f, leftX, cy + bh * 0.5f, rightX, cy + bh * 0.5f, barColor0, gradColor)
+                    if(peakPx!=null){val xx=cx+peakPx*(if(cfg.mirror).5f else 1f);emitQuad(xx,cy-bh*.5f,xx+marker,cy-bh*.5f,xx,cy+bh*.5f,xx+marker,cy+bh*.5f,gradColor,gradColor)}
                 }
                 BarsShapePath.CIRCLE, BarsShapePath.SIDED_POLYGON -> {
                     val cx = w * 0.5f
@@ -508,6 +513,10 @@ class VexoGlRenderer(
                         cx + nx * rOut + px * tipW, cy + ny * rOut + py * tipW,
                         barColor0, gradColor
                     )
+                    if(peakPx!=null){
+                        val rr=baseR+peakPx*(if(cfg.mirror).55f else 1f)
+                        emitQuad(cx+nx*rr-px*halfW,cy+ny*rr-py*halfW,cx+nx*rr+px*halfW,cy+ny*rr+py*halfW,cx+nx*(rr+marker)-px*halfW,cy+ny*(rr+marker)-py*halfW,cx+nx*(rr+marker)+px*halfW,cy+ny*(rr+marker)+py*halfW,gradColor,gradColor)
+                    }
                 }
             }
         }
@@ -520,18 +529,19 @@ class VexoGlRenderer(
         val count = bars.size
         val minDim = minOf(w, h).toFloat()
         val segments = if (closed && cfg.pathGap <= 0f) count else count - 1
-        val needed = segments * 12
-        if (vertexScratch.size < needed || colorScratch.size < segments * 24) {
+        val copies=if(cfg.mirror)2 else 1
+        val needed = segments * copies * 12
+        if (vertexScratch.size < needed || colorScratch.size < segments * copies * 24) {
             vertexScratch = FloatArray(needed)
-            colorScratch = FloatArray(segments * 24)
+            colorScratch = FloatArray(segments * copies * 24)
             vertexBuf = allocFloatBuffer(vertexScratch.size)
             colorBuf = allocFloatBuffer(colorScratch.size)
         }
-        fun point(i: Int): Pair<Float, Float> {
+        fun point(i: Int,side:Float): Pair<Float, Float> {
             val idx = if (cfg.flipInput) count - 1 - i else i
             val gain = cfg.heightScale * cfg.barHeightMultiplier
             val raw = (bars[idx] * kotlin.math.abs(gain)).coerceIn(0f, kotlin.math.abs(cfg.maxHeightScale))
-            val amp = raw * minDim * 0.42f * if (gain < 0f) -1f else 1f
+            val amp = raw * minDim * 0.42f * (if (gain < 0f) -1f else 1f)*side*(if(cfg.alternatingDirection && i%2==1)-1f else 1f)*(if(cfg.mirror).5f else 1f)
             val t = i.toFloat() / (if (closed) count else count - 1)
             if (!closed) return if (cfg.shapePath == BarsShapePath.VERTICAL_LINE) (w * 0.5f + amp) to (h * (0.07f + t * 0.86f)) else (w * (0.07f + t * 0.86f)) to (h * 0.5f - amp)
             val angle = Math.toRadians(cfg.pathAngleDeg.toDouble()).toFloat() + t * 2f * PI.toFloat() * (1f - cfg.pathGap.coerceIn(0f, 0.9f))
@@ -544,9 +554,10 @@ class VexoGlRenderer(
         }
         var vi = 0; var ci = 0
         val half = (kotlin.math.abs(cfg.fixedHeight).takeIf { it > 0f } ?: (minDim / count * cfg.barWidth)).coerceIn(1f, 32f) * 0.5f
-        for (i in 0 until segments) {
-            val (x0, y0) = point(i)
-            val (x1, y1) = point((i + 1) % count)
+        for(copy in 0 until copies) for (i in 0 until segments) {
+            val side=if(copy==0)1f else -1f
+            val (x0, y0) = point(i,side)
+            val (x1, y1) = point((i + 1) % count,side)
             val dx = x1 - x0; val dy = y1 - y0
             val len = kotlin.math.sqrt(dx * dx + dy * dy).coerceAtLeast(0.001f)
             val nx = -dy / len * half; val ny = dx / len * half
@@ -1337,7 +1348,7 @@ class VexoGlRenderer(
                 BitmapFactory.decodeStream(it, null, opts)
             } ?: return null
 
-            val rotation = context.contentResolver.openInputStream(uri)?.use { stream ->
+            val rotation = runCatching { context.contentResolver.openInputStream(uri)?.use { stream ->
                 when (ExifInterface(stream).getAttributeInt(
                     ExifInterface.TAG_ORIENTATION,
                     ExifInterface.ORIENTATION_NORMAL
@@ -1347,7 +1358,7 @@ class VexoGlRenderer(
                     ExifInterface.ORIENTATION_ROTATE_270 -> 270f
                     else -> 0f
                 }
-            } ?: 0f
+            } ?: 0f }.getOrDefault(0f)
 
             if (rotation == 0f) raw else {
                 val m = AndroidMatrix().apply { postRotate(rotation) }
