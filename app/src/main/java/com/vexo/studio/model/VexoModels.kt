@@ -389,7 +389,12 @@ sealed interface LayerConfig {
         val alternatingDirection: Boolean = false,
         val barCount: Int = 0, // 0 follows provider output count
         val barSpacing: Float = 0f,
-        val roundness: Float = 1f
+        val roundness: Float = 1f,
+        val creativePath: CreativeSpectrumPath = CreativeSpectrumPath.LEGACY,
+        val creativeStyle: CreativeSpectrumStyle = CreativeSpectrumStyle.BARS,
+        val pathTurns: Float = 2f,
+        val pathSpread: Float = .3f,
+        val stepCount: Int = 8
     ) : LayerConfig
 
     @Serializable
@@ -439,7 +444,14 @@ sealed interface LayerConfig {
         val lineSpacing: Float = 1.2f,
         val strokeWidth: Float = 0f,
         val strokeColorArgb: Int = 0xFF000000.toInt(),
-        val shadowRadius: Float = 4f
+        val shadowRadius: Float = 4f,
+        val animation: TextMotion = TextMotion.NONE,
+        val animationDuration: Float = 2f,
+        val animationDelay: Float = 0f,
+        val animationLoop: Boolean = true,
+        val animationAmount: Float = .2f,
+        val animationAudio: MeasureConfig = MeasureConfig(measureWhat=MeasureWhat.BEAT,amountA=.3f,amountB=.3f),
+        val shadowColorArgb: Int = 0xCC000000.toInt()
     ) : LayerConfig
 
     @Serializable
@@ -492,7 +504,17 @@ sealed interface LayerConfig {
             amountB = 0.4f
         ),
         val customImage: String = "internalres:particle_circle_blur4",
-        val seed: Int = 42
+        val seed: Int = 42,
+        val emitter: ParticleEmitter = ParticleEmitter.LEGACY,
+        val emitterX: Float = .5f,
+        val emitterY: Float = .5f,
+        val emitterWidth: Float = 1f,
+        val emitterHeight: Float = 1f,
+        val directionSpread: Float = 37f,
+        val drag: Float = 0f,
+        val burstCount: Int = 0,
+        val burstThreshold: Float = .65f,
+        val burstProvider: Int = 1
     ) : LayerConfig
 
     @Serializable
@@ -988,3 +1010,8 @@ data class CreativeImageConfig(
     val grain: Float = 0f,
     val audio: MeasureConfig = MeasureConfig()
 )
+
+@Serializable enum class CreativeSpectrumPath { LEGACY, ARC, SPIRAL, HEART, SINE }
+@Serializable enum class CreativeSpectrumStyle { BARS, DOTS, STEPS }
+@Serializable enum class ParticleEmitter { LEGACY, POINT, LINE, BOX, RING, DISC }
+@Serializable enum class TextMotion { NONE, FADE, SLIDE, PULSE, REVEAL, BEAT_SCALE }

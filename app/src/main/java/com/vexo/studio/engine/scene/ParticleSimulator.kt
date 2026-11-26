@@ -32,6 +32,7 @@ class ParticleSimulator(maxPool: Int = 3000) {
     private val phase = FloatArray(capacity)
 
     private var spawnAccumulator = 0f
+    private var previousBurst=false
     private var rng = Random(42)
     private var lastSeed = 42
 
@@ -49,6 +50,7 @@ class ParticleSimulator(maxPool: Int = 3000) {
     fun reset(seed: Int) {
         active.fill(false)
         spawnAccumulator = 0f
+        previousBurst=false
         activeCount = 0
         lastSeed = seed
         rng = Random(seed)
@@ -60,7 +62,8 @@ class ParticleSimulator(maxPool: Int = 3000) {
         deltaSec: Float,
         totalTimeSec: Float,
         playingTimeSec: Float,
-        isPlaying: Boolean
+        isPlaying: Boolean,
+        burstSnapshot: AudioProviderSnapshot? = snapshot
     ) {
         if (cfg.seed != lastSeed) {
             reset(cfg.seed)
@@ -82,6 +85,11 @@ class ParticleSimulator(maxPool: Int = 3000) {
 
         var spawnsRemaining = (spawnAccumulator / spawnInterval).toInt().coerceAtMost(24)
         spawnAccumulator -= spawnsRemaining * spawnInterval
+        spawnAccumulator=spawnAccumulator.coerceAtMost(spawnInterval)
+        val trigger=isPlaying&&(burstSnapshot?.beat?:0f)>=cfg.burstThreshold.coerceIn(.05f,1f)
+        if(trigger&&!previousBurst)spawnsRemaining+=cfg.burstCount.coerceIn(0,256)
+        previousBurst=trigger
+        for(i in limit until capacity)active[i]=false
 
         val angleRad = Math.toRadians(cfg.vectorAngleDeg.toDouble()).toFloat()
         val fovScale = 1f / tan(Math.toRadians((cfg.perspectiveFov.coerceIn(20f, 150f) * 0.5).toDouble())).toFloat()
@@ -112,8 +120,9 @@ class ParticleSimulator(maxPool: Int = 3000) {
                 ay += (dx / dist) * 0.45f - dy * 0.12f
             }
 
-            vx[i] += ax * cappedDt
-            vy[i] += ay * cappedDt
+            val damping=kotlin.math.exp(-cfg.drag.coerceIn(0f,10f)*cappedDt)
+            vx[i] = (vx[i]+ax*cappedDt)*damping
+            vy[i] = (vy[i]+ay*cappedDt)*damping
 
             val sineOffset = if (cfg.sideSineWaveMag != 0f) {
                 sin(age[i] * cfg.sideSineWaveFreq + phase[i]) * cfg.sideSineWaveMag * 0.01f * cappedDt
@@ -171,14 +180,18 @@ class ParticleSimulator(maxPool: Int = 3000) {
                 y[i] = rng.nextFloat()
             }
         }
+        if(cfg.emitter!=com.vexo.studio.model.ParticleEmitter.LEGACY){
+            val pos=CreativeGeometry.emitter(cfg.emitter,rng.nextFloat(),rng.nextFloat(),cfg.emitterX,cfg.emitterY,cfg.emitterWidth,cfg.emitterHeight)
+            x[i]=pos.x;y[i]=pos.y
+        }
         z[i] = (rng.nextFloat() - 0.5f) * 350f
 
         val dir = if (cfg.useRandomVectorInstead) {
             rng.nextFloat() * 2f * PI.toFloat()
         } else if (cfg.vectorRelativeToCenter) {
-            kotlin.math.atan2(y[i] - 0.5f, x[i] - 0.5f)
+            kotlin.math.atan2(y[i] - cfg.emitterY, x[i] - cfg.emitterX)
         } else {
-            angleRad + (rng.nextFloat() - 0.5f) * 0.65f
+            angleRad + (rng.nextFloat() - 0.5f) * cfg.directionSpread.coerceIn(0f,360f)*PI.toFloat()/180f
         }
 
         val spd = (cfg.speed + (rng.nextFloat() - 0.5f) * cfg.speedRandom) * 0.0018f

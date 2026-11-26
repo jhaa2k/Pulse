@@ -110,6 +110,7 @@ object VexoShaders {
         uniform vec2 uUvScale;
         uniform vec2 uImageBlurStep;
         uniform float uKeyStrength;
+        uniform float uReveal;
         uniform int uCreativeGradient;
         uniform int uCreativeDistortion;
         uniform vec4 uGradientFrom;
@@ -129,6 +130,7 @@ object VexoShaders {
         }
         void main() {
             vec2 uv = vUv;
+            if(uv.x>uReveal)discard;
             if (uShape == 1) {
                 vec2 d = uv - vec2(0.5);
                 if (dot(d, d) > 0.25) discard;

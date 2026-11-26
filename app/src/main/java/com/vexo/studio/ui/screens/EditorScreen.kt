@@ -838,6 +838,14 @@ private fun PropertiesTab(
 
         when (val cfg = layer.config) {
             is LayerConfig.Bars -> {
+                ExpandableSectionHeader("Creative spectrum",expandedSections["creative_bars"]==true,{toggleAccordion(expandedSections,"creative_bars")}){
+                    StudioChipSelector("Creative path",com.vexo.studio.model.CreativeSpectrumPath.entries,cfg.creativePath,{it.name}){v->vm.updateLayer(layer.common.id){l->l.copy(config=(l.config as LayerConfig.Bars).copy(creativePath=v))}}
+                    StudioChipSelector("Creative style",com.vexo.studio.model.CreativeSpectrumStyle.entries,cfg.creativeStyle,{it.name}){v->vm.updateLayer(layer.common.id){l->l.copy(config=(l.config as LayerConfig.Bars).copy(creativeStyle=v))}}
+                    StudioSlider("Radius",cfg.circleRadius,0.01f,0.8f,0.28f,"",0.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){l->l.copy(config=(l.config as LayerConfig.Bars).copy(circleRadius=v))}},onCommit=::endDrag)
+                    StudioSlider("Turns",cfg.pathTurns,0.25f,5.0f,2.0f,"",0.05f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){l->l.copy(config=(l.config as LayerConfig.Bars).copy(pathTurns=v))}},onCommit=::endDrag)
+                    StudioSlider("Wave spread",cfg.pathSpread,0.0f,1.0f,0.3f,"",0.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){l->l.copy(config=(l.config as LayerConfig.Bars).copy(pathSpread=v))}},onCommit=::endDrag)
+                    StudioSlider("Steps",cfg.stepCount.toFloat(),2.0f,16.0f,8.0f,"",1.0f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){l->l.copy(config=(l.config as LayerConfig.Bars).copy(stepCount=v.toInt()))}},onCommit=::endDrag)
+                }
                 ExpandableSectionHeader("Path & geometry", expandedSections["Bars_Pathgeometry"] == true, { toggleAccordion(expandedSections, "Bars_Pathgeometry") }) {
                     StudioSlider("Polygon Sides", cfg.polygonSides.toFloat(), 3f, 12f, 6f, "", 1f, onValueChange = { v ->
                         beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(polygonSides = v.toInt())) }
@@ -1025,11 +1033,20 @@ private fun PropertiesTab(
                 }
             }
             is LayerConfig.Text -> {
+                ExpandableSectionHeader("Text animation",expandedSections["text_motion"]==true,{toggleAccordion(expandedSections,"text_motion")}){
+                    StudioChipSelector("Motion",com.vexo.studio.model.TextMotion.entries,cfg.animation,{it.name}){v->vm.updateLayer(layer.common.id){l->l.copy(config=(l.config as LayerConfig.Text).copy(animation=v))}}
+                    StudioToggleRow("Loop",cfg.animationLoop){v->vm.updateLayer(layer.common.id){l->l.copy(config=(l.config as LayerConfig.Text).copy(animationLoop=v))}}
+                    StudioSlider("Duration (s)",cfg.animationDuration,0.1f,20.0f,2.0f,"",0.1f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){l->l.copy(config=(l.config as LayerConfig.Text).copy(animationDuration=v))}},onCommit=::endDrag)
+                    StudioSlider("Delay (s)",cfg.animationDelay,0.0f,60.0f,0.0f,"",0.1f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){l->l.copy(config=(l.config as LayerConfig.Text).copy(animationDelay=v))}},onCommit=::endDrag)
+                    StudioSlider("Amount",cfg.animationAmount,0.0f,1.0f,0.2f,"",0.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){l->l.copy(config=(l.config as LayerConfig.Text).copy(animationAmount=v))}},onCommit=::endDrag)
+                    MeasureBindingControls("Text beat scale",cfg.animationAudio,uiState.project.audioProviders.map{it.index},::beginDrag,::endDrag){v,undo->vm.updateLayer(layer.common.id,undo){l->l.copy(config=(l.config as LayerConfig.Text).copy(animationAudio=v))}}
+                    StudioColorPickerRow("Shadow color",cfg.shadowColorArgb){v->vm.updateLayer(layer.common.id){l->l.copy(config=(l.config as LayerConfig.Text).copy(shadowColorArgb=v))}}
+                }
                 ExpandableSectionHeader("Content & typography", expandedSections["Text_Contenttypography"] == true, { toggleAccordion(expandedSections, "Text_Contenttypography") }) {
                     OutlinedTextField(
                         value = cfg.text,
                         onValueChange = { text -> vm.updateLayer(layer.common.id) { l -> l.copy(config = (l.config as LayerConfig.Text).copy(text = text)) } },
-                        label = { Text("TEXT ({Title}, {Artist}, {Album}, {Time})") },
+                        label = { Text("TEXT ({Title}, {Artist}, {Album}, {Time}, {Duration}, {Progress})") },
                         modifier = Modifier.fillMaxWidth()
                     )
                     RegisteredSlider("fontSize", cfg.fontSize.toFloat(), settings.showPropertyHelpHints, { v ->
@@ -1093,6 +1110,18 @@ private fun PropertiesTab(
                 }
             }
             is LayerConfig.Particles -> {
+                ExpandableSectionHeader("Creative emitter",expandedSections["emitter"]==true,{toggleAccordion(expandedSections,"emitter")}){
+                    StudioChipSelector("Emitter",com.vexo.studio.model.ParticleEmitter.entries,cfg.emitter,{it.name}){v->vm.updateLayer(layer.common.id){l->l.copy(config=(l.config as LayerConfig.Particles).copy(emitter=v))}}
+                    StudioSlider("Emitter X",cfg.emitterX,0.0f,1.0f,0.5f,"",0.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){l->l.copy(config=(l.config as LayerConfig.Particles).copy(emitterX=v))}},onCommit=::endDrag)
+                    StudioSlider("Emitter Y",cfg.emitterY,0.0f,1.0f,0.5f,"",0.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){l->l.copy(config=(l.config as LayerConfig.Particles).copy(emitterY=v))}},onCommit=::endDrag)
+                    StudioSlider("Emitter width",cfg.emitterWidth,0.0f,2.0f,1.0f,"",0.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){l->l.copy(config=(l.config as LayerConfig.Particles).copy(emitterWidth=v))}},onCommit=::endDrag)
+                    StudioSlider("Emitter height",cfg.emitterHeight,0.0f,2.0f,1.0f,"",0.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){l->l.copy(config=(l.config as LayerConfig.Particles).copy(emitterHeight=v))}},onCommit=::endDrag)
+                    StudioSlider("Direction spread",cfg.directionSpread,0.0f,360.0f,37.0f,"",1.0f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){l->l.copy(config=(l.config as LayerConfig.Particles).copy(directionSpread=v))}},onCommit=::endDrag)
+                    StudioSlider("Drag",cfg.drag,0.0f,10.0f,0.0f,"",0.1f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){l->l.copy(config=(l.config as LayerConfig.Particles).copy(drag=v))}},onCommit=::endDrag)
+                    StudioSlider("Beat burst count",cfg.burstCount.toFloat(),0.0f,256.0f,0.0f,"",1.0f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){l->l.copy(config=(l.config as LayerConfig.Particles).copy(burstCount=v.toInt()))}},onCommit=::endDrag)
+                    StudioSlider("Burst threshold",cfg.burstThreshold,0.05f,1.0f,0.65f,"",0.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){l->l.copy(config=(l.config as LayerConfig.Particles).copy(burstThreshold=v))}},onCommit=::endDrag)
+                    StudioChipSelector("Burst provider",uiState.project.audioProviders.map{it.index},cfg.burstProvider,{"#$it"}){v->vm.updateLayer(layer.common.id){l->l.copy(config=(l.config as LayerConfig.Particles).copy(burstProvider=v))}}
+                }
                 ExpandableSectionHeader("Emission", expandedSections["Particles_Emission"] == true, { toggleAccordion(expandedSections, "Particles_Emission") }) {
                     StudioSlider("Spawn Interval", cfg.spawnTimeSec, 0.005f, 0.25f, 0.015f, "s", 0.005f, onValueChange = { v ->
                         beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(spawnTimeSec = v)) }
