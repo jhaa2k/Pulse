@@ -217,6 +217,21 @@ object VexoShaders {
         }
     """
 
+    const val MOTION_FRAGMENT = """
+        precision mediump float;
+        uniform sampler2D uTex;
+        uniform vec2 uMotion;
+        uniform float uOpacity;
+        varying vec2 vUv;
+        void main(){
+            vec4 sum=vec4(0.0);
+            for(int i=0;i<9;i++){
+                float t=float(i)/8.0;
+                sum+=texture2D(uTex,clamp(vUv-uMotion*t,0.0,1.0))*(1.0-t*0.5);
+            }
+            gl_FragColor=sum*(uOpacity/6.75);
+        }
+    """
     const val MIRROR_FRAGMENT = """
         precision mediump float;
         varying vec2 vUv;

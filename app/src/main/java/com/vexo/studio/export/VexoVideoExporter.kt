@@ -415,7 +415,7 @@ class VexoVideoExporter(private val context: Context) {
 
             onProgress(ExportProgress(isRunning = true, progress = 0.98f, statusText = "Verifying & publishing MP4"))
 
-            verifyMp4File(tempFile)
+            verifyMp4File(tempFile,width,height,totalDurationUs)
             val publishedUri = publishVideo(tempFile, project.name, settings.customOutputUri)
             tempFile.delete()
 
@@ -518,16 +518,24 @@ class VexoVideoExporter(private val context: Context) {
         return bytesWritten
     }
 
-    private fun verifyMp4File(file: File) {
+    private fun verifyMp4File(file: File,width:Int,height:Int,expectedDurationUs:Long) {
         if (!file.exists() || file.length() <= 0L) {
             error("Exported MP4 file is empty")
         }
+        val extractor=MediaExtractor()
+        try{
+            extractor.setDataSource(file.absolutePath)
+            val formats=(0 until extractor.trackCount).map{extractor.getTrackFormat(it)}
+            val video=formats.firstOrNull{it.getString(MediaFormat.KEY_MIME)=="video/avc"} ?: error("MP4 has no H.264 track")
+            check(formats.any{it.getString(MediaFormat.KEY_MIME)=="audio/mp4a-latm"}){"MP4 has no AAC track"}
+            check(video.getInteger(MediaFormat.KEY_WIDTH)==width && video.getInteger(MediaFormat.KEY_HEIGHT)==height){"Export dimensions differ from selection"}
+        }finally{extractor.release()}
         val retriever = MediaMetadataRetriever()
         try {
             retriever.setDataSource(file.absolutePath)
             val hasVideo = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_VIDEO)
             val dur = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
-            if (hasVideo != "yes" || dur <= 0L) {
+            if (hasVideo != "yes" || dur <= 0L || kotlin.math.abs(dur*1000L-expectedDurationUs)>maxOf(500_000L,expectedDurationUs/20)) {
                 error("Exported file failed media verification")
             }
         } finally {

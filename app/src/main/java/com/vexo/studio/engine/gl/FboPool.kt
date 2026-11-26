@@ -36,6 +36,17 @@ class FboPool {
         keys.forEach { key -> allocated.remove(key)?.let { deleteFbo(it) } }
     }
 
+    fun retainSceneBuffers(compositionIds:Set<Int>,layerIds:Set<String>){
+        val stale=allocated.keys.filter{key->
+            when {
+                key.startsWith("comp_")->key.removePrefix("comp_").toIntOrNull() !in compositionIds
+                key.startsWith("trail_")->key.removePrefix("trail_") !in layerIds
+                else->false
+            }
+        }
+        stale.forEach{allocated.remove(it)?.let(::deleteFbo)}
+    }
+
     fun releaseAll() {
         allocated.values.forEach { deleteFbo(it) }
         allocated.clear()

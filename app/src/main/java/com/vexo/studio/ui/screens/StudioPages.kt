@@ -223,6 +223,7 @@ fun AudioLibraryScreen(
         }
         val sleep by vm.sleepRemaining.collectAsState()
         StudioChipSelector("Sleep timer" + if(sleep>0) " · "+formatDuration(sleep*1000) else "", listOf(0,15,30,60,120), if(sleep==0L) 0 else ((sleep+59)/60).toInt(), {if(it==0) "Off" else "$it min"}) { vm.setSleepTimer(it) }
+        StudioChipSelector("Track transition (fade, no overlap)",listOf(0,1000,2000,3000,5000),playback.transitionFadeMs,{if(it==0)"Off" else "${it/1000}s"},vm.playbackController::setTransitionFade)
         // Queue controls: shuffle, repeat, volume
         Row(
             modifier = Modifier

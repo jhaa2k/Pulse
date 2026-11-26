@@ -1251,6 +1251,13 @@ private fun PropertiesTab(
                     StudioChipSelector("Content Blend", BlendMode.entries, cfg.blendModeContent, { it.label }) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(blendModeContent = v)) } }
                 }
                 ExpandableSectionHeader("Motion trail", expandedSections["MotionBlurEffect_Motiontrail"] == true, { toggleAccordion(expandedSections, "MotionBlurEffect_Motiontrail") }) {
+                    StudioChipSelector("Motion Source",com.vexo.studio.model.MotionSource.entries,cfg.motionSource,{it.label}){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.MotionBlurEffect).copy(motionSource=v))}}
+                    StudioToggleRow("Relative Motion",cfg.relativeMotionMode){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.MotionBlurEffect).copy(relativeMotionMode=v))}}
+                    if(cfg.motionSource==com.vexo.studio.model.MotionSource.MANUAL){
+                        StudioSlider("Motion X",cfg.manualMotionX,-.25f,.25f,.025f,"",.001f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.MotionBlurEffect).copy(manualMotionX=v))}},onCommit=::endDrag)
+                        StudioSlider("Motion Y",cfg.manualMotionY,-.25f,.25f,0f,"",.001f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.MotionBlurEffect).copy(manualMotionY=v))}},onCommit=::endDrag)
+                    }
+                    StudioSlider("Trail Persistence",cfg.trailPersistence,0f,.95f,.65f,"",.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.MotionBlurEffect).copy(trailPersistence=v))}},onCommit=::endDrag)
                     StudioColorPickerRow("Trail Tint", cfg.colorArgb) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(colorArgb = v)) } }
                     StudioSlider("Blur Amount", cfg.blurAmountMultiplier, 0.4f, 3f, 0.85f, "x", 0.05f, onValueChange = { v ->
                         beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(blurAmountMultiplier = v)) }

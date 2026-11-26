@@ -41,6 +41,7 @@ data class PlaybackUiState(
     val shuffleEnabled: Boolean = false,
     val repeatMode: RepeatModeState = RepeatModeState.OFF,
     val volume: Float = 1f,
+    val transitionFadeMs: Int = 0,
     val trackMeta: TrackMetadataSnapshot = TrackMetadataSnapshot(),
     val errorMessage: String? = null
 )
@@ -70,6 +71,21 @@ class VexoPlaybackController(
     val state: StateFlow<PlaybackUiState> = _state.asStateFlow()
 
     private var artworkCounter = 0
+    private val playbackPrefs=context.getSharedPreferences("playback_options",Context.MODE_PRIVATE)
+    private val transitionHandler=Handler(android.os.Looper.getMainLooper())
+    private var fadeInStartedMs=0L
+    private val transitionTick=object:Runnable{
+        override fun run(){
+            val st=_state.value
+            val duration=player.duration
+            val remaining=if(duration>0)duration-player.currentPosition else Long.MAX_VALUE
+            val since=android.os.SystemClock.elapsedRealtime()-fadeInStartedMs
+            val gain=PlaybackTransition.gain(st.transitionFadeMs,remaining,since,player.hasNextMediaItem(),player.isPlaying)
+            val target=st.volume*gain
+            if(kotlin.math.abs(player.volume-target)>.002f)player.volume=target
+            transitionHandler.postDelayed(this,40)
+        }
+    }
     // ExoPlayer access is confined to its application looper. The audio sink reads this snapshot.
     @Volatile private var playbackPositionUs: Long = 0L
 
@@ -78,6 +94,8 @@ class VexoPlaybackController(
     init {
         pcmTap.playbackClockUsProvider = { playbackPositionUs }
         soundEffects.attach(player.audioSessionId)
+        _state.value=_state.value.copy(transitionFadeMs=playbackPrefs.getInt("fade_ms",0).coerceIn(0,5000))
+        transitionHandler.post(transitionTick)
     }
 
     private fun buildPlayer(): ExoPlayer {
@@ -122,6 +140,7 @@ class VexoPlaybackController(
                     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                         val idx = currentMediaItemIndex
                         ringBuffer.resetGeneration()
+                        fadeInStartedMs=if(reason==Player.MEDIA_ITEM_TRANSITION_REASON_AUTO)android.os.SystemClock.elapsedRealtime() else 0L
                         updateCurrentTrackMetadata(idx)
                     }
 
@@ -132,6 +151,7 @@ class VexoPlaybackController(
                     ) {
                         if (reason == Player.DISCONTINUITY_REASON_SEEK) {
                             ringBuffer.resetGeneration()
+                            fadeInStartedMs=0L
                         }
                         playbackPositionUs = newPosition.positionMs.coerceAtLeast(0L) * 1000L
                         _state.value = _state.value.copy(positionMs = newPosition.positionMs.coerceAtLeast(0L))
@@ -210,12 +230,11 @@ class VexoPlaybackController(
             player.play()
             startForegroundService()
             updateCurrentTrackMetadata(startIndex)
+        } else if(existing.isNotEmpty()) {
+            player.addMediaItems(mediaItems.drop(existing.size))
         } else {
-            val curPos = if (existing.isEmpty()) 0L else player.currentPosition
-            val wasPlaying = player.isPlaying
-            player.setMediaItems(mediaItems, startIndex.coerceAtLeast(0), curPos)
+            player.setMediaItems(mediaItems,0,0L)
             player.prepare()
-            if (wasPlaying) player.play()
         }
     }
 
@@ -292,6 +311,13 @@ class VexoPlaybackController(
         _state.value = _state.value.copy(repeatMode = next)
     }
 
+    fun setTransitionFade(ms:Int){
+        val v=ms.coerceIn(0,5000)
+        _state.value=_state.value.copy(transitionFadeMs=v)
+        playbackPrefs.edit().putInt("fade_ms",v).apply()
+        if(v==0)player.volume=_state.value.volume
+    }
+
     fun setVolume(vol: Float) {
         val clamped = vol.coerceIn(0f, 1f)
         player.volume = clamped
@@ -302,6 +328,7 @@ class VexoPlaybackController(
         val q = _state.value.queue.toMutableList()
         if (index !in q.indices) return
         q.removeAt(index)
+        _state.value=_state.value.copy(queue=q)
         player.removeMediaItem(index)
         val newIdx = player.currentMediaItemIndex.coerceIn(-1, q.lastIndex)
         _state.value = _state.value.copy(queue = q, currentIndex = newIdx)
@@ -333,6 +360,7 @@ class VexoPlaybackController(
     }
 
     fun release() {
+        transitionHandler.removeCallbacks(transitionTick)
         sessionVisualizer.close()
         soundEffects.close()
         player.release()
@@ -392,7 +420,11 @@ class VexoPlaybackController(
         return try {
             retriever.setDataSource(context, uri)
             val bytes = retriever.embeddedPicture ?: return null
-            val opts = BitmapFactory.Options().apply { inSampleSize = 1 }
+            val bounds=BitmapFactory.Options().apply{inJustDecodeBounds=true}
+            BitmapFactory.decodeByteArray(bytes,0,bytes.size,bounds)
+            var sample=1
+            while(maxOf(bounds.outWidth,bounds.outHeight)/sample>1024)sample*=2
+            val opts = BitmapFactory.Options().apply { inSampleSize = sample }
             BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts)
         } catch (_: Exception) {
             null
