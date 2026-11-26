@@ -33,12 +33,15 @@ object StudioFonts{
     val weights=listOf(100,200,300,400,500,600,700,800,900)
     fun weightLabel(weight:Int)=when(weight){100->"Thin";200->"Extra Light";300->"Light";400->"Regular";500->"Medium";600->"Semi Bold";700->"Bold";800->"Extra Bold";900->"Black";else->"Legacy"}
     private fun weightFile(weight:Int)=when(weight){100->"thin";200->"extralight";300->"light";500->"medium";600->"semibold";700->"bold";800->"extrabold";900->"black";else->"regular"}
-    fun resolve(context:Context,name:String,weight:Int,italic:Boolean):Typeface{
+    private val cache=android.util.LruCache<String,Typeface>(64)
+    @Synchronized fun resolve(context:Context,name:String,weight:Int,italic:Boolean):Typeface{
+        val cacheKey=name+"/"+weight+"/"+italic
+        cache.get(cacheKey)?.let{return it}
         val family=families.firstOrNull{it.name.equals(name,true)}?:families.first()
         val w=weights.minByOrNull{kotlin.math.abs(it-weight)}?:400
         val staticWeights=family.key in setOf("poppins","lato","barlow")
         val path="fonts/"+family.key+(if(staticWeights&&w!=400)"_"+weightFile(w) else "")+".ttf"
-        return runCatching{
+        val result=runCatching{
             if(Build.VERSION.SDK_INT>=26&&family.variable){
                 val base=Typeface.Builder(context.assets,path).setWeight(w).setFontVariationSettings("'wght' "+w).build()?:Typeface.DEFAULT
                 if(italic)Typeface.create(base,Typeface.ITALIC) else base
@@ -47,5 +50,7 @@ object StudioFonts{
                 if(staticWeights&&!italic)base else Typeface.create(base,if(italic)Typeface.ITALIC or (if(w>=700&&!staticWeights)Typeface.BOLD else 0) else if(w>=700&&!staticWeights)Typeface.BOLD else Typeface.NORMAL)
             }
         }.getOrDefault(Typeface.create(Typeface.SANS_SERIF,if(w>=700)Typeface.BOLD else Typeface.NORMAL))
+        cache.put(cacheKey,result)
+        return result
     }
 }

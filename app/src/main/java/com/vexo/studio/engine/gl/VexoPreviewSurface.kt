@@ -6,7 +6,7 @@ import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Text
+import com.vexo.studio.ui.theme.StudioText as Text
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay

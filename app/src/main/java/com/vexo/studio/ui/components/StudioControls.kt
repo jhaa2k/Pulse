@@ -27,7 +27,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
+import com.vexo.studio.ui.theme.StudioText as Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -41,6 +41,20 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import kotlin.math.atan2
+import kotlin.math.sqrt
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.font.FontWeight
@@ -374,28 +388,79 @@ fun <T> StudioChipSelector(
 fun StudioColorPickerRow(label:String,argb:Int,onColorChange:(Int)->Unit){
     val palette=LocalVexoPalette.current
     var open by remember{mutableStateOf(false)}
-    val presets=listOf(0xFFFFFFFF.toInt(),0xFFC6F36A.toInt(),0xFF38BDF8.toInt(),0xFFF59E0B.toInt(),0xFFEF4444.toInt(),0xFFA855F7.toInt(),0xFF10B981.toInt(),0xFF000000.toInt(),0)
-    Column(Modifier.fillMaxWidth().padding(vertical=3.dp)){
-        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.SpaceBetween){
-            Text(label.uppercase(),style=MaterialTheme.typography.labelSmall,color=palette.textSecondary,modifier=Modifier.weight(1f))
-            Text("#%08X".format(argb),style=MaterialTheme.typography.labelSmall,color=palette.textPrimary,modifier=Modifier.clickable{open=true}.padding(5.dp))
-            Box(Modifier.size(23.dp).background(Color(argb)).border(1.dp,palette.border).clickable{open=true})
-        }
-        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(5.dp)){
-            presets.forEach{col->Box(Modifier.size(23.dp).background(Color(col)).border(if(col==argb)2.dp else 1.dp,if(col==argb)palette.accent else palette.border).clickable{onColorChange(col)})}
-            Text("CUSTOM",style=MaterialTheme.typography.labelSmall,color=palette.accent,modifier=Modifier.clickable{open=true}.padding(5.dp))
-        }
+    Row(Modifier.fillMaxWidth().clip(palette.shape).clickable{open=true}.padding(vertical=6.dp,horizontal=2.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)){
+        Text(label,style=MaterialTheme.typography.labelSmall,color=palette.textSecondary,modifier=Modifier.weight(1f))
+        Text("#%08X".format(argb),style=MaterialTheme.typography.labelSmall,color=palette.textPrimary)
+        ColorSwatch(argb,Modifier.size(32.dp))
     }
-    if(open){
-        var hex by remember{mutableStateOf("%08X".format(argb))}
-        val raw=hex.trim().removePrefix("#")
-        val parsed=raw.toLongOrNull(16)?.takeIf{raw.length==6||raw.length==8}?.let{if(raw.length==6)(it or 0xFF000000L).toInt() else it.toInt()}
-        AlertDialog(onDismissRequest={open=false},title={Text("CUSTOM COLOR")},text={
-            Column{
-                OutlinedTextField(value=hex,onValueChange={hex=it.take(9)},label={Text("RRGGBB or AARRGGBB")},singleLine=true)
-                Box(Modifier.fillMaxWidth().height(32.dp).background(Color(parsed?:argb)).border(1.dp,palette.border))
-                if(parsed!=null) StudioSlider("Alpha",((parsed ushr 24)and 255)/255f,0f,1f,1f,"",.01f,onValueChange={v->hex="%08X".format(((v*255).toInt() shl 24) or (parsed and 0xFFFFFF))})
+    if(open)StudioColorWheelDialog(label,argb,{onColorChange(it);open=false},{open=false})
+}
+
+@Composable
+private fun ColorSwatch(argb:Int,modifier:Modifier=Modifier){
+    val p=LocalVexoPalette.current
+    Canvas(modifier.clip(RoundedCornerShape(8.dp)).border(1.dp,p.border,RoundedCornerShape(8.dp))){
+        val cell=6.dp.toPx()
+        for(y in 0..(size.height/cell).toInt())for(x in 0..(size.width/cell).toInt())drawRect(if((x+y)%2==0)Color(0xFFCCCCCC) else Color(0xFF777777),Offset(x*cell,y*cell),Size(cell,cell))
+        drawRect(Color(argb))
+    }
+}
+
+@Composable
+private fun StudioColorWheelDialog(label:String,argb:Int,onApply:(Int)->Unit,onCancel:()->Unit){
+    val p=LocalVexoPalette.current
+    val initial=remember(argb){FloatArray(3).also{android.graphics.Color.colorToHSV(argb,it)}}
+    var hue by remember(argb){mutableStateOf(initial[0])}
+    var saturation by remember(argb){mutableStateOf(initial[1])}
+    var value by remember(argb){mutableStateOf(initial[2])}
+    var alpha by remember(argb){mutableStateOf(((argb ushr 24)and 255)/255f)}
+    var hex by remember(argb){mutableStateOf("%08X".format(argb))}
+    val draft=android.graphics.Color.HSVToColor((alpha*255).roundToInt(),floatArrayOf(hue,saturation,value))
+    fun sync(){hex="%08X".format(android.graphics.Color.HSVToColor((alpha*255).roundToInt(),floatArrayOf(hue,saturation,value)))}
+    fun select(color:Int){val hsv=FloatArray(3);android.graphics.Color.colorToHSV(color,hsv);hue=hsv[0];saturation=hsv[1];value=hsv[2];alpha=((color ushr 24)and 255)/255f;sync()}
+    val raw=hex.trim().removePrefix("#")
+    val parsed=raw.toLongOrNull(16)?.takeIf{raw.length==6||raw.length==8}?.let{if(raw.length==6)(it or 0xFF000000L).toInt()else it.toInt()}
+    val presets=listOf(0xFFFFFFFF.toInt(),0xFFC5F84A.toInt(),0xFF38BDF8.toInt(),0xFFF59E0B.toInt(),0xFFEF4444.toInt(),0xFFA855F7.toInt(),0xFF10B981.toInt(),0xFF000000.toInt(),0)
+    val choose by rememberUpdatedState<(Offset,Float,Float)->Unit>({position,w,h->
+        val dx=position.x-w*.5f;val dy=position.y-h*.5f;val radius=minOf(w,h)*.5f
+        hue=((atan2(dy,dx)*180f/PI.toFloat())+360f)%360f
+        saturation=(sqrt(dx*dx+dy*dy)/radius.coerceAtLeast(1f)).coerceIn(0f,1f)
+        sync()
+    })
+    AlertDialog(onDismissRequest=onCancel,title={Text(label)},text={
+        Column(Modifier.fillMaxWidth().heightIn(max=490.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(8.dp),horizontalAlignment=Alignment.CenterHorizontally){
+            val rainbow=listOf(Color.Red,Color.Yellow,Color.Green,Color.Cyan,Color.Blue,Color.Magenta,Color.Red)
+            Canvas(Modifier.size(216.dp).pointerInput(Unit){detectTapGestures{choose(it,size.width.toFloat(),size.height.toFloat())}}.pointerInput(Unit){
+                detectDragGestures(onDragStart={choose(it,size.width.toFloat(),size.height.toFloat())}){change,_->choose(change.position,size.width.toFloat(),size.height.toFloat());change.consume()}
+            }){
+                val radius=size.minDimension*.5f
+                drawCircle(Brush.sweepGradient(rainbow,center),radius,center)
+                drawCircle(Brush.radialGradient(listOf(Color.White,Color.Transparent),center,radius),radius,center)
+                if(value<1f)drawCircle(Color.Black.copy(alpha=1f-value),radius,center)
+                val radians=hue*PI.toFloat()/180f
+                val mark=center+Offset(cos(radians),sin(radians))*radius*saturation
+                drawCircle(Color.Black,8.dp.toPx(),mark,style=Stroke(3.dp.toPx()))
+                drawCircle(Color.White,8.dp.toPx(),mark,style=Stroke(1.5.dp.toPx()))
             }
-        },confirmButton={TextButton(enabled=parsed!=null,onClick={parsed?.let(onColorChange);open=false}){Text("APPLY")}},dismissButton={TextButton(onClick={open=false}){Text("CANCEL")}})
-    }
+            StudioSlider("Hue",hue,0f,359.9f,0f,"°",1f,onValueChange={hue=it;sync()})
+            StudioSlider("Saturation",saturation,0f,1f,1f,"",.01f,onValueChange={saturation=it;sync()})
+            StudioSlider("Brightness",value,0f,1f,1f,"",.01f,onValueChange={value=it;sync()})
+            StudioSlider("Opacity",alpha,0f,1f,1f,"",.01f,onValueChange={alpha=it;sync()})
+            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp),verticalAlignment=Alignment.CenterVertically){
+                Column(Modifier.weight(1f)){Text("Original",style=MaterialTheme.typography.labelSmall);ColorSwatch(argb,Modifier.fillMaxWidth().height(32.dp))}
+                Column(Modifier.weight(1f)){Text("New",style=MaterialTheme.typography.labelSmall);ColorSwatch(draft,Modifier.fillMaxWidth().height(32.dp))}
+            }
+            OutlinedTextField(hex,{input->
+                hex=input.take(9)
+                val clean=hex.trim().removePrefix("#")
+                clean.toLongOrNull(16)?.takeIf{clean.length==6||clean.length==8}?.let{num->
+                    val col=if(clean.length==6)(num or 0xFF000000L).toInt()else num.toInt()
+                    val hsv=FloatArray(3);android.graphics.Color.colorToHSV(col,hsv);hue=hsv[0];saturation=hsv[1];value=hsv[2];alpha=((col ushr 24)and 255)/255f
+                }
+            },label={Text("HEX · RRGGBB / AARRGGBB")},singleLine=true,isError=parsed==null,modifier=Modifier.fillMaxWidth())
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(5.dp)){
+                presets.forEach{col->ColorSwatch(col,Modifier.size(29.dp).clickable{select(col)})}
+            }
+        }
+    },confirmButton={TextButton(enabled=parsed!=null,onClick={parsed?.let(onApply)}){Text("APPLY")}},dismissButton={TextButton(onClick=onCancel){Text("CANCEL")}})
 }

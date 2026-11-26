@@ -48,7 +48,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
+import com.vexo.studio.ui.theme.StudioText as Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -74,6 +74,17 @@ import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Surface
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.draw.clip
 import androidx.compose.runtime.DisposableEffect
 import com.vexo.studio.ui.StudioViewModel
 import com.vexo.studio.ui.screens.AudioLibraryScreen
@@ -248,41 +259,29 @@ private fun VexoRootApp(vm: StudioViewModel) {
                 if (uiState.navDestination!=NavDestination.STUDIO && playback.queue.isNotEmpty()) {
                     com.vexo.studio.ui.screens.CompactTransportBar(playback, {vm.playbackController.togglePlayPause()}, {vm.playbackController.previous()}, {vm.playbackController.next()}, {vm.playbackController.seekTo(it)}, {audioPicker.launch(arrayOf("audio/*"))}, Modifier.fillMaxWidth().padding(horizontal=8.dp))
                 }
-                Row(
-                    modifier = Modifier.fillMaxWidth().background(palette.panel).border(1.dp, palette.border)
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(2.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    StudioTab.entries.forEach{tab->
-                        val active=uiState.navDestination==NavDestination.STUDIO&&uiState.studioTab==tab
-                        val glyph=when(tab){StudioTab.LAYERS->Icons.Default.Layers;StudioTab.PROPERTIES->Icons.Default.Tune;StudioTab.ASSETS->Icons.Default.Image;StudioTab.PRESETS->Icons.Default.Dashboard}
-                        Column(Modifier.semantics{selected=active}.clickable{vm.navigateTo(NavDestination.STUDIO);vm.selectStudioTab(tab)}.padding(horizontal=9.dp,vertical=5.dp),horizontalAlignment=Alignment.CenterHorizontally){
-                            Icon(glyph,tab.label,tint=if(active)palette.accent else palette.textSecondary,modifier=Modifier.size(18.dp))
-                            Text(tab.label,style=MaterialTheme.typography.labelSmall,color=if(active)palette.accent else palette.textSecondary,maxLines=1)
+                val navState=rememberLazyListState()
+                val destinations=NavDestination.entries.filter{it!=NavDestination.STUDIO}
+                val activeIndex=if(uiState.navDestination==NavDestination.STUDIO)StudioTab.entries.indexOf(uiState.studioTab) else StudioTab.entries.size+destinations.indexOf(uiState.navDestination)
+                LaunchedEffect(activeIndex){if(activeIndex>=0&&navState.layoutInfo.visibleItemsInfo.none{it.index==activeIndex})navState.animateScrollToItem(activeIndex)}
+                Surface(modifier=Modifier.fillMaxWidth().padding(horizontal=6.dp,vertical=4.dp),shape=RoundedCornerShape(18.dp),color=palette.panel,tonalElevation=2.dp,shadowElevation=3.dp){
+                    LazyRow(state=navState,modifier=Modifier.fillMaxWidth().padding(horizontal=4.dp,vertical=3.dp),
+                        horizontalArrangement=Arrangement.spacedBy(2.dp),verticalAlignment=Alignment.CenterVertically){
+                        items(StudioTab.entries.size){i->
+                            val tab=StudioTab.entries[i]
+                            val glyph=when(tab){StudioTab.LAYERS->Icons.Default.Layers;StudioTab.PROPERTIES->Icons.Default.Tune;StudioTab.ASSETS->Icons.Default.Image;StudioTab.PRESETS->Icons.Default.Dashboard}
+                            StudioNavItem(tab.label,glyph,uiState.navDestination==NavDestination.STUDIO&&uiState.studioTab==tab){vm.navigateTo(NavDestination.STUDIO);vm.selectStudioTab(tab)}
                         }
-                    }
-                    val destinations=NavDestination.entries.filter{it!=NavDestination.STUDIO}
-                    destinations.forEach { dest ->
-                        val active = dest == uiState.navDestination
-                        val icon = when(dest) {
-                            NavDestination.STUDIO -> Icons.Default.Tune
-                            NavDestination.PROJECTS -> Icons.Default.FolderOpen
-                            NavDestination.AUDIO -> Icons.Default.LibraryMusic
-                            NavDestination.TEMPLATES -> Icons.Default.Dashboard
-                            NavDestination.EXPORT -> Icons.Default.FileUpload
-                            NavDestination.SETTINGS -> Icons.Default.Settings
-                        }
-                        Column(
-                            modifier = Modifier.semantics { selected = active }.clickable { vm.navigateTo(dest) }
-                                .heightIn(min = 42.dp).padding(horizontal = 8.dp, vertical = 3.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(3.dp)
-                        ) {
-                            Box(Modifier.background(if(active) palette.accent else Color.Transparent, palette.shape).padding(horizontal = 8.dp, vertical = 2.dp)) {
-                                Icon(icon, contentDescription = dest.label, tint = if(active) palette.accentOn else palette.textSecondary, modifier = Modifier.size(18.dp))
+                        items(destinations.size){i->
+                            val dest=destinations[i]
+                            val glyph=when(dest){
+                                NavDestination.STUDIO->Icons.Default.Tune
+                                NavDestination.PROJECTS->Icons.Default.FolderOpen
+                                NavDestination.AUDIO->Icons.Default.LibraryMusic
+                                NavDestination.TEMPLATES->Icons.Default.Dashboard
+                                NavDestination.EXPORT->Icons.Default.FileUpload
+                                NavDestination.SETTINGS->Icons.Default.Settings
                             }
-                            Text(dest.label, style = MaterialTheme.typography.labelSmall, color = if(active) palette.accent else palette.textSecondary, maxLines = 1)
+                            StudioNavItem(dest.label,glyph,uiState.navDestination==dest){vm.navigateTo(dest)}
                         }
                     }
                 }
@@ -290,35 +289,8 @@ private fun VexoRootApp(vm: StudioViewModel) {
             }
         }
     ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-        ) {
-            val banner = playback.errorMessage ?: uiState.statusBanner
-            if (banner != null) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(palette.panelElevated)
-                        .border(1.dp, palette.accent, palette.shape)
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(banner, style = MaterialTheme.typography.bodySmall, color = palette.textPrimary, modifier = Modifier.weight(1f))
-                    Text(
-                        "DISMISS",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = palette.accent,
-                        modifier = Modifier.clickable {
-                            vm.clearBanner()
-                            vm.playbackController.clearError()
-                        }
-                    )
-                }
-            }
-
+        Box(Modifier.fillMaxSize().padding(padding)){
+            Column(Modifier.fillMaxSize()){
             when (uiState.navDestination) {
                 NavDestination.STUDIO -> EditorScreen(
                     vm = vm,
@@ -350,6 +322,19 @@ private fun VexoRootApp(vm: StudioViewModel) {
                 )
                 NavDestination.SETTINGS -> SettingsScreen(vm = vm, settings = settings)
             }
+            }
+            val banner=playback.errorMessage?:uiState.statusBanner
+            if(banner!=null){
+                val isError=playback.errorMessage!=null||banner.contains("failed",true)||banner.contains("error",true)
+                val tint=if(isError)palette.danger else palette.accent
+                Surface(modifier=Modifier.align(Alignment.TopCenter).padding(horizontal=12.dp,vertical=8.dp),shape=RoundedCornerShape(14.dp),color=palette.panelElevated,shadowElevation=8.dp,border=androidx.compose.foundation.BorderStroke(1.dp,tint.copy(alpha=.65f))){
+                    Row(Modifier.padding(start=12.dp,end=4.dp,top=3.dp,bottom=3.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)){
+                        Icon(if(isError)Icons.Default.Info else Icons.Default.CheckCircle,null,tint=tint,modifier=Modifier.size(20.dp))
+                        Text(banner,style=MaterialTheme.typography.bodySmall,color=palette.textPrimary,modifier=Modifier.weight(1f,fill=false),maxLines=4,overflow=TextOverflow.Ellipsis)
+                        IconButton(onClick={vm.clearBanner();vm.playbackController.clearError()},modifier=Modifier.size(36.dp)){Icon(Icons.Default.Close,"Dismiss message",tint=palette.textSecondary,modifier=Modifier.size(18.dp))}
+                    }
+                }
+            }
         }
     }
 
@@ -373,5 +358,16 @@ private fun VexoRootApp(vm: StudioViewModel) {
                 TextButton(onClick = { showRenameProject = false }) { Text("CANCEL") }
             }
         )
+    }
+}
+
+@Composable
+private fun StudioNavItem(label:String,glyph:ImageVector,active:Boolean,onClick:()->Unit){
+    val p=LocalVexoPalette.current
+    Column(Modifier.widthIn(min=70.dp).heightIn(min=58.dp).clip(RoundedCornerShape(14.dp)).semantics{selected=active}.clickable(onClick=onClick).padding(horizontal=7.dp,vertical=5.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(3.dp)){
+        Box(Modifier.widthIn(min=44.dp).height(29.dp).background(if(active)p.accent else Color.Transparent,RoundedCornerShape(12.dp)),contentAlignment=Alignment.Center){
+            Icon(glyph,label,tint=if(active)p.accentOn else p.textSecondary,modifier=Modifier.size(21.dp))
+        }
+        Text(label,style=MaterialTheme.typography.labelSmall,fontWeight=if(active)FontWeight.SemiBold else FontWeight.Medium,color=if(active)p.accent else p.textSecondary,maxLines=1)
     }
 }
