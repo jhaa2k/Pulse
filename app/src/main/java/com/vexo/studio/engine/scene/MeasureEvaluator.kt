@@ -25,14 +25,7 @@ object KeyframeEvaluator {
             if (timeMs in a.timeMs until b.timeMs) {
                 val span = (b.timeMs - a.timeMs).coerceAtLeast(1L)
                 val t = ((timeMs - a.timeMs).toFloat() / span.toFloat()).coerceIn(0f, 1f)
-                return when (a.interpolation) {
-                    InterpolationType.HOLD -> a.value
-                    InterpolationType.LINEAR -> a.value + (b.value - a.value) * t
-                    InterpolationType.EASE_IN_OUT -> {
-                        val eased = t * t * (3f - 2f * t)
-                        a.value + (b.value - a.value) * eased
-                    }
-                }
+                return a.value + (b.value - a.value) * AnimationCurves.ease(a.interpolation,t)
             }
         }
         return sorted.last().value

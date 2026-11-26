@@ -276,6 +276,36 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         selectComposition(0)
     }
 
+    private val motionPrefs=app.getSharedPreferences("motion_presets",android.content.Context.MODE_PRIVATE)
+    private val motionSerializer=kotlinx.serialization.builtins.ListSerializer(com.vexo.studio.engine.scene.SavedMotionPreset.serializer())
+    private val _motionPresets=kotlinx.coroutines.flow.MutableStateFlow(runCatching{
+        kotlinx.serialization.json.Json.decodeFromString(motionSerializer,motionPrefs.getString("presets","[]")?:"[]")
+    }.getOrDefault(emptyList()).take(20))
+    val motionPresets=_motionPresets.asStateFlow()
+
+    fun saveMotionPreset(layerId:String,name:String){
+        if(name.isBlank())return
+        val preset=com.vexo.studio.engine.scene.MotionPresets.capture(name,_uiState.value.project.keyframes.filter{it.targetLayerId==layerId})
+        if(preset==null){_uiState.value=_uiState.value.copy(statusBanner="Create transform keyframes first");return}
+        val list=(_motionPresets.value.filterNot{it.name.equals(preset.name,true)}+preset).takeLast(20)
+        motionPrefs.edit().putString("presets",kotlinx.serialization.json.Json.encodeToString(motionSerializer,list)).apply()
+        _motionPresets.value=list
+        _uiState.value=_uiState.value.copy(statusBanner="Animation preset saved")
+    }
+    fun deleteMotionPreset(name:String){
+        val list=_motionPresets.value.filterNot{it.name==name}
+        motionPrefs.edit().putString("presets",kotlinx.serialization.json.Json.encodeToString(motionSerializer,list)).apply()
+        _motionPresets.value=list
+    }
+    fun applyMotionPreset(layerId:String,recipe:com.vexo.studio.engine.scene.MotionRecipe?,savedName:String?,start:Long,duration:Long,strength:Float){
+        val p=_uiState.value.project
+        val layer=p.compositions.flatMap{it.layers}.firstOrNull{it.common.id==layerId&&!it.common.locked}?:return
+        val tracks=if(recipe!=null)com.vexo.studio.engine.scene.MotionPresets.builtin(recipe,layer.common,start,duration,strength)
+        else _motionPresets.value.firstOrNull{it.name==savedName}?.let{com.vexo.studio.engine.scene.MotionPresets.applySaved(it,layer.common,start,duration)}.orEmpty()
+        if(tracks.isEmpty())return
+        commitProjectChange(p.copy(keyframes=com.vexo.studio.engine.scene.MotionPresets.replace(p.keyframes,tracks)))
+    }
+
     fun putTransformKeyframe(layerId:String,key:String,time:Long,value:Float,mode:com.vexo.studio.model.InterpolationType){
         if(key !in com.vexo.studio.engine.scene.TransformAnimation.keys||!value.isFinite())return
         val p=_uiState.value.project

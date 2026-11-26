@@ -899,6 +899,7 @@ private fun PropertiesTab(
             if(t.endMs>0&&t.endMs<=t.startMs)Text("End must be after start",color=palette.danger)
         }
         ExpandableSectionHeader("Keyframe animation",expandedSections["keyframes"]==true,{toggleAccordion(expandedSections,"keyframes")}){
+            MotionPresetPanel(vm,layer)
             TransformKeyframePanel(vm,uiState,layer)
         }
         ExpandableSectionHeader("Advanced audio bindings", expandedSections["bindings"] == true, { toggleAccordion(expandedSections, "bindings") }) {
@@ -1777,6 +1778,7 @@ private fun TransformKeyframePanel(vm:StudioViewModel,ui:StudioUiState,layer:Lay
     val duration=maxOf(1L,playback.durationMs,frames.lastOrNull()?.timeMs?:0L)
     StudioChipSelector("Property",keys,key,{it}){key=it}
     StudioChipSelector("Interpolation",com.vexo.studio.model.InterpolationType.entries,mode,{it.name}){mode=it}
+    CurvePreview(mode)
     Text("Playhead: "+formatDuration(playback.positionMs),style=MaterialTheme.typography.labelMedium)
     Canvas(Modifier.fillMaxWidth().height(38.dp).background(palette.panelElevated).pointerInput(duration){
         detectTapGestures{p->vm.playbackController.seekTo((p.x/size.width.coerceAtLeast(1)*duration).toLong().coerceIn(0L,duration))}
@@ -1828,4 +1830,51 @@ private fun TimingNumber(label:String,ms:Long,commit:(Long)->Unit){
         OutlinedTextField(draft,{draft=it.take(16)},label={Text(label+" (s)")},singleLine=true,modifier=Modifier.weight(1f),isError=parsed==null)
         TextButton(enabled=parsed!=null,onClick={parsed?.let{commit((it*1000).toLong())}}){Text("SET")}
     }
+}
+
+@Composable
+private fun CurvePreview(mode:com.vexo.studio.model.InterpolationType){
+    val palette=LocalVexoPalette.current
+    Canvas(Modifier.fillMaxWidth().height(64.dp).background(palette.panelElevated)){
+        val pad=6.dp.toPx()
+        fun y(v:Float)=size.height-pad-(v+.15f)/1.3f*(size.height-2*pad)
+        drawLine(palette.border,Offset(pad,y(0f)),Offset(size.width-pad,y(0f)),1.dp.toPx())
+        drawLine(palette.border,Offset(pad,y(1f)),Offset(size.width-pad,y(1f)),1.dp.toPx())
+        val path=androidx.compose.ui.graphics.Path()
+        for(i in 0..64){
+            val t=i/64f
+            val x=pad+(size.width-2*pad)*t
+            val y=y(com.vexo.studio.engine.scene.AnimationCurves.ease(mode,t))
+            if(i==0)path.moveTo(x,y)else path.lineTo(x,y)
+        }
+        drawPath(path,palette.accent,style=androidx.compose.ui.graphics.drawscope.Stroke(2.dp.toPx()))
+    }
+}
+
+@UnstableApi
+@Composable
+private fun MotionPresetPanel(vm:StudioViewModel,layer:LayerNode){
+    val playback by vm.playbackState.collectAsState()
+    val saved by vm.motionPresets.collectAsState()
+    var recipe by remember{mutableStateOf(com.vexo.studio.engine.scene.MotionRecipe.FADE_IN)}
+    var duration by remember{mutableStateOf(1f)}
+    var strength by remember{mutableStateOf(1f)}
+    var selectedSaved by remember{mutableStateOf("")}
+    var name by remember{mutableStateOf("")}
+    var confirm by remember{mutableStateOf(false)}
+    var useSaved by remember{mutableStateOf(false)}
+    StudioChipSelector("Motion preset",com.vexo.studio.engine.scene.MotionRecipe.entries,recipe,{it.label}){recipe=it}
+    StudioSlider("Preset duration",duration,.1f,10f,1f,"s",.1f,onValueChange={duration=it})
+    StudioSlider("Strength",strength,0f,2f,1f,"x",.05f,onValueChange={strength=it})
+    TextButton(onClick={useSaved=false;confirm=true}){Text("APPLY AT PLAYHEAD")}
+    OutlinedTextField(name,{name=it.take(60)},label={Text("Save keyframes as preset")},singleLine=true,modifier=Modifier.fillMaxWidth())
+    TextButton(enabled=name.isNotBlank(),onClick={vm.saveMotionPreset(layer.common.id,name);name=""}){Text("SAVE MOTION PRESET")}
+    if(saved.isNotEmpty()){
+        StudioChipSelector("Saved motion",saved.map{it.name},selectedSaved,{it}){selectedSaved=it}
+        Row(Modifier.horizontalScroll(rememberScrollState())){
+            TextButton(enabled=saved.any{it.name==selectedSaved},onClick={useSaved=true;confirm=true}){Text("APPLY SAVED")}
+            TextButton(enabled=saved.any{it.name==selectedSaved},onClick={vm.deleteMotionPreset(selectedSaved);selectedSaved=""}){Text("REMOVE SAVED")}
+        }
+    }
+    if(confirm)AlertDialog(onDismissRequest={confirm=false},title={Text("APPLY ANIMATION?")},text={Text("Replaces existing keyframes for the affected transform properties. Saved presets use absolute values and the selected duration.")},confirmButton={TextButton(onClick={vm.applyMotionPreset(layer.common.id,if(useSaved)null else recipe,if(useSaved)selectedSaved else null,playback.positionMs,(duration*1000).toLong(),strength);confirm=false}){Text("APPLY")}},dismissButton={TextButton(onClick={confirm=false}){Text("CANCEL")}})
 }

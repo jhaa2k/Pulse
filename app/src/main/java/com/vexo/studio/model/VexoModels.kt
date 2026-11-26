@@ -259,7 +259,7 @@ enum class MotionSource(val aveeName: String, val label: String) {
 }
 
 @Serializable
-enum class InterpolationType { HOLD, LINEAR, EASE_IN_OUT }
+enum class InterpolationType { HOLD, LINEAR, EASE_IN_OUT, EASE_IN, EASE_OUT, SINE_IN_OUT, BACK_OUT, BOUNCE_OUT }
 
 @Serializable
 data class Keyframe(
