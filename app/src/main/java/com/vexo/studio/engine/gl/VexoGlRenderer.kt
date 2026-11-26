@@ -63,7 +63,8 @@ data class RenderSceneSnapshot(
     val zoom: Float = 1f,
     val panX: Float = 0f,
     val panY: Float = 0f,
-    val showSafeArea: Boolean = false
+    val showSafeArea: Boolean = false,
+    val previewCompositionIndex: Int = 0
 )
 
 /**
@@ -225,10 +226,11 @@ class VexoGlRenderer(
 
         val resolved = SceneGraph.resolve(scene.project)
         val compTextures = mutableMapOf<Int, Int>()
+        val displayIndex=if(isExportRenderer)0 else scene.previewCompositionIndex.takeIf{idx->scene.project.compositions.any{it.index==idx}}?:0
 
         // Render sub-compositions first (index != 0) into offscreen FBOs
         for (comp in resolved.order) {
-            if (comp.index == 0) continue
+            if (comp.index == 0 || comp.index == displayIndex) continue
             val fbo = fboPool.obtain("comp_${comp.index}", viewportW, viewportH)
             GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, fbo.fboId)
             GLES20.glViewport(0, 0, fbo.width, fbo.height)
@@ -242,7 +244,7 @@ class VexoGlRenderer(
         GLES20.glViewport(0, 0, viewportW, viewportH)
         clearBackground(scene.project.canvas.backgroundColorArgb)
 
-        val finalComp = resolved.order.firstOrNull { it.index == 0 }
+        val finalComp = resolved.order.firstOrNull { it.index == displayIndex }
             ?: scene.project.compositions.firstOrNull()
         if (finalComp != null) {
             renderComposition(finalComp, scene, deltaSec, viewportW, viewportH, compTextures)
@@ -290,7 +292,7 @@ class VexoGlRenderer(
         h: Int,
         compTextures: Map<Int, Int>
     ) {
-        val c = layer.common
+        val c = com.vexo.studio.engine.scene.TransformAnimation.evaluate(layer.common,scene.project.keyframes,scene.trackMeta.positionMs)
         val providerIdx = when (val cfg = layer.config) {
             is LayerConfig.Bars -> cfg.audioProviderIndex
             else -> c.measurePos.providerIndex

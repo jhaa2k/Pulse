@@ -49,6 +49,7 @@ data class StudioUiState(
     val studioTab: StudioTab = StudioTab.LAYERS,
     val project: VexoProject = VexoTemplates.monochromeStudio(),
     val selectedCompositionIndex: Int = 0,
+    val previewSelectedComposition: Boolean = false,
     val selectedLayerId: String? = null,
     val selectedProviderIndex: Int = 1,
     val projects: List<ProjectSummary> = emptyList(),
@@ -153,7 +154,8 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                     zoom = ui.previewZoom,
                     panX = ui.previewPanX,
                     panY = ui.previewPanY,
-                    showSafeArea = ui.project.canvas.showSafeAreaGuides
+                    showSafeArea = ui.project.canvas.showSafeAreaGuides,
+                    previewCompositionIndex = if(ui.previewSelectedComposition)ui.selectedCompositionIndex else 0
                 )
             }
         )
@@ -218,12 +220,69 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         _uiState.value = _uiState.value.copy(selectedLayerId = layerId)
     }
 
+    fun toggleCompositionPreview(){_uiState.value=_uiState.value.copy(previewSelectedComposition=!_uiState.value.previewSelectedComposition)}
+
     fun addComposition() {
         val p = _uiState.value.project
+        if(p.compositions.size>=64){_uiState.value=_uiState.value.copy(statusBanner="Maximum 64 compositions");return}
         val nextIdx = (p.compositions.maxOfOrNull { it.index } ?: 0) + 1
         val newComp = CompositionNode(index = nextIdx, name = "Composition $nextIdx")
         commitProjectChange(p.copy(compositions = p.compositions + newComp))
         _uiState.value = _uiState.value.copy(selectedCompositionIndex = nextIdx, selectedLayerId = null)
+    }
+
+    fun renameComposition(index:Int,name:String){
+        val clean=name.trim().take(80)
+        if(clean.isEmpty())return
+        val p=_uiState.value.project
+        commitProjectChange(p.copy(compositions=p.compositions.map{if(it.index==index)it.copy(name=clean) else it}))
+    }
+    fun duplicateComposition(index:Int){
+        val p=_uiState.value.project
+        if(p.compositions.size>=64)return
+        val src=p.compositions.firstOrNull{it.index==index}?:return
+        if(p.compositions.sumOf{it.layers.size}+src.layers.size>2048)return
+        val ids=src.layers.associate{it.common.id to UUID.randomUUID().toString()}
+        val next=(p.compositions.maxOfOrNull{it.index}?:0)+1
+        val copy=src.copy(id=UUID.randomUUID().toString(),index=next,name=src.name+" Copy",layers=src.layers.map{it.copy(common=it.common.copy(id=ids.getValue(it.common.id)))},providerIndices=emptyList())
+        commitProjectChange(p.copy(compositions=p.compositions+copy,keyframes=p.keyframes+p.keyframes.filter{it.targetLayerId in ids}.map{it.copy(targetLayerId=ids.getValue(it.targetLayerId))}))
+        selectComposition(next)
+    }
+    fun deleteComposition(index:Int){
+        if(index==0)return
+        val p=_uiState.value.project
+        val target=p.compositions.firstOrNull{it.index==index}?:return
+        val refs=p.compositions.filter{it.index!=index}.filter{comp->
+            comp.layers.any{l->index in com.vexo.studio.engine.scene.SceneGraph.referencesOf(l.config)}
+        }
+        if(refs.isNotEmpty()){
+            _uiState.value=_uiState.value.copy(statusBanner="Remove references from "+refs.joinToString{it.name}+" before deleting")
+            return
+        }
+        val ids=target.layers.map{it.common.id}.toSet()
+        commitProjectChange(p.copy(compositions=p.compositions.filterNot{it.index==index},keyframes=p.keyframes.filterNot{it.targetLayerId in ids}))
+        selectComposition(0)
+    }
+
+    fun putTransformKeyframe(layerId:String,key:String,time:Long,value:Float,mode:com.vexo.studio.model.InterpolationType){
+        if(key !in com.vexo.studio.engine.scene.TransformAnimation.keys||!value.isFinite())return
+        val p=_uiState.value.project
+        if(p.compositions.none{c->c.layers.any{it.common.id==layerId&&!it.common.locked}})return
+        val property="transform."+key
+        val track=p.keyframes.firstOrNull{it.targetLayerId==layerId&&it.propertyKey==property}
+        val t=time.coerceAtLeast(0)
+        val frames=(track?.keyframes.orEmpty().filterNot{it.timeMs==t}+com.vexo.studio.model.Keyframe(t,value,mode)).sortedBy{it.timeMs}
+        if(frames.size>500)return
+        commitProjectChange(p.copy(keyframes=p.keyframes.filterNot{it.targetLayerId==layerId&&it.propertyKey==property}+com.vexo.studio.model.KeyframeTrack(layerId,property,frames)))
+    }
+    fun removeTransformKeyframe(layerId:String,key:String,time:Long?){
+        val p=_uiState.value.project
+        val property="transform."+key
+        val tracks=p.keyframes.mapNotNull{t->
+            if(t.targetLayerId!=layerId||t.propertyKey!=property)t
+            else if(time==null)null else t.copy(keyframes=t.keyframes.filterNot{it.timeMs==time}).takeIf{it.keyframes.isNotEmpty()}
+        }
+        commitProjectChange(p.copy(keyframes=tracks))
     }
 
     fun addLayer(type: LayerType) {
@@ -268,7 +327,8 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                 comp.copy(layers = list)
             }
         }
-        commitProjectChange(p.copy(compositions = updatedComps))
+        val clonedTracks=p.keyframes.filter{it.targetLayerId==layerId}.mapNotNull{t->clonedId?.let{t.copy(targetLayerId=it)}}
+        commitProjectChange(p.copy(compositions = updatedComps,keyframes=p.keyframes+clonedTracks))
         if (clonedId != null) _uiState.value = _uiState.value.copy(selectedLayerId = clonedId)
     }
 
@@ -280,7 +340,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                 comp.copy(layers = comp.layers.filterNot { it.common.id == layerId })
             } else comp
         }
-        commitProjectChange(p.copy(compositions = updatedComps))
+        commitProjectChange(p.copy(compositions = updatedComps,keyframes=p.keyframes.filterNot{it.targetLayerId==layerId}))
         val remaining = updatedComps.firstOrNull { it.index == compIdx }?.layers
         _uiState.value = _uiState.value.copy(selectedLayerId = remaining?.firstOrNull()?.common?.id)
     }
@@ -337,12 +397,17 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
 
     fun addAudioProvider() {
         val p = _uiState.value.project
+        if(p.audioProviders.size>=16){_uiState.value=_uiState.value.copy(statusBanner="Maximum 16 audio providers");return}
         val nextIdx = (p.audioProviders.maxOfOrNull { it.index } ?: 0) + 1
         val next = p.copy(audioProviders = p.audioProviders + AudioProviderConfig(index = nextIdx, tag = "Provider $nextIdx"))
         commitProjectChange(next)
         _uiState.value = _uiState.value.copy(selectedProviderIndex = nextIdx)
     }
 
+    fun renameAudioProvider(index:Int,name:String){
+        val clean=name.trim().take(80)
+        if(clean.isNotBlank())updateAudioProvider(index){it.copy(tag=clean)}
+    }
     fun selectAudioProvider(index: Int) {
         _uiState.value = _uiState.value.copy(selectedProviderIndex = index)
     }

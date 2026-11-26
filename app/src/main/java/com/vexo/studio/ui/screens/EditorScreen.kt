@@ -409,6 +409,8 @@ private fun LayersTab(
 ) {
     val palette = LocalVexoPalette.current
     var showAddLayerDialog by remember { mutableStateOf(false) }
+    var renameComp by remember{mutableStateOf(false)}
+    var deleteComp by remember{mutableStateOf(false)}
     var renameLayerTarget by remember { mutableStateOf<LayerNode?>(null) }
     var deleteLayerTarget by remember { mutableStateOf<LayerNode?>(null) }
 
@@ -426,14 +428,18 @@ private fun LayersTab(
                 DropdownMenu(expanded = compositionMenu, onDismissRequest = { compositionMenu = false }) {
                     uiState.project.compositions.forEach { comp -> DropdownMenuItem(text = { Text(comp.name) }, onClick = { vm.selectComposition(comp.index); compositionMenu = false }) }
                     DropdownMenuItem(text = { Text("New composition") }, onClick = { vm.addComposition(); compositionMenu = false })
+                    DropdownMenuItem(text={Text("Rename composition")},onClick={compositionMenu=false;renameComp=true})
+                    DropdownMenuItem(text={Text("Duplicate composition")},onClick={compositionMenu=false;vm.duplicateComposition(activeComp.index)})
+                    if(activeComp.index!=0)DropdownMenuItem(text={Text("Delete composition",color=palette.danger)},onClick={compositionMenu=false;deleteComp=true})
                 }
             }
             TextButton(onClick = { showAddLayerDialog = true }) { Icon(Icons.Default.Add, null, tint = palette.accent); Text("Layer", color = palette.accent) }
         }
+        StudioToggleRow("Preview selected composition",uiState.previewSelectedComposition,{_:Boolean->vm.toggleCompositionPreview()})
         LazyColumn(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 10.dp),
+                .weight(1f).fillMaxWidth()
+                .padding(horizontal = 6.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             items(activeComp.layers, key = { it.common.id }) { layer ->
@@ -496,6 +502,11 @@ private fun LayersTab(
         }
     }
 
+    if(renameComp){
+        var name by remember{mutableStateOf(activeComp.name)}
+        AlertDialog(onDismissRequest={renameComp=false},title={Text("RENAME COMPOSITION")},text={OutlinedTextField(name,{name=it},singleLine=true)},confirmButton={TextButton(onClick={vm.renameComposition(activeComp.index,name);renameComp=false}){Text("SAVE")}},dismissButton={TextButton(onClick={renameComp=false}){Text("CANCEL")}})
+    }
+    if(deleteComp)AlertDialog(onDismissRequest={deleteComp=false},title={Text("DELETE COMPOSITION?")},text={Text("Referenced compositions are protected from deletion.")},confirmButton={TextButton(onClick={vm.deleteComposition(activeComp.index);deleteComp=false}){Text("DELETE")}},dismissButton={TextButton(onClick={deleteComp=false}){Text("CANCEL")}})
     if (showAddLayerDialog) {
         AlertDialog(
             onDismissRequest = { showAddLayerDialog = false },
@@ -788,6 +799,9 @@ private fun PropertiesTab(
             )
         }
 
+        ExpandableSectionHeader("Keyframe animation",expandedSections["keyframes"]==true,{toggleAccordion(expandedSections,"keyframes")}){
+            TransformKeyframePanel(vm,uiState,layer)
+        }
         ExpandableSectionHeader("Advanced audio bindings", expandedSections["bindings"] == true, { toggleAccordion(expandedSections, "bindings") }) {
             val ids = uiState.project.audioProviders.map { it.index }
             StudioChipSelector("Position Provider", ids, layer.common.measurePos.providerIndex, { "#$it" }) { v -> vm.updateLayer(layer.common.id) { it.copy(common=it.common.copy(measurePos=it.common.measurePos.copy(providerIndex=v))) } }
@@ -1546,4 +1560,31 @@ private fun MeasureBindingControls(label:String,cfg:com.vexo.studio.model.Measur
     StudioSlider("Amount X",cfg.amountA,-8f,8f,0f,"",.01f,onValueChange={v->begin();onChange(cfg.copy(amountA=v),false)},onCommit=end)
     StudioSlider("Amount Y",cfg.amountB,-8f,8f,0f,"",.01f,onValueChange={v->begin();onChange(cfg.copy(amountB=v),false)},onCommit=end)
     StudioSlider("Trigger Threshold",cfg.triggerThreshold,0f,.99f,0f,"",.01f,onValueChange={v->begin();onChange(cfg.copy(triggerThreshold=v),false)},onCommit=end)
+}
+
+@UnstableApi
+@Composable
+private fun TransformKeyframePanel(vm:StudioViewModel,ui:StudioUiState,layer:LayerNode){
+    val playback by vm.playbackState.collectAsState()
+    val keys=com.vexo.studio.engine.scene.TransformAnimation.keys
+    var key by rememberSaveable(layer.common.id){mutableStateOf("posX")}
+    var mode by remember{mutableStateOf(com.vexo.studio.model.InterpolationType.LINEAR)}
+    var draft by remember(layer.common.id,key){mutableStateOf(com.vexo.studio.engine.scene.TransformAnimation.value(layer.common,key).toString())}
+    val track=ui.project.keyframes.firstOrNull{it.targetLayerId==layer.common.id&&it.propertyKey=="transform."+key}
+    StudioChipSelector("Property",keys,key,{it}){key=it}
+    StudioChipSelector("Interpolation",com.vexo.studio.model.InterpolationType.entries,mode,{it.name}){mode=it}
+    Text("Playhead: "+formatDuration(playback.positionMs),style=MaterialTheme.typography.labelMedium)
+    OutlinedTextField(draft,{draft=it.take(24)},label={Text("Value at playhead")},singleLine=true,modifier=Modifier.fillMaxWidth())
+    val value=draft.toFloatOrNull()?.takeIf{it.isFinite()}
+    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){
+        TextButton(enabled=value!=null,onClick={value?.let{vm.putTransformKeyframe(layer.common.id,key,playback.positionMs,it,mode)}}){Text("ADD / UPDATE KEY")}
+        TextButton(enabled=track!=null,onClick={vm.removeTransformKeyframe(layer.common.id,key,null)}){Text("CLEAR")}
+    }
+    track?.keyframes?.take(500)?.forEach{frame->
+        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
+            Text(formatDuration(frame.timeMs)+" · "+("%.3f".format(frame.value))+" · "+frame.interpolation.name,modifier=Modifier.weight(1f),style=MaterialTheme.typography.labelSmall)
+            TextButton(onClick={vm.playbackController.seekTo(frame.timeMs);draft=frame.value.toString();mode=frame.interpolation}){Text("EDIT")}
+            TextButton(onClick={vm.removeTransformKeyframe(layer.common.id,key,frame.timeMs)}){Text("X")}
+        }
+    }
 }

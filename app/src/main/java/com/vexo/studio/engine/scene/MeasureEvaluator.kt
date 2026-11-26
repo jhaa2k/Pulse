@@ -21,7 +21,8 @@ object KeyframeEvaluator {
         for (i in 0 until sorted.lastIndex) {
             val a = sorted[i]
             val b = sorted[i + 1]
-            if (timeMs in a.timeMs..b.timeMs) {
+            if (timeMs == b.timeMs) return b.value
+            if (timeMs in a.timeMs until b.timeMs) {
                 val span = (b.timeMs - a.timeMs).coerceAtLeast(1L)
                 val t = ((timeMs - a.timeMs).toFloat() / span.toFloat()).coerceIn(0f, 1f)
                 return when (a.interpolation) {

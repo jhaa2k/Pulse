@@ -16,61 +16,26 @@ data class ResolvedSceneGraph(
  * self-references and cycles.
  */
 object SceneGraph {
-    fun dependenciesOf(comp: CompositionNode): Set<Int> {
-        val deps = linkedSetOf<Int>()
-        for (layer in comp.layers) {
-            if (!layer.common.visible) continue
-            when (val cfg = layer.config) {
-                is LayerConfig.Image -> {
-                    if (cfg.sourceType == com.vexo.studio.model.ImageSourceType.COMPOSITION &&
-                        cfg.sourceCompositionIndex != comp.index
-                    ) {
-                        deps.add(cfg.sourceCompositionIndex)
-                    }
-                    if (cfg.maskImage.startsWith("composition:")) {
-                        cfg.maskImage.substringAfter(':').toIntOrNull()?.takeIf { it != comp.index }?.let { deps.add(it) }
-                    }
-                }
-                is LayerConfig.BlurEffect -> {
-                    if (cfg.sourceCompositionIndex != comp.index) {
-                        deps.add(cfg.sourceCompositionIndex)
-                    }
-                }
-                is LayerConfig.MotionBlurEffect -> {
-                    if (cfg.targetCompositionIndex != comp.index) {
-                        deps.add(cfg.targetCompositionIndex)
-                    }
-                }
-                is LayerConfig.MirrorEffect -> {
-                    if (cfg.targetCompositionIndex != comp.index) {
-                        deps.add(cfg.targetCompositionIndex)
-                    }
-                }
-                is LayerConfig.RgbSplitEffect -> {
-                    if (cfg.targetCompositionIndex != comp.index) {
-                        deps.add(cfg.targetCompositionIndex)
-                    }
-                }
-                else -> Unit
-            }
+    fun referencesOf(cfg:LayerConfig):Set<Int>{
+        val result=linkedSetOf<Int>()
+        fun mask(value:String){if(value.startsWith("composition:"))value.substringAfter(':').toIntOrNull()?.let{result.add(it)}}
+        when(cfg){
+            is LayerConfig.Image->{if(cfg.sourceType==com.vexo.studio.model.ImageSourceType.COMPOSITION)result.add(cfg.sourceCompositionIndex);mask(cfg.maskImage)}
+            is LayerConfig.BlurEffect->{result.add(cfg.sourceCompositionIndex);mask(cfg.maskImage)}
+            is LayerConfig.MotionBlurEffect->result.add(cfg.targetCompositionIndex)
+            is LayerConfig.MirrorEffect->result.add(cfg.targetCompositionIndex)
+            is LayerConfig.RgbSplitEffect->result.add(cfg.targetCompositionIndex)
+            else->Unit
         }
-        return deps
+        return result
     }
 
-    fun hasSelfReference(comp: CompositionNode): Boolean {
-        return comp.layers.any { layer ->
-            if (!layer.common.visible) return@any false
-            when (val cfg = layer.config) {
-                is LayerConfig.Image -> cfg.sourceType == com.vexo.studio.model.ImageSourceType.COMPOSITION &&
-                    cfg.sourceCompositionIndex == comp.index || cfg.maskImage == "composition:${comp.index}"
-                is LayerConfig.BlurEffect -> cfg.sourceCompositionIndex == comp.index
-                is LayerConfig.MotionBlurEffect -> cfg.targetCompositionIndex == comp.index
-                is LayerConfig.MirrorEffect -> cfg.targetCompositionIndex == comp.index
-                is LayerConfig.RgbSplitEffect -> cfg.targetCompositionIndex == comp.index
-                else -> false
-            }
-        }
+    fun dependenciesOf(comp: CompositionNode): Set<Int> {
+        return comp.layers.filter{it.common.visible}.flatMap{referencesOf(it.config)}.filter{it!=comp.index}.toSet()
     }
+
+    fun hasSelfReference(comp:CompositionNode):Boolean =
+        comp.layers.any{it.common.visible && comp.index in referencesOf(it.config)}
 
     fun resolve(project: VexoProject): ResolvedSceneGraph {
         val byIndex = project.compositions.associateBy { it.index }
