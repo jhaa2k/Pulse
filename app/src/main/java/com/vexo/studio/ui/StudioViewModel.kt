@@ -60,7 +60,8 @@ data class StudioUiState(
     val previewZoom: Float = 1f,
     val previewPanX: Float = 0f,
     val previewPanY: Float = 0f,
-    val statusBanner: String? = null
+    val statusBanner: String? = null,
+    val unsaved:Boolean=false
 )
 
 @UnstableApi
@@ -80,8 +81,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun updateProjectSummary(project: VexoProject): List<ProjectSummary> {
-        val entry = ProjectSummary(project.id, project.name, System.currentTimeMillis(), project.canvas.aspectRatio, project.compositions.sumOf { it.layers.size })
-        return listOf(entry) + _uiState.value.projects.filterNot { it.id == project.id }
+        return _uiState.value.projects
     }
 
     val playbackState: StateFlow<PlaybackUiState> = playbackController.state
@@ -109,7 +109,8 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
             project = recovered,
             selectedCompositionIndex = firstComp.index,
             selectedLayerId = firstComp.layers.firstOrNull()?.common?.id,
-            projects = projectRepo.listProjects()
+            projects = projectRepo.listProjects(),
+            unsaved=projectRepo.loadProject(recovered.id)?.let{it.copy(updatedAtMs=recovered.updatedAtMs)!=recovered}?:true
         )
         playbackController.loadProjectAudio(recovered.id,recovered.audioUri)
         viewModelScope.launch(Dispatchers.IO) {
@@ -119,7 +120,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                     val result=runCatching{
                         synchronized(saveLock){
                             if(latestSave[project.id]===project){
-                                projectRepo.saveProject(project,_uiState.value.project.id==project.id)
+                                if(_uiState.value.project.id==project.id)projectRepo.autosave(project)
                                 latestSave.remove(project.id,project)
                             }
                         }
@@ -173,7 +174,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     override fun onCleared() {
         pendingSaves.close()
         // Final synchronous flush only for still-pending projects when the editor is destroyed.
-        synchronized(saveLock){latestSave.values.toList().forEach{p->runCatching{projectRepo.saveProject(p,_uiState.value.project.id==p.id)}};latestSave.clear()}
+        synchronized(saveLock){latestSave.values.toList().forEach{p->if(p.id==_uiState.value.project.id)runCatching{projectRepo.autosave(p)}};latestSave.clear()}
         realtimeFftEngine.close()
         super.onCleared()
     }
@@ -580,7 +581,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         _uiState.value = _uiState.value.copy(
             canUndo = history.canUndo,
             canRedo = history.canRedo,
-            projects = updateProjectSummary(cur)
+            projects = updateProjectSummary(cur),unsaved=true
         )
     }
 
@@ -638,7 +639,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
             selectedProviderIndex = prev.audioProviders.firstOrNull { it.index == _uiState.value.selectedProviderIndex }?.index ?: prev.audioProviders.first().index,
             canUndo = history.canUndo,
             canRedo = history.canRedo,
-            projects = updateProjectSummary(prev)
+            projects = updateProjectSummary(prev),unsaved=true
         )
     }
 
@@ -653,7 +654,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
             selectedProviderIndex = next.audioProviders.firstOrNull { it.index == _uiState.value.selectedProviderIndex }?.index ?: next.audioProviders.first().index,
             canUndo = history.canUndo,
             canRedo = history.canRedo,
-            projects = updateProjectSummary(next)
+            projects = updateProjectSummary(next),unsaved=true
         )
     }
 
@@ -682,30 +683,43 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     val sleepRemaining=playbackController.sleepRemaining
     fun setSleepTimer(minutes:Int)=playbackController.setSleepTimer(minutes)
 
-    fun createNewProject(name: String, template: VexoProject = VexoTemplates.monochromeStudio()) {
-        val fresh = template.copy(
-            id = UUID.randomUUID().toString(),
-            name = name.ifBlank { "Untitled Studio" },
-            updatedAtMs = System.currentTimeMillis()
-        )
+    fun saveCurrentProject(){
+        val p=_uiState.value.project.copy(audioUri=playbackController.currentAudioUri())
+        runCatching{synchronized(saveLock){latestSave.remove(p.id);projectRepo.saveProject(p)}}.onSuccess{
+            _uiState.value=_uiState.value.copy(project=p,projects=projectRepo.listProjects(),unsaved=false,statusBanner="Project saved")
+        }.onFailure{_uiState.value=_uiState.value.copy(statusBanner="Save failed: "+it.message)}
+    }
+
+    fun applyPreset(template:VexoProject){
+        val current=_uiState.value.project
+        val fresh=template.copy(id=UUID.randomUUID().toString(),updatedAtMs=System.currentTimeMillis(),
+            audioUri=playbackController.currentAudioUri(),
+            canvas=template.canvas.copy(aspectRatio=current.canvas.aspectRatio),
+            exportSettings=current.exportSettings.copy(aspectRatio=current.canvas.aspectRatio,trimStartMs=0L,trimEndMs=0L,customOutputUri=null))
+        replaceWithDraft(fresh,true)
+    }
+
+    fun createNewProject(name:String,template:VexoProject=VexoTemplates.monochromeStudio()){
+        val fresh=template.copy(id=UUID.randomUUID().toString(),name=name.ifBlank{"Untitled Studio"},updatedAtMs=System.currentTimeMillis())
+        replaceWithDraft(fresh,false)
+    }
+
+    private fun replaceWithDraft(fresh:VexoProject,keepMusic:Boolean){
+        val prior=_uiState.value.project.id
         history.clear()
-        synchronized(saveLock) { projectRepo.saveProject(fresh) }
-        val comp = fresh.compositions.firstOrNull { it.index == 1 } ?: fresh.compositions.first()
-        _uiState.value = _uiState.value.copy(
-            project = fresh,
-            selectedCompositionIndex = comp.index,
-            selectedLayerId = comp.layers.firstOrNull()?.common?.id,
-            projects = projectRepo.listProjects(),
-            canUndo = false,
-            canRedo = false,
-            navDestination = NavDestination.STUDIO,
-            statusBanner = "Loaded ${fresh.name}"
-        )
-        playbackController.loadProjectAudio(fresh.id,fresh.audioUri)
+        val comp=fresh.compositions.firstOrNull{it.index==1}?:fresh.compositions.first()
+        synchronized(saveLock){
+            latestSave.remove(prior)
+            projectRepo.autosave(fresh)
+            _uiState.value=_uiState.value.copy(project=fresh,selectedCompositionIndex=comp.index,selectedLayerId=comp.layers.firstOrNull()?.common?.id,selectedProviderIndex=fresh.audioProviders.first().index,previewSelectedComposition=false,previewZoom=1f,previewPanX=0f,previewPanY=0f,canUndo=false,canRedo=false,unsaved=true,navDestination=NavDestination.STUDIO,statusBanner="Unsaved draft · "+fresh.name)
+        }
+        if(keepMusic)playbackController.rebindProjectQueue(fresh.id)
+        else playbackController.loadProjectAudio(fresh.id,fresh.audioUri)
     }
 
     fun openProject(id: String) {
-        val loaded = latestSave[id] ?: synchronized(saveLock) { projectRepo.loadProject(id) } ?: return
+        val loaded = synchronized(saveLock) { projectRepo.loadProject(id) } ?: return
+        synchronized(saveLock){latestSave.remove(_uiState.value.project.id);projectRepo.autosave(loaded)}
         history.clear()
         val comp = loaded.compositions.firstOrNull { it.index == 1 } ?: loaded.compositions.first()
         _uiState.value = _uiState.value.copy(
@@ -714,6 +728,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
             selectedLayerId = comp.layers.firstOrNull()?.common?.id,
             canUndo = false,
             canRedo = false,
+            unsaved=false,previewSelectedComposition=false,selectedProviderIndex=loaded.audioProviders.first().index,
             navDestination = NavDestination.STUDIO
         )
         synchronized(saveLock){projectRepo.markActive(loaded.id)}
@@ -721,7 +736,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun duplicateProject(id: String) {
-        synchronized(saveLock){latestSave[id]?.let{projectRepo.saveProject(it,false);latestSave.remove(id,it)};projectRepo.duplicateProject(id)}
+        synchronized(saveLock){projectRepo.duplicateProject(id)}
         _uiState.value = _uiState.value.copy(projects = projectRepo.listProjects())
     }
 
@@ -741,7 +756,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         val remaining = projectRepo.listProjects()
         if (_uiState.value.project.id == id) {
             val fallback = remaining.firstOrNull()?.let { projectRepo.loadProject(it.id) }
-                ?: VexoTemplates.monochromeStudio().also { projectRepo.saveProject(it) }
+                ?: VexoTemplates.monochromeStudio()
             history.clear()
             val comp=fallback.compositions.firstOrNull{it.index==0}?:fallback.compositions.first()
             _uiState.value = _uiState.value.copy(
@@ -750,7 +765,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                 selectedProviderIndex=fallback.audioProviders.first().index,canUndo=false,canRedo=false,previewSelectedComposition=false,
                 projects = projectRepo.listProjects()
             )
-            projectRepo.markActive(fallback.id)
+            projectRepo.autosave(fallback)
             playbackController.loadProjectAudio(fallback.id,fallback.audioUri)
         } else {
             _uiState.value = _uiState.value.copy(projects = remaining)
@@ -763,7 +778,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                 val stream = app.contentResolver.openInputStream(uri) ?: error("Cannot open preset file")
                 val imported = stream.use { s -> VexArchive.read(app, s, displayName.substringBeforeLast('.')) }
                 withContext(Dispatchers.Main) {
-                    createNewProject(imported.name, imported)
+                    applyPreset(imported)
                     val unsupported = imported.compositions.sumOf { it.preservedElements.size }
                     _uiState.value = _uiState.value.copy(statusBanner = "Imported ${imported.compositions.size} compositions · ${imported.compositions.sumOf { it.layers.size }} editable layers" + if (unsupported > 0) " · $unsupported unsupported elements preserved" else "")
                 }
@@ -944,7 +959,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
             project = next,
             canUndo = history.canUndo,
             canRedo = history.canRedo,
-            projects = updateProjectSummary(next)
+            projects = updateProjectSummary(next),unsaved=true
         )
     }
 

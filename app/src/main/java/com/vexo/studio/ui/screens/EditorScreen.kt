@@ -1757,7 +1757,7 @@ private fun PresetsTab(
                     .fillMaxWidth()
                     .border(1.dp, palette.border, palette.shape)
                     .background(palette.glassPanel, palette.shape)
-                    .clickable { vm.createNewProject(tpl.name, tpl) }
+                    .clickable { vm.applyPreset(tpl) }
                     .padding(12.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically

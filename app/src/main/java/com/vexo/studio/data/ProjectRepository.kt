@@ -61,6 +61,8 @@ class ProjectRepository(context: Context) {
     @Synchronized
     fun recoverAutosaveOrDefault():VexoProject {
         val active=runCatching{android.util.AtomicFile(activeFile).readFully().toString(Charsets.UTF_8).trim()}.getOrNull()
+        val activeDraft=readValid(autosaveFile)?.takeIf{it.id==active}
+        if(activeDraft!=null)return activeDraft
         val saved=active?.let(::loadProject)
         if(saved!=null){
             val draft=readValid(autosaveFile)?.takeIf{it.id==saved.id}
@@ -71,7 +73,7 @@ class ProjectRepository(context: Context) {
         if(recovered!=null)return recovered
         val existing=listProjects().firstOrNull()?.let{loadProject(it.id)}
         if(existing!=null)return existing
-        return VexoTemplates.monochromeStudio().also{saveProject(it)}
+        return VexoTemplates.monochromeStudio().also{autosave(it)}
     }
 
     @Synchronized
@@ -91,12 +93,15 @@ class ProjectRepository(context: Context) {
 
     @Synchronized
     fun markActive(id:String){
-        if(validId(id)&&loadProject(id)!=null)atomicWrite(activeFile,id)
+        if(validId(id))atomicWrite(activeFile,id)
     }
 
     @Synchronized
     fun autosave(project:VexoProject){
-        atomicWrite(autosaveFile,encodeEnvelope(project.copy(updatedAtMs=System.currentTimeMillis())))
+        val data=encodeEnvelope(project.copy(updatedAtMs=System.currentTimeMillis()))
+        require(data.toByteArray(Charsets.UTF_8).size<=NativeVexCodec.MAX_JSON_BYTES){"Draft exceeds save limit"}
+        atomicWrite(autosaveFile,data)
+        markActive(project.id)
     }
 
     @Synchronized

@@ -362,7 +362,7 @@ fun TemplatesScreen(
                     .fillMaxWidth()
                     .border(1.dp, palette.border, palette.shape)
                     .background(palette.glassPanel, palette.shape)
-                    .clickable { vm.createNewProject(tpl.name, tpl) }
+                    .clickable { vm.applyPreset(tpl) }
                     .padding(14.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {

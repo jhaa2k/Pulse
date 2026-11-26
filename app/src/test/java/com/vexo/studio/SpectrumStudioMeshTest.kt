@@ -24,7 +24,7 @@ class SpectrumStudioMeshTest{
     @Test fun fillLineAndPolygonAreDifferent(){
         val c=LayerConfig.Bars(creativeStyle=CreativeSpectrumStyle.FILL,creativePath=CreativeSpectrumPath.SQUARE,showPeaks=false)
         fun count(cfg:LayerConfig.Bars):Int{var n=0;SpectrumStudioMesh.emit(cfg,FloatArray(16){.2f},null,100,100){_,_,_->n++};return n}
-        assertTrue(count(c)>count(c.copy(creativeStyle=CreativeSpectrumStyle.LINE)))
+        assertTrue(count(c.copy(mirror=false))>count(c.copy(mirror=false,creativeStyle=CreativeSpectrumStyle.LINE)))
         assertTrue(count(c)>count(c.copy(pathGap=.2f)))
     }
 }

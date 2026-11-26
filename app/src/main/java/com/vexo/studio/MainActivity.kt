@@ -200,7 +200,7 @@ private fun VexoRootApp(vm: StudioViewModel) {
                             color = palette.accent
                         )
                         Text(
-                            text = uiState.project.name,
+                            text = uiState.project.name + if(uiState.unsaved) " *" else "",
                             style = MaterialTheme.typography.labelSmall,
                             color = palette.textSecondary,
                             maxLines = 1,
@@ -214,8 +214,8 @@ private fun VexoRootApp(vm: StudioViewModel) {
                             NavDestination.entries.forEach { dest -> DropdownMenuItem(text = { Text(dest.label) }, onClick = { showAppMenu = false; vm.navigateTo(dest) }) }
                         }
                     }
-                    IconButton(onClick = { presetExportPicker.launch("${uiState.project.name}.VEX") }) {
-                        Icon(Icons.Default.Save, "Save VEX project", tint = palette.textSecondary)
+                    IconButton(onClick = vm::saveCurrentProject) {
+                        Icon(Icons.Default.Save, "Save to project library", tint = if(uiState.unsaved)palette.accent else palette.textSecondary)
                     }
                     Box(
                         modifier = Modifier

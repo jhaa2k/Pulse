@@ -236,6 +236,11 @@ class VexoPlaybackController(
         if(queueProjectId==id){queueProjectId=null;lastSavedQueue=null;cancelAudioImport()}
         runCatching{queueStore.delete(id)}
     }
+    fun rebindProjectQueue(projectId:String){
+        saveQueue()
+        queueProjectId=projectId;lastSavedQueue=null;lastSavedPosition=-1L;lastSavedId=null
+        saveQueue()
+    }
     fun loadProjectAudio(projectId:String,uri: String?) {
         if(queueProjectId==projectId)return
         saveQueue()
