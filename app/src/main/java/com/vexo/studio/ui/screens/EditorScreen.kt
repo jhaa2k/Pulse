@@ -1271,11 +1271,6 @@ private fun AudioProviderEditorSection(
             vm.updateAudioProvider(provider.index) { it.copy(window = win) }
         }
         StudioChipSelector("Channel Mode", ChannelMode.entries, provider.channelMode, { it.label }) { ch ->
-            vm.playbackController.pcmTap.channelSelectMode = when (ch) {
-                ChannelMode.MIX -> 0
-                ChannelMode.LEFT -> 1
-                ChannelMode.RIGHT -> 2
-            }
             vm.updateAudioProvider(provider.index) { it.copy(channelMode = ch) }
         }
         StudioToggleRow("Provider Enabled", provider.enabled) { v -> vm.updateAudioProvider(provider.index) { it.copy(enabled = v) } }

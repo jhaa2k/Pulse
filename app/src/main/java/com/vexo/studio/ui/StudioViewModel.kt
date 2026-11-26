@@ -132,13 +132,6 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         realtimeFftEngine.start(
             providersProvider = {
                 val ui = _uiState.value
-                val primary = ui.project.audioProviders.firstOrNull { it.index == ui.selectedProviderIndex }
-                    ?: ui.project.audioProviders.firstOrNull()
-                playbackController.pcmTap.channelSelectMode = when (primary?.channelMode) {
-                    ChannelMode.LEFT -> 1
-                    ChannelMode.RIGHT -> 2
-                    else -> 0
-                }
                 ui.project.audioProviders
             },
             isPlayingProvider = { playbackState.value.isPlaying },

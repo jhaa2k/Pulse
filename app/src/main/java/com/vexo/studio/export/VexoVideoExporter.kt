@@ -214,6 +214,8 @@ class VexoVideoExporter(private val context: Context) {
             val frameDurationNs = 1_000_000_000L / fps
             val deltaMs = 1000f / fps
             val monoWindow = FloatArray(8192)
+            val leftWindow=FloatArray(8192)
+            val rightWindow=FloatArray(8192)
             val exportStartMs = System.currentTimeMillis()
 
             var audioSampleCursor = 0L
@@ -337,23 +339,27 @@ class VexoVideoExporter(private val context: Context) {
                 val sampleEnd = ((timeSec * sampleRate).toInt()).coerceIn(0, totalMonoSamples)
                 val winStart = (sampleEnd - monoWindow.size).coerceAtLeast(0)
                 val copyLen = sampleEnd - winStart
-                monoWindow.fill(0f)
+                monoWindow.fill(0f);leftWindow.fill(0f);rightWindow.fill(0f)
                 if (copyLen > 0) {
                     reader.seek(winStart.toLong()*frameBytes)
                     reader.readFully(pcmWindowBytes,0,copyLen*frameBytes)
                     pcmWindowView.position(0)
                     for(i in 0 until copyLen) {
-                        var sum=0f
-                        repeat(channels){sum+=pcmWindowView.short/32768f}
-                        monoWindow[monoWindow.size-copyLen+i]=sum/channels
+                        val l=pcmWindowView.short/32768f
+                        val r=if(channels==2)pcmWindowView.short/32768f else l
+                        val j=monoWindow.size-copyLen+i
+                        monoWindow[j]=(l+r)*.5f;leftWindow[j]=l;rightWindow[j]=r
                     }
                 }
 
                 val audioSnapshots = mutableMapOf<Int, AudioProviderSnapshot>()
                 for ((idx, eng) in engines) {
                     val cfg = project.audioProviders.first { it.index == idx }
-                    val fftSize = AudioProviderEngine.sanitizeFftSize(cfg.fftSize)
-                    val slice = monoWindow.copyOfRange(monoWindow.size - fftSize, monoWindow.size)
+                    val slice=when(cfg.channelMode){
+                        com.vexo.studio.model.ChannelMode.LEFT->leftWindow
+                        com.vexo.studio.model.ChannelMode.RIGHT->rightWindow
+                        com.vexo.studio.model.ChannelMode.MIX->monoWindow
+                    }
                     audioSnapshots[idx] = eng.process(
                         samples = slice,
                         sampleRate = sampleRate,

@@ -42,14 +42,14 @@ class PcmTapAudioProcessor(
                 channels = inputAudioFormat.channelCount,
                 sampleRateHz = inputAudioFormat.sampleRate,
                 mediaTimestampUs = playbackClockUsProvider(),
-                channelSelect = channelSelectMode
+                channelSelect = 0
             )
             else -> ringBuffer.writePcm16(
                 buffer = inputBuffer,
                 channels = inputAudioFormat.channelCount,
                 sampleRateHz = inputAudioFormat.sampleRate,
                 mediaTimestampUs = playbackClockUsProvider(),
-                channelSelect = channelSelectMode
+                channelSelect = 0
             )
         }
 
