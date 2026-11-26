@@ -574,23 +574,8 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    private var sleepJob: kotlinx.coroutines.Job? = null
-    private val _sleepRemaining = MutableStateFlow(0L)
-    val sleepRemaining = _sleepRemaining.asStateFlow()
-    fun setSleepTimer(minutes: Int) {
-        sleepJob?.cancel()
-        val deadline = android.os.SystemClock.elapsedRealtime() + minutes.coerceIn(0,180)*60_000L
-        _sleepRemaining.value = (minutes.coerceIn(0,180)*60L)
-        if (minutes <= 0) return
-        sleepJob = viewModelScope.launch {
-            while (isActive) {
-                val remain = (deadline-android.os.SystemClock.elapsedRealtime()).coerceAtLeast(0L)
-                _sleepRemaining.value = (remain+999)/1000
-                if (remain == 0L) { playbackController.player.pause(); break }
-                delay(minOf(1000L,remain))
-            }
-        }
-    }
+    val sleepRemaining=playbackController.sleepRemaining
+    fun setSleepTimer(minutes:Int)=playbackController.setSleepTimer(minutes)
 
     fun createNewProject(name: String, template: VexoProject = VexoTemplates.monochromeStudio()) {
         val fresh = template.copy(

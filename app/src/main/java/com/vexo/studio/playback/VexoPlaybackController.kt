@@ -25,6 +25,13 @@ import androidx.media3.exoplayer.Renderer
 import com.vexo.studio.engine.audio.PcmRingBuffer
 import com.vexo.studio.engine.gl.TrackMetadataSnapshot
 import com.vexo.studio.model.AudioTrackItem
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -71,11 +78,24 @@ class VexoPlaybackController(
     val state: StateFlow<PlaybackUiState> = _state.asStateFlow()
 
     private var artworkCounter = 0
+    private val artworkScope=CoroutineScope(SupervisorJob()+Dispatchers.Main.immediate)
+    private var artworkJob:Job?=null
+    private val _sleepRemaining=MutableStateFlow(0L)
+    val sleepRemaining=_sleepRemaining.asStateFlow()
+    private var sleepDeadline=0L
+    private var lastSleepTick=0L
     private val playbackPrefs=context.getSharedPreferences("playback_options",Context.MODE_PRIVATE)
     private val transitionHandler=Handler(android.os.Looper.getMainLooper())
     private var fadeInStartedMs=0L
     private val transitionTick=object:Runnable{
         override fun run(){
+            val now=android.os.SystemClock.elapsedRealtime()
+            if(sleepDeadline>0L&&now-lastSleepTick>=250L){
+                lastSleepTick=now
+                val left=PlaybackClock.remainingSeconds(sleepDeadline,now)
+                _sleepRemaining.value=left
+                if(left==0L){sleepDeadline=0L;player.pause()}
+            }
             val st=_state.value
             val duration=player.duration
             val remaining=if(duration>0)duration-player.currentPosition else Long.MAX_VALUE
@@ -94,7 +114,13 @@ class VexoPlaybackController(
     init {
         pcmTap.playbackClockUsProvider = { playbackPositionUs }
         soundEffects.attach(player.audioSessionId)
-        _state.value=_state.value.copy(transitionFadeMs=playbackPrefs.getInt("fade_ms",0).coerceIn(0,5000))
+        val volume=runCatching{playbackPrefs.getFloat("volume",1f)}.getOrDefault(1f).takeIf{it.isFinite()}?.coerceIn(0f,1f)?:1f
+        val repeat=runCatching{RepeatModeState.valueOf(playbackPrefs.getString("repeat","OFF")?:"OFF")}.getOrDefault(RepeatModeState.OFF)
+        val shuffle=playbackPrefs.getBoolean("shuffle",false)
+        player.volume=volume
+        player.shuffleModeEnabled=shuffle
+        player.repeatMode=when(repeat){RepeatModeState.OFF->Player.REPEAT_MODE_OFF;RepeatModeState.ONE->Player.REPEAT_MODE_ONE;RepeatModeState.ALL->Player.REPEAT_MODE_ALL}
+        _state.value=_state.value.copy(volume=volume,repeatMode=repeat,shuffleEnabled=shuffle,transitionFadeMs=playbackPrefs.getInt("fade_ms",0).coerceIn(0,5000))
         transitionHandler.post(transitionTick)
     }
 
@@ -176,6 +202,7 @@ class VexoPlaybackController(
 
     fun loadProjectAudio(uri: String?) {
         if (uri != null && currentAudioUri() == uri) return
+        artworkJob?.cancel();artworkJob=null
         player.pause()
         player.clearMediaItems()
         ringBuffer.resetGeneration()
@@ -249,6 +276,13 @@ class VexoPlaybackController(
         updateCurrentTrackMetadata(index)
     }
 
+    fun setSleepTimer(minutes:Int){
+        val count=minutes.coerceIn(0,180)
+        sleepDeadline=if(count>0)android.os.SystemClock.elapsedRealtime()+count*60_000L else 0L
+        lastSleepTick=0L
+        _sleepRemaining.value=count*60L
+    }
+
     fun togglePlayPause() {
         if (_state.value.queue.isEmpty()) return
         if (player.playWhenReady && player.playbackState != Player.STATE_ENDED && player.playbackState != Player.STATE_IDLE) {
@@ -295,6 +329,7 @@ class VexoPlaybackController(
         val next = !player.shuffleModeEnabled
         player.shuffleModeEnabled = next
         _state.value = _state.value.copy(shuffleEnabled = next)
+        playbackPrefs.edit().putBoolean("shuffle",next).apply()
     }
 
     fun cycleRepeatMode() {
@@ -309,6 +344,7 @@ class VexoPlaybackController(
             RepeatModeState.ALL -> Player.REPEAT_MODE_ALL
         }
         _state.value = _state.value.copy(repeatMode = next)
+        playbackPrefs.edit().putString("repeat",next.name).apply()
     }
 
     fun setTransitionFade(ms:Int){
@@ -319,9 +355,11 @@ class VexoPlaybackController(
     }
 
     fun setVolume(vol: Float) {
+        if(!vol.isFinite())return
         val clamped = vol.coerceIn(0f, 1f)
         player.volume = clamped
         _state.value = _state.value.copy(volume = clamped)
+        playbackPrefs.edit().putFloat("volume",clamped).apply()
     }
 
     fun removeFromQueue(index: Int) {
@@ -361,34 +399,31 @@ class VexoPlaybackController(
 
     fun release() {
         transitionHandler.removeCallbacks(transitionTick)
+        artworkScope.cancel()
         sessionVisualizer.close()
         soundEffects.close()
         player.release()
     }
 
-    private fun updateCurrentTrackMetadata(index: Int) {
-        val item = _state.value.queue.getOrNull(index)
-        if (item == null) {
-            _state.value = _state.value.copy(
-                currentIndex = -1,
-                trackMeta = TrackMetadataSnapshot()
-            )
+    private fun updateCurrentTrackMetadata(index:Int){
+        val item=_state.value.queue.getOrNull(index)
+        artworkJob?.cancel()
+        val generation=++artworkCounter
+        if(item==null){
+            _state.value=_state.value.copy(currentIndex=-1,positionMs=0L,durationMs=0L,trackMeta=TrackMetadataSnapshot(artworkVersion=generation))
             return
         }
-        val art = extractArtworkBitmap(Uri.parse(item.uri))
-        artworkCounter++
-        _state.value = _state.value.copy(
-            currentIndex = index,
-            trackMeta = TrackMetadataSnapshot(
-                title = item.title,
-                artist = item.artist,
-                album = item.album,
-                positionMs = player.currentPosition.coerceAtLeast(0L),
-                durationMs = item.durationMs,
-                artwork = art,
-                artworkVersion = artworkCounter
-            )
-        )
+        val pos=player.currentPosition.coerceAtLeast(0L)
+        val dur=player.duration.takeIf{it>0}?:item.durationMs
+        _state.value=_state.value.copy(currentIndex=index,positionMs=pos,durationMs=dur,errorMessage=null,
+            trackMeta=TrackMetadataSnapshot(title=item.title,artist=item.artist,album=item.album,positionMs=pos,durationMs=dur,artworkVersion=generation))
+        artworkJob=artworkScope.launch{
+            val bitmap=withContext(Dispatchers.IO){extractArtworkBitmap(Uri.parse(item.uri))}
+            val state=_state.value
+            if(generation==artworkCounter&&state.queue.getOrNull(state.currentIndex)?.id==item.id){
+                _state.value=state.copy(trackMeta=state.trackMeta.copy(artwork=bitmap,artworkVersion=++artworkCounter))
+            }else bitmap?.recycle()
+        }
     }
 
     private fun extractTrackItem(uri: Uri): AudioTrackItem {
@@ -420,6 +455,7 @@ class VexoPlaybackController(
         return try {
             retriever.setDataSource(context, uri)
             val bytes = retriever.embeddedPicture ?: return null
+            if(bytes.size>20*1024*1024)return null
             val bounds=BitmapFactory.Options().apply{inJustDecodeBounds=true}
             BitmapFactory.decodeByteArray(bytes,0,bytes.size,bounds)
             var sample=1
