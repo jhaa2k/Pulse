@@ -10,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.Font
@@ -79,7 +80,7 @@ fun VexoTheme(
             textPrimary = Color(0xFFF4F5F7),
             textSecondary = Color(0xFFADB0B7),
             accent = customAccent,
-            accentOn = Color(0xFF11150B),
+            accentOn = if (customAccent.luminance() > .179f) Color.Black else Color.White,
             danger = Color(0xFFEF4444)
         )
         ThemePreset.AMBER_CONSOLE -> VexoPalette(
@@ -112,6 +113,23 @@ fun VexoTheme(
         lightColorScheme(
             primary = palette.accent,
             onPrimary = palette.accentOn,
+            primaryContainer = palette.panelElevated,
+            onPrimaryContainer = palette.textPrimary,
+            secondary = palette.accent,
+            onSecondary = palette.accentOn,
+            secondaryContainer = palette.panelElevated,
+            onSecondaryContainer = palette.textPrimary,
+            tertiary = palette.accent,
+            onTertiary = palette.accentOn,
+            tertiaryContainer = palette.panelElevated,
+            onTertiaryContainer = palette.textPrimary,
+            surfaceTint = palette.accent,
+            inverseSurface = palette.textPrimary,
+            inverseOnSurface = palette.bg,
+            inversePrimary = palette.bg,
+            onError = if (palette.danger.luminance() > .179f) Color.Black else Color.White,
+            errorContainer = palette.panelElevated,
+            onErrorContainer = palette.danger,
             background = palette.bg,
             surface = palette.panel,
             surfaceVariant = palette.panelElevated,
@@ -125,6 +143,23 @@ fun VexoTheme(
         darkColorScheme(
             primary = palette.accent,
             onPrimary = palette.accentOn,
+            primaryContainer = palette.panelElevated,
+            onPrimaryContainer = palette.textPrimary,
+            secondary = palette.accent,
+            onSecondary = palette.accentOn,
+            secondaryContainer = palette.panelElevated,
+            onSecondaryContainer = palette.textPrimary,
+            tertiary = palette.accent,
+            onTertiary = palette.accentOn,
+            tertiaryContainer = palette.panelElevated,
+            onTertiaryContainer = palette.textPrimary,
+            surfaceTint = palette.accent,
+            inverseSurface = palette.textPrimary,
+            inverseOnSurface = palette.bg,
+            inversePrimary = palette.bg,
+            onError = if (palette.danger.luminance() > .179f) Color.Black else Color.White,
+            errorContainer = palette.panelElevated,
+            onErrorContainer = palette.danger,
             background = palette.bg,
             surface = palette.panel,
             surfaceVariant = palette.panelElevated,
@@ -179,7 +214,9 @@ fun VexoTheme(
         )
     )
 
-    val allTypography=typography.copy(displayLarge=typography.displayLarge.copy(fontFamily=poppins),displayMedium=typography.displayMedium.copy(fontFamily=poppins),displaySmall=typography.displaySmall.copy(fontFamily=poppins),headlineLarge=typography.headlineLarge.copy(fontFamily=poppins),headlineMedium=typography.headlineMedium.copy(fontFamily=poppins),headlineSmall=typography.headlineSmall.copy(fontFamily=poppins),titleLarge=typography.titleLarge.copy(fontFamily=poppins),titleSmall=typography.titleSmall.copy(fontFamily=poppins),bodyLarge=typography.bodyLarge.copy(fontFamily=poppins),labelLarge=typography.labelLarge.copy(fontFamily=poppins))
+    fun compact(style: TextStyle)=style.copy(fontFamily=poppins,fontSize=style.fontSize*.94f,lineHeight=style.lineHeight*.94f)
+    val baseTypography=typography.copy(displayLarge=typography.displayLarge.copy(fontFamily=poppins),displayMedium=typography.displayMedium.copy(fontFamily=poppins),displaySmall=typography.displaySmall.copy(fontFamily=poppins),headlineLarge=typography.headlineLarge.copy(fontFamily=poppins),headlineMedium=typography.headlineMedium.copy(fontFamily=poppins),headlineSmall=typography.headlineSmall.copy(fontFamily=poppins),titleLarge=typography.titleLarge.copy(fontFamily=poppins),titleSmall=typography.titleSmall.copy(fontFamily=poppins),bodyLarge=typography.bodyLarge.copy(fontFamily=poppins),labelLarge=typography.labelLarge.copy(fontFamily=poppins))
+    val allTypography=baseTypography.copy(displayLarge=compact(baseTypography.displayLarge),displayMedium=compact(baseTypography.displayMedium),displaySmall=compact(baseTypography.displaySmall),headlineLarge=compact(baseTypography.headlineLarge),headlineMedium=compact(baseTypography.headlineMedium),headlineSmall=compact(baseTypography.headlineSmall),titleLarge=compact(baseTypography.titleLarge),titleMedium=compact(baseTypography.titleMedium),titleSmall=compact(baseTypography.titleSmall),bodyLarge=compact(baseTypography.bodyLarge),bodyMedium=compact(baseTypography.bodyMedium),bodySmall=compact(baseTypography.bodySmall),labelLarge=compact(baseTypography.labelLarge),labelMedium=compact(baseTypography.labelMedium),labelSmall=compact(baseTypography.labelSmall))
     CompositionLocalProvider(LocalVexoPalette provides palette) {
         MaterialTheme(
             colorScheme = colorScheme,

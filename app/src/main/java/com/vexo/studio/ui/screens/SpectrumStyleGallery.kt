@@ -29,7 +29,7 @@ internal fun SpectrumStyleGallery(layerId:String,cfg:LayerConfig.Bars,apply:(Lay
     var usedText by rememberSaveable(layerId){mutableStateOf("")}
     var query by rememberSaveable{mutableStateOf("")}
     Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){
-        TextButton(onClick={open=true}){Text("STYLE GALLERY (26)")}
+        TextButton(onClick={open=true}){Text("STYLE GALLERY (${SpectrumStyleLibrary.recipes.size})")}
         TextButton(onClick={
             val used=usedText.split('|').filter{it.isNotBlank()}.toSet()
             val (recipe,next)=SpectrumStyleLibrary.next(used,cfg)
@@ -68,6 +68,10 @@ private fun SpectrumSample(cfg:LayerConfig.Bars,modifier:Modifier){
         val peaks=FloatArray(n){i->bars[i]+.09f}
         val points=ArrayList<MeshVertex>()
         SpectrumStudioMesh.emit(cfg,bars,peaks,240,140){x,y,c->points.add(MeshVertex(x,y,c))}
+        if(cfg.segment2!=com.vexo.studio.model.BarsSegmentType.NONE){
+            val second=cfg.copy(segment1=cfg.segment2,segment2=com.vexo.studio.model.BarsSegmentType.NONE,creativeStyle=cfg.secondaryCreativeStyle,barWidth=cfg.segment2Width,barHeightMultiplier=cfg.segment2HeightMultiplier,fixedHeight=cfg.segment2FixedHeight,mirror=cfg.segment2Mirror,colorFromArgb=cfg.segment2ColorFrom,colorToArgb=cfg.segment2ColorTo)
+            SpectrumStudioMesh.emit(second,bars,peaks,240,140){x,y,c->points.add(MeshVertex(x,y,c))}
+        }
         val grouped=linkedMapOf<Int,Path>()
         for(i in points.indices step 3){
             val a=points[i];val b=points[i+1];val c=points[i+2]

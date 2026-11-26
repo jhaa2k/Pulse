@@ -53,14 +53,16 @@ object SpectrumStudioMesh {
             val t=(i+.5f)/n
             val origin=point(t);val d=point(t+.25f/n)-point(t-.25f/n);val tangent=d.unit()
             val size=(sqrt(d.x*d.x+d.y*d.y)*2f*c.barWidth.coerceIn(.05f,1.5f)*(1f-c.barSpacing.coerceIn(0f,.95f))).coerceIn(.5f,maxOf(.5f,dim*.15f))
-            val src=(i.toLong()*bars.size/n).toInt().coerceIn(0,bars.lastIndex)
+            val phase = (i.toDouble()/n*c.sampleRepeats.coerceIn(1,8) + c.sampleOffset.coerceIn(-1f,1f))
+            val wrapped = phase - floor(phase)
+            val src = (wrapped * bars.size).toInt().coerceIn(0,bars.lastIndex)
             val idx=if(c.flipInput)bars.lastIndex-src else src
             val raw=bars[idx].takeIf{it.isFinite()}?:0f
-            val amplitude=(raw*abs(gain)).coerceIn(lo,hi)
+            val amplitude=(raw.coerceAtLeast(0f).pow(c.amplitudeCurve.coerceIn(.25f,3f))*abs(gain)).coerceIn(lo,hi)
             val direction=(if(gain<0f)-1f else 1f)*(if(c.alternatingDirection&&i%2==1)-1f else 1f)
             val length=(amplitude*dim*.42f+c.fixedHeight*2f)*direction
-            val base=if(c.mirror)-length*.5f else 0f
-            val peak=((peaks?.getOrNull(idx)?:raw)*abs(gain)).coerceIn(0f,hi)*dim*.42f*direction*(if(c.mirror).5f else 1f)
+            val base=c.baselineOffset.coerceIn(-1f,1f)*dim*.3f + if(c.mirror)-length*.5f else 0f
+            val peak=c.baselineOffset.coerceIn(-1f,1f)*dim*.3f+((peaks?.getOrNull(idx)?:raw).coerceAtLeast(0f).pow(c.amplitudeCurve.coerceIn(.25f,3f))*abs(gain)).coerceIn(0f,hi)*dim*.42f*direction*(if(c.mirror).5f else 1f)
             val color=MeasureEvaluator.blendArgb(c.colorFromArgb,c.colorToArgb,(t+c.colorBlendOffset).coerceIn(0f,1f))
             samples.add(Sample(origin,tangent,tangent.normal(),size,base,base+length,peak,color,amplitude))
         }

@@ -54,7 +54,7 @@ object AveeJsonCodec {
     private const val MAX_VIZ_ENTRY_BYTES = 16 * 1024 * 1024 // 16 MB guard against zip bombs
 
     fun importFromText(rawText: String, fallbackName: String = "Imported Preset"): VexoProject {
-        val trimmed = rawText.trim()
+        val trimmed = rawText.trim().removePrefix("\uFEFF").trimStart()
         if (trimmed.isEmpty()) error("Empty preset file")
 
         val root = json.parseToJsonElement(trimmed)
@@ -354,9 +354,9 @@ object AveeJsonCodec {
             scaleIsUniform = obj.propBool("scaleIsUniform", false),
             rotationDeg = obj.propFloat("rotation", 0f),
             opacity = obj.propFloat("opacity", 1f),
-            measurePos = parseMeasure(obj["MeasurePos"]),
-            measureScale = parseMeasure(obj["measureScale"]),
-            measureRot = parseMeasure(obj["measureRot"]),
+            measurePos = parseMeasure(obj.entries.firstOrNull { it.key.equals("MeasurePos",true) }?.value),
+            measureScale = parseMeasure(obj.entries.firstOrNull { it.key.equals("measureScale",true) }?.value),
+            measureRot = parseMeasure(obj.entries.firstOrNull { it.key.equals("measureRot",true) }?.value),
             extraFields = extractExtraFields(obj, emptySet())
         )
     }
@@ -509,6 +509,9 @@ object AveeJsonCodec {
             sourceCompositionIndex = obj.propInt("sourceCompositionIndex", 1),
             blurRadius = obj.propFloat("blurRadius", 2f),
             blurMultiplier = obj.propFloat("blurMultiplier", 4.1f),
+            layer1Scale = obj.propFloat("1layerScale", obj.propFloat("layer1Scale", 1f)),
+            layer2Scale = obj.propFloat("2layerScale", obj.propFloat("layer2Scale", 0f)),
+            layer3Scale = obj.propFloat("3layerScale", obj.propFloat("layer3Scale", 0f)),
             layer1ColorArgb = obj.propInt("1layerColor", -1),
             layer2ColorArgb = obj.propInt("2layerColor", -1),
             layer3ColorArgb = obj.propInt("3layerColor", -1),
@@ -516,7 +519,8 @@ object AveeJsonCodec {
             blendModeContent = BlendMode.fromAvee(obj.propString("blendModeContent", "PreMulAlpha")),
             showUnblurredContent = obj.propBool("showUnblurredContent", false),
             showUnblurredContentUnder = obj.propBool("showUnblurredContentUnder", true),
-            maskImage = obj.propString("MaskImage", "internalres:transparent")
+            maskImage = obj.propString("MaskImage", "internalres:transparent"),
+            measureBlur = parseMeasure(obj.entries.firstOrNull { it.key.equals("measureBlur",true) }?.value)
         )
     )
 
@@ -716,6 +720,9 @@ object AveeJsonCodec {
                 put("sourceCompositionIndex", propObj(cfg.sourceCompositionIndex))
                 put("blurRadius", propObj(cfg.blurRadius))
                 put("blurMultiplier", propObj(cfg.blurMultiplier))
+                put("1layerScale", propObj(cfg.layer1Scale)); put("2layerScale", propObj(cfg.layer2Scale)); put("3layerScale", propObj(cfg.layer3Scale))
+                put("1layerColor", propObj(cfg.layer1ColorArgb)); put("2layerColor", propObj(cfg.layer2ColorArgb)); put("3layerColor", propObj(cfg.layer3ColorArgb))
+                put("color", propObj(cfg.colorArgb)); put("blendModeContent", propObj(cfg.blendModeContent.aveeName)); put("MaskImage", propObj(cfg.maskImage)); put("measureBlur", encodeMeasure(cfg.measureBlur))
                 put("showUnblurredContent", propObj(if (cfg.showUnblurredContent) 1 else 0))
                 put("showUnblurredContentUnder", propObj(if (cfg.showUnblurredContentUnder) 1 else 0))
             }
@@ -760,11 +767,12 @@ object AveeJsonCodec {
     }
 
     private fun parseMeasure(el: JsonElement?): MeasureConfig {
-        val obj = el as? JsonObject ?: return MeasureConfig()
-        val whatObj = obj["measureWhat"] as? JsonObject
-        val whatName = whatObj?.get("v")?.primitiveString() ?: "Nothing"
-        val a = (obj["A"] as? JsonObject)?.get("v")?.primitiveFloat() ?: 0.5f
-        val b = (obj["B"] as? JsonObject)?.get("v")?.primitiveFloat() ?: 0.5f
+        val obj = el as? JsonObject ?: return el?.primitiveString()?.let(::parseMvarf2Measure) ?: MeasureConfig()
+        val raw = obj["v"]?.primitiveString()
+        if (raw != null && obj.propEl("measureWhat") == null) return parseMvarf2Measure(raw)
+        val whatName = obj.propString("measureWhat", "Nothing")
+        val a = obj.propFloat("A", .5f)
+        val b = obj.propFloat("B", .5f)
         return MeasureConfig(
             measureWhat = MeasureWhat.fromAvee(whatName),
             amountA = a,
@@ -773,12 +781,12 @@ object AveeJsonCodec {
     }
 
     private fun parseMvarfValue(raw: String, defaultVal: Float): Float {
-        val parts = raw.trim().split(' ')
+        val parts = raw.trim().split(Regex("\\s+"))
         return parts.getOrNull(1)?.toFloatOrNull() ?: defaultVal
     }
 
     private fun parseMvarf2Measure(raw: String): MeasureConfig {
-        val parts = raw.trim().split(' ')
+        val parts = raw.trim().split(Regex("\\s+"))
         val what = MeasureWhat.fromAvee(parts.getOrNull(0))
         val a = parts.getOrNull(1)?.toFloatOrNull() ?: 0.5f
         val b = parts.getOrNull(2)?.toFloatOrNull() ?: 0.5f
@@ -789,7 +797,7 @@ object AveeJsonCodec {
      * Converts Avee "H S L A" normalized floats (0..1) to Android ARGB Int.
      */
     fun parseHsla4fToArgb(raw: String): Int {
-        val parts = raw.trim().split(' ').mapNotNull { it.toFloatOrNull() }
+        val parts = raw.trim().split(Regex("\\s+")).mapNotNull { it.toFloatOrNull() }
         if (parts.size < 4) return 0xFFFFFFFF.toInt()
         val h = (parts[0].coerceIn(0f, 1f)) * 360f
         val s = parts[1].coerceIn(0f, 1f)
@@ -852,10 +860,10 @@ object AveeJsonCodec {
         (this as? JsonPrimitive)?.intOrNull ?: (this as? JsonPrimitive)?.content?.toIntOrNull()
 
     private fun JsonElement.primitiveFloat(): Float? =
-        (this as? JsonPrimitive)?.floatOrNull ?: (this as? JsonPrimitive)?.content?.toFloatOrNull()
+        ((this as? JsonPrimitive)?.floatOrNull ?: (this as? JsonPrimitive)?.content?.toFloatOrNull())?.takeIf { it.isFinite() }
 
     private fun JsonObject.propEl(key: String): JsonElement? {
-        val child = this[key] ?: return null
+        val child = this[key] ?: entries.firstOrNull { it.key.equals(key, ignoreCase = true) }?.value ?: return null
         return if (child is JsonObject && child.containsKey("v")) child["v"] else child
     }
 
@@ -881,9 +889,15 @@ object AveeJsonCodec {
     }
 
     private fun JsonObject.propFloat2(key: String, defX: Float, defY: Float): Pair<Float, Float> {
-        val raw = propString(key, "$defX $defY").trim().split(' ')
-        val x = raw.getOrNull(0)?.toFloatOrNull() ?: defX
-        val y = raw.getOrNull(1)?.toFloatOrNull() ?: defY
-        return x to y
+        val value = propEl(key)
+        return when (value) {
+            is JsonArray -> (value.getOrNull(0)?.primitiveFloat() ?: defX) to (value.getOrNull(1)?.primitiveFloat() ?: defY)
+            is JsonObject -> value.propFloat("x", defX) to value.propFloat("y", defY)
+            else -> {
+                val raw = value?.primitiveString().orEmpty().trim().removePrefix("[").removeSuffix("]").split(Regex("[,\\s]+"))
+                (raw.getOrNull(0)?.toFloatOrNull()?.takeIf { it.isFinite() } ?: defX) to
+                    (raw.getOrNull(1)?.toFloatOrNull()?.takeIf { it.isFinite() } ?: defY)
+            }
+        }
     }
 }

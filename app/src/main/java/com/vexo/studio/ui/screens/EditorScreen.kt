@@ -298,7 +298,7 @@ private fun PreviewBlock(
     showDiagnostics:Boolean=false
 ) {
     val palette = LocalVexoPalette.current
-    Column(modifier=modifier.background(Color.Black).clipToBounds()){
+    Column(modifier=modifier.background(palette.panel).clipToBounds()){
         Row(Modifier.fillMaxWidth().background(palette.panel).horizontalScroll(rememberScrollState()).padding(horizontal=4.dp),verticalAlignment=Alignment.CenterVertically){
             IconButton(onClick=vm::undo,enabled=uiState.canUndo,modifier=Modifier.size(32.dp)){Icon(Icons.Default.Undo,"Undo",modifier=Modifier.size(17.dp),tint=if(uiState.canUndo)palette.textPrimary else palette.border)}
             IconButton(onClick=vm::redo,enabled=uiState.canRedo,modifier=Modifier.size(32.dp)){Icon(Icons.Default.Redo,"Redo",modifier=Modifier.size(17.dp),tint=if(uiState.canRedo)palette.textPrimary else palette.border)}
@@ -567,6 +567,8 @@ private fun LayersTab(
                             Text(type.label.uppercase(), style = MaterialTheme.typography.labelMedium)
                         }
                     }
+                    Text("CREATIVE EFFECTS",style=MaterialTheme.typography.labelMedium,color=palette.accent)
+                    Box(Modifier.fillMaxWidth().background(palette.panelElevated,palette.shape).border(1.dp,palette.border,palette.shape).clickable{vm.addGlowLayer();showAddLayerDialog=false}.padding(12.dp)){Text("GLOW • SELECTED LAYER",style=MaterialTheme.typography.labelMedium,color=palette.textPrimary)}
                     Text("CREATIVE RECIPES",style=MaterialTheme.typography.labelMedium,color=palette.accent)
                     com.vexo.studio.model.CreativeRecipes.names.forEach{name->
                         Box(Modifier.fillMaxWidth().background(palette.panelElevated).border(1.dp,palette.border).clickable{vm.addCreativeLayer(name);showAddLayerDialog=false}.padding(12.dp)){Text(name.uppercase(),style=MaterialTheme.typography.labelMedium)}
@@ -907,6 +909,10 @@ private fun PropertiesTab(
                     StudioSlider("Radius",cfg.circleRadius,0.01f,0.8f,0.28f,"",0.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){l->l.copy(config=(l.config as LayerConfig.Bars).copy(circleRadius=v))}},onCommit=::endDrag)
                     StudioSlider("Turns",cfg.pathTurns,0.25f,5.0f,2.0f,"",0.05f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){l->l.copy(config=(l.config as LayerConfig.Bars).copy(pathTurns=v))}},onCommit=::endDrag)
                     StudioSlider("Wave spread",cfg.pathSpread,0.0f,1.0f,0.3f,"",0.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){l->l.copy(config=(l.config as LayerConfig.Bars).copy(pathSpread=v))}},onCommit=::endDrag)
+                    StudioSlider("Sample Offset",cfg.sampleOffset,-1f,1f,0f,"",.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){l->l.copy(config=(l.config as LayerConfig.Bars).copy(sampleOffset=v))}},onCommit=::endDrag)
+                    StudioSlider("Spectrum Repeat",cfg.sampleRepeats.toFloat(),1f,8f,1f,"",1f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){l->l.copy(config=(l.config as LayerConfig.Bars).copy(sampleRepeats=v.toInt()))}},onCommit=::endDrag)
+                    StudioSlider("Amplitude Curve",cfg.amplitudeCurve,.25f,3f,1f,"",.05f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){l->l.copy(config=(l.config as LayerConfig.Bars).copy(amplitudeCurve=v))}},onCommit=::endDrag)
+                    StudioSlider("Baseline Offset",cfg.baselineOffset,-1f,1f,0f,"",.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){l->l.copy(config=(l.config as LayerConfig.Bars).copy(baselineOffset=v))}},onCommit=::endDrag)
                     StudioSlider("Steps",cfg.stepCount.toFloat(),2.0f,16.0f,8.0f,"",1.0f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){l->l.copy(config=(l.config as LayerConfig.Bars).copy(stepCount=v.toInt()))}},onCommit=::endDrag)
                 }
                 ExpandableSectionHeader("Path & geometry", expandedSections["Bars_Pathgeometry"] == true, { toggleAccordion(expandedSections, "Bars_Pathgeometry") }) {

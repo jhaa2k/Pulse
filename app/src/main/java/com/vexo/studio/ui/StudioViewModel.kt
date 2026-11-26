@@ -443,6 +443,31 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         _uiState.value=_uiState.value.copy(selectedLayerId=layer.common.id,studioTab=StudioTab.PROPERTIES)
     }
 
+    /** Isolate the selected layer on a transparent bus so glow has an actual source. */
+    fun addGlowLayer() {
+        val state = _uiState.value
+        val p = state.project
+        val comp = p.compositions.firstOrNull { it.index == state.selectedCompositionIndex } ?: return
+        val selected = comp.layers.firstOrNull { it.common.id == state.selectedLayerId }
+        if (selected == null || selected.common.locked || !selected.common.visible || p.compositions.size >= 64 || p.compositions.sumOf { it.layers.size } >= 2048) {
+            _uiState.value = state.copy(statusBanner = "Select a visible, unlocked layer and ensure composition capacity before adding glow")
+            return
+        }
+        val idx = (p.compositions.maxOfOrNull { it.index } ?: 0) + 1
+        val bus = CompositionNode(index=idx, name="Glow source: " + selected.common.name, layers=listOf(selected))
+        val glow = LayerNode(LayerType.BLUR_EFFECT, LayerCommon(name="Glow • " + selected.common.name, blendMode=BlendMode.ADD),
+            LayerConfig.BlurEffect(sourceCompositionIndex=idx, blurRadius=5f, blurMultiplier=2f,
+                layer1Scale=1f, layer1ColorArgb=0xAAFFFFFF.toInt(), layer2Scale=1.025f, layer2ColorArgb=0x55FFFFFF,
+                blendModeContent=BlendMode.ADD, showUnblurredContentUnder=false, showUnblurredContent=true))
+        val next = p.copy(compositions=p.compositions.map { if(it.index==comp.index)it.copy(layers=it.layers.map { l->if(l.common.id==selected.common.id)glow else l }) else it }+bus)
+        if(com.vexo.studio.engine.scene.SceneGraph.resolve(next).hasCycle) {
+            _uiState.value=state.copy(statusBanner="Glow source would create a composition cycle")
+            return
+        }
+        commitProjectChange(next)
+        _uiState.value=_uiState.value.copy(selectedLayerId=glow.common.id,studioTab=StudioTab.PROPERTIES,statusBanner="Glow added. Original layer is editable in its source composition.")
+    }
+
     fun addLayer(type: LayerType) {
         val p = _uiState.value.project
         val compIdx = _uiState.value.selectedCompositionIndex

@@ -399,7 +399,11 @@ sealed interface LayerConfig {
         val secondaryCreativeStyle: CreativeSpectrumStyle = CreativeSpectrumStyle.BARS,
         val creativeStrokeWidth: Float = 2f,
         val creativeFillAlpha: Float = .65f,
-        val creativeTipSize: Float = 1f
+        val creativeTipSize: Float = 1f,
+        val sampleOffset: Float = 0f,
+        val sampleRepeats: Int = 1,
+        val amplitudeCurve: Float = 1f,
+        val baselineOffset: Float = 0f
     ) : LayerConfig
 
     @Serializable
