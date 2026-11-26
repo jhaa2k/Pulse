@@ -276,6 +276,17 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         if(frames.size>500)return
         commitProjectChange(p.copy(keyframes=p.keyframes.filterNot{it.targetLayerId==layerId&&it.propertyKey==property}+com.vexo.studio.model.KeyframeTrack(layerId,property,frames)))
     }
+    fun moveTransformKeyframe(layerId:String,key:String,oldTime:Long,newTime:Long){
+        val p=_uiState.value.project
+        if(p.compositions.none{c->c.layers.any{it.common.id==layerId&&!it.common.locked}})return
+        val property="transform."+key
+        val track=p.keyframes.firstOrNull{it.targetLayerId==layerId&&it.propertyKey==property}?:return
+        val frame=track.keyframes.firstOrNull{it.timeMs==oldTime}?:return
+        val t=newTime.coerceAtLeast(0L)
+        val edited=track.copy(keyframes=(track.keyframes.filterNot{it.timeMs==oldTime||it.timeMs==t}+frame.copy(timeMs=t)).sortedBy{it.timeMs})
+        commitProjectChange(p.copy(keyframes=p.keyframes.map{if(it==track)edited else it}))
+    }
+
     fun removeTransformKeyframe(layerId:String,key:String,time:Long?){
         val p=_uiState.value.project
         val property="transform."+key
@@ -511,7 +522,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
 
     fun availableTemplates(): List<VexoProject> = runCatching {
         com.vexo.studio.data.BuiltInTemplateRepository.load(app)
-    }.getOrDefault(emptyList()) + VexoTemplates.allTemplates()
+    }.getOrDefault(emptyList()) + VexoTemplates.allTemplates() + com.vexo.studio.model.CreativeSceneTemplates.all()
 
     fun applyArtworkPalette() {
         val bitmap = playbackState.value.trackMeta.artwork

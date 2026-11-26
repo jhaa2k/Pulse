@@ -1657,20 +1657,52 @@ private fun TransformKeyframePanel(vm:StudioViewModel,ui:StudioUiState,layer:Lay
     var mode by remember{mutableStateOf(com.vexo.studio.model.InterpolationType.LINEAR)}
     var draft by remember(layer.common.id,key){mutableStateOf(com.vexo.studio.engine.scene.TransformAnimation.value(layer.common,key).toString())}
     val track=ui.project.keyframes.firstOrNull{it.targetLayerId==layer.common.id&&it.propertyKey=="transform."+key}
+    val frames=track?.keyframes.orEmpty().sortedBy{it.timeMs}
+    val palette=LocalVexoPalette.current
+    var editTime by remember(layer.common.id,key){mutableStateOf<Long?>(null)}
+    var timeDraft by remember{mutableStateOf("")}
+    val duration=maxOf(1L,playback.durationMs,frames.lastOrNull()?.timeMs?:0L)
     StudioChipSelector("Property",keys,key,{it}){key=it}
     StudioChipSelector("Interpolation",com.vexo.studio.model.InterpolationType.entries,mode,{it.name}){mode=it}
     Text("Playhead: "+formatDuration(playback.positionMs),style=MaterialTheme.typography.labelMedium)
+    Canvas(Modifier.fillMaxWidth().height(38.dp).background(palette.panelElevated).pointerInput(duration){
+        detectTapGestures{p->vm.playbackController.seekTo((p.x/size.width.coerceAtLeast(1)*duration).toLong().coerceIn(0L,duration))}
+    }){
+        val y=size.height*.5f
+        drawLine(palette.border,Offset(0f,y),Offset(size.width,y),2.dp.toPx())
+        frames.forEach{frame->
+            val x=frame.timeMs.toFloat()/duration*size.width
+            val r=4.dp.toPx()
+            val diamond=androidx.compose.ui.graphics.Path().apply{moveTo(x,y-r);lineTo(x+r,y);lineTo(x,y+r);lineTo(x-r,y);close()}
+            drawPath(diamond,palette.accent)
+        }
+        val x=(playback.positionMs.toFloat()/duration).coerceIn(0f,1f)*size.width
+        drawLine(palette.textPrimary,Offset(x,0f),Offset(x,size.height),1.dp.toPx())
+    }
+    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())){
+        TextButton(enabled=frames.any{it.timeMs<playback.positionMs},onClick={frames.lastOrNull{it.timeMs<playback.positionMs}?.let{vm.playbackController.seekTo(it.timeMs)}}){Text("PREV KEY")}
+        TextButton(enabled=frames.any{it.timeMs>playback.positionMs},onClick={frames.firstOrNull{it.timeMs>playback.positionMs}?.let{vm.playbackController.seekTo(it.timeMs)}}){Text("NEXT KEY")}
+        TextButton(onClick={draft=com.vexo.studio.engine.scene.KeyframeEvaluator.evaluate(track,playback.positionMs,com.vexo.studio.engine.scene.TransformAnimation.value(layer.common,key)).toString()}){Text("READ VALUE")}
+    }
     OutlinedTextField(draft,{draft=it.take(24)},label={Text("Value at playhead")},singleLine=true,modifier=Modifier.fillMaxWidth())
     val value=draft.toFloatOrNull()?.takeIf{it.isFinite()}
     Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){
         TextButton(enabled=value!=null,onClick={value?.let{vm.putTransformKeyframe(layer.common.id,key,playback.positionMs,it,mode)}}){Text("ADD / UPDATE KEY")}
         TextButton(enabled=track!=null,onClick={vm.removeTransformKeyframe(layer.common.id,key,null)}){Text("CLEAR")}
     }
-    track?.keyframes?.take(500)?.forEach{frame->
+    frames.take(500).forEach{frame->
         Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
             Text(formatDuration(frame.timeMs)+" · "+("%.3f".format(frame.value))+" · "+frame.interpolation.name,modifier=Modifier.weight(1f),style=MaterialTheme.typography.labelSmall)
             TextButton(onClick={vm.playbackController.seekTo(frame.timeMs);draft=frame.value.toString();mode=frame.interpolation}){Text("EDIT")}
+            TextButton(onClick={editTime=frame.timeMs;timeDraft=(frame.timeMs/1000.0).toString()}){Text("TIME")}
             TextButton(onClick={vm.removeTransformKeyframe(layer.common.id,key,frame.timeMs)}){Text("X")}
         }
     }
+    editTime?.let{old->
+        val value=timeDraft.toDoubleOrNull()?.takeIf{it.isFinite()&&it>=0&&it<=86400}
+        AlertDialog(onDismissRequest={editTime=null},title={Text("MOVE KEYFRAME")},text={
+            OutlinedTextField(timeDraft,{timeDraft=it.take(16)},label={Text("Time in seconds")},singleLine=true)
+        },confirmButton={TextButton(enabled=value!=null,onClick={value?.let{vm.moveTransformKeyframe(layer.common.id,key,old,(it*1000).toLong())};editTime=null}){Text("MOVE")}},dismissButton={TextButton(onClick={editTime=null}){Text("CANCEL")}})
+    }
+
 }

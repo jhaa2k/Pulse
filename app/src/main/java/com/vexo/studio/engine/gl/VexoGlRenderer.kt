@@ -536,7 +536,8 @@ class VexoGlRenderer(
         val n=bars.size
         if(n==0)return
         val steps=if(cfg.creativeStyle==com.vexo.studio.model.CreativeSpectrumStyle.STEPS)cfg.stepCount.coerceIn(2,16) else 1
-        val needed=n*steps*12
+        val isDot=cfg.creativeStyle==com.vexo.studio.model.CreativeSpectrumStyle.DOTS
+        val needed=n*steps*(if(isDot)72 else 12)
         if(vertexScratch.size<needed||colorScratch.size<needed*2){vertexScratch=FloatArray(needed);colorScratch=FloatArray(needed*2);vertexBuf=allocFloatBuffer(needed);colorBuf=allocFloatBuffer(needed*2)}
         val minDim=minOf(w,h).toFloat()
         fun point(t:Float):com.vexo.studio.engine.scene.CreativeGeometry.Point{
@@ -576,7 +577,18 @@ class VexoGlRenderer(
             }
             val base=if(cfg.mirror)-height*.5f else 0f
             when(cfg.creativeStyle){
-                com.vexo.studio.model.CreativeSpectrumStyle.DOTS->quad(base+height-width*.5f,base+height+width*.5f)
+                com.vexo.studio.model.CreativeSpectrumStyle.DOTS->{
+                    val cx=pt.x+nx*(base+height);val cy=pt.y+ny*(base+height)
+                    val r=width*.5f
+                    fun dotVertex(x:Float,y:Float){
+                        vertexScratch[vi++]=x;vertexScratch[vi++]=y
+                        colorScratch[ci++]=((color ushr 16)and 255)/255f;colorScratch[ci++]=((color ushr 8)and 255)/255f;colorScratch[ci++]=(color and 255)/255f;colorScratch[ci++]=((color ushr 24)and 255)/255f
+                    }
+                    for(j in 0 until 12){
+                        val a=j*PI.toFloat()/6f;val b=(j+1)*PI.toFloat()/6f
+                        dotVertex(cx,cy);dotVertex(cx+cos(a)*r,cy+sin(a)*r);dotVertex(cx+cos(b)*r,cy+sin(b)*r)
+                    }
+                }
                 com.vexo.studio.model.CreativeSpectrumStyle.STEPS->{
                     val lit=(amplitude.coerceIn(0f,1f)*steps).toInt().coerceIn(0,steps)
                     val full=minDim*.42f*(if(height<0f)-1 else 1)
