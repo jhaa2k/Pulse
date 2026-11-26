@@ -1456,7 +1456,7 @@ private fun AudioProviderEditorSection(
                     .clickable { vm.selectAudioProvider(p.index) }
                     .padding(horizontal = 10.dp, vertical = 6.dp)
             ) {
-                Text("PROVIDER ${p.index}", style = MaterialTheme.typography.labelSmall, color = if (active) palette.accentOn else palette.textPrimary)
+                Text("#${p.index} ${p.tag}", style = MaterialTheme.typography.labelSmall, color = if (active) palette.accentOn else palette.textPrimary)
             }
         }
         Box(
@@ -1470,6 +1470,24 @@ private fun AudioProviderEditorSection(
         }
     }
 
+    var providerAction by remember(provider.id){mutableStateOf("")}
+    var providerName by remember(provider.id){mutableStateOf(provider.tag)}
+    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())){
+        TextButton(onClick={providerName=provider.tag;providerAction="rename"}){Text("RENAME")}
+        TextButton(enabled=uiState.project.audioProviders.size<16,onClick={vm.duplicateAudioProvider(provider.index)}){Text("DUPLICATE")}
+        TextButton(onClick={providerAction="reset"}){Text("RESET")}
+        TextButton(enabled=uiState.project.audioProviders.size>1,onClick={providerAction="delete"}){Text("DELETE")}
+    }
+    if(providerAction.isNotEmpty())AlertDialog(onDismissRequest={providerAction=""},title={Text(providerAction.uppercase()+" PROVIDER")},text={
+        when(providerAction){
+            "rename"->OutlinedTextField(providerName,{providerName=it.take(80)},singleLine=true,label={Text("Provider name")})
+            "delete"->Text("Bindings using this provider will move to the first remaining provider.")
+            else->Text("Reset analysis parameters to defaults while keeping the provider identity.")
+        }
+    },confirmButton={TextButton(enabled=providerAction!="rename"||providerName.isNotBlank(),onClick={
+        when(providerAction){"rename"->vm.renameAudioProvider(provider.index,providerName);"delete"->vm.deleteAudioProvider(provider.index);"reset"->vm.resetAudioProvider(provider.index)}
+        providerAction=""
+    }){Text("CONFIRM")}},dismissButton={TextButton(onClick={providerAction=""}){Text("CANCEL")}})
     ExpandableSectionHeader(
         title = "GENERAL & SPECTRUM",
         expanded = expandedSections["provider_general"] ?: false,
@@ -1479,7 +1497,7 @@ private fun AudioProviderEditorSection(
             vm.updateAudioProvider(provider.index) { it.copy(sampleProvider = mode) }
         }
         StudioChipSelector("FFT Size", listOf(256, 512, 1024, 2048, 4096, 8192), provider.fftSize, { "$it" }) { sz ->
-            vm.updateAudioProvider(provider.index) { it.copy(fftSize = sz) }
+            vm.updateAudioProvider(provider.index) { it.copy(fftSize = sz,hopSize=it.hopSize.coerceAtMost(sz)) }
         }
         StudioChipSelector("Window", WindowType.entries, provider.window, { it.label }) { win ->
             vm.updateAudioProvider(provider.index) { it.copy(window = win) }

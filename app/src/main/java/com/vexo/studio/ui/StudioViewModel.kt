@@ -595,9 +595,28 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         val p = _uiState.value.project
         if(p.audioProviders.size>=16){_uiState.value=_uiState.value.copy(statusBanner="Maximum 16 audio providers");return}
         val nextIdx = (p.audioProviders.maxOfOrNull { it.index } ?: 0) + 1
-        val next = p.copy(audioProviders = p.audioProviders + AudioProviderConfig(index = nextIdx, tag = "Provider $nextIdx"))
+        val next = p.copy(audioProviders = p.audioProviders + com.vexo.studio.engine.scene.ProviderBindings.defaults(appSettings.value,nextIdx,"Provider $nextIdx"))
         commitProjectChange(next)
         _uiState.value = _uiState.value.copy(selectedProviderIndex = nextIdx)
+    }
+
+    fun duplicateAudioProvider(index:Int){
+        val p=_uiState.value.project
+        if(p.audioProviders.size>=16)return
+        val source=p.audioProviders.firstOrNull{it.index==index}?:return
+        val next=(p.audioProviders.maxOfOrNull{it.index}?:0)+1
+        commitProjectChange(p.copy(audioProviders=p.audioProviders+source.copy(id=UUID.randomUUID().toString(),index=next,tag=(source.tag+" Copy").take(80))))
+        _uiState.value=_uiState.value.copy(selectedProviderIndex=next)
+    }
+    fun deleteAudioProvider(index:Int){
+        val p=_uiState.value.project
+        val next=com.vexo.studio.engine.scene.ProviderBindings.remove(p,index)
+        if(next==p)return
+        commitProjectChange(next)
+        _uiState.value=_uiState.value.copy(selectedProviderIndex=next.audioProviders.first().index,statusBanner="Provider removed; its bindings moved to the first remaining provider")
+    }
+    fun resetAudioProvider(index:Int){
+        updateAudioProvider(index){old->com.vexo.studio.engine.scene.ProviderBindings.defaults(appSettings.value,index,old.tag).copy(id=old.id)}
     }
 
     fun renameAudioProvider(index:Int,name:String){

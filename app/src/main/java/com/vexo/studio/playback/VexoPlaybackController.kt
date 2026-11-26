@@ -311,7 +311,7 @@ class VexoPlaybackController(
         if (player.hasNextMediaItem()) {
             ringBuffer.resetGeneration()
             player.seekToNextMediaItem()
-        } else if (_state.value.queue.isNotEmpty()) {
+        } else if (_state.value.repeatMode==RepeatModeState.ALL && _state.value.queue.isNotEmpty()) {
             playIndex(0)
         }
     }

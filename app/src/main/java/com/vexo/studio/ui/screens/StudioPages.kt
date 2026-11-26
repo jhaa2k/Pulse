@@ -560,6 +560,7 @@ fun SettingsScreen(
     ) {
         val sections = remember { mutableStateMapOf<String, Boolean>() }
         Text("Settings", style = MaterialTheme.typography.titleMedium)
+        ExpandableSectionHeader("Local crash diagnostics",sections["crash"]==true,{toggleAccordion(sections,"crash")}){LocalCrashPanel()}
         ExpandableSectionHeader("Appearance", sections["appearance"] == true, { toggleAccordion(sections,"appearance") }) {
 
         StudioChipSelector("Theme Preset", ThemePreset.entries, settings.themePreset, { it.label }) { theme ->
@@ -603,6 +604,24 @@ fun SettingsScreen(
         StudioToggleRow("Show Property Help Icons", settings.showPropertyHelpHints) { show ->
             vm.updateSettings { it.copy(showPropertyHelpHints = show) }
         }
+        }
+    }
+}
+
+@Composable
+private fun LocalCrashPanel(){
+    val context=androidx.compose.ui.platform.LocalContext.current
+    var report by androidx.compose.runtime.remember{androidx.compose.runtime.mutableStateOf(com.vexo.studio.data.LocalCrashReport.read(context))}
+    Text("Fatal error summaries are stored locally. No automatic upload.",style=MaterialTheme.typography.labelSmall)
+    if(report.isEmpty())Text("No saved fatal error report.",style=MaterialTheme.typography.bodySmall)
+    else{
+        Text(report,style=MaterialTheme.typography.bodySmall)
+        Row{
+            TextButton(onClick={
+                val clipboard=context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("VEXO crash report",report))
+            }){Text("COPY")}
+            TextButton(onClick={com.vexo.studio.data.LocalCrashReport.clear(context);report=""}){Text("CLEAR")}
         }
     }
 }

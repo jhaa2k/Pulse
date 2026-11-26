@@ -16,6 +16,11 @@ class VexoApplication : Application() {
     val projectRepository: ProjectRepository by lazy { ProjectRepository(this) }
     val settingsRepository: SettingsRepository by lazy { SettingsRepository(this) }
 
+    override fun onCreate(){
+        super.onCreate()
+        com.vexo.studio.data.LocalCrashReport.install(this)
+    }
+
     override fun onTerminate() {
         playbackController.release()
         super.onTerminate()
