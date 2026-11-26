@@ -1775,19 +1775,37 @@ private fun TransformKeyframePanel(vm:StudioViewModel,ui:StudioUiState,layer:Lay
     val palette=LocalVexoPalette.current
     var editTime by remember(layer.common.id,key){mutableStateOf<Long?>(null)}
     var timeDraft by remember{mutableStateOf("")}
-    val duration=maxOf(1L,playback.durationMs,frames.lastOrNull()?.timeMs?:0L)
+    val duration=maxOf(1000L,playback.durationMs,frames.lastOrNull()?.timeMs?:0L)
+    var draggedTime by remember(layer.common.id,key,track){mutableStateOf<Long?>(null)}
+    var dragTarget by remember(layer.common.id,key,track){mutableStateOf<Long?>(null)}
+    var dragStartX by remember{mutableStateOf(0f)}
     StudioChipSelector("Property",keys,key,{it}){key=it}
     StudioChipSelector("Interpolation",com.vexo.studio.model.InterpolationType.entries,mode,{it.name}){mode=it}
     CurvePreview(mode)
     Text("Playhead: "+formatDuration(playback.positionMs),style=MaterialTheme.typography.labelMedium)
-    Canvas(Modifier.fillMaxWidth().height(38.dp).background(palette.panelElevated).pointerInput(duration){
-        detectTapGestures{p->vm.playbackController.seekTo((p.x/size.width.coerceAtLeast(1)*duration).toLong().coerceIn(0L,duration))}
+    Text("Drag a diamond to move its time. Tap ruler to seek.",style=MaterialTheme.typography.labelSmall)
+    Canvas(Modifier.fillMaxWidth().height(44.dp).background(palette.panelElevated).pointerInput(duration,playback.durationMs){
+        if(playback.durationMs>0)detectTapGestures{p->vm.playbackController.seekTo((p.x/size.width.coerceAtLeast(1)*duration).toLong().coerceIn(0L,playback.durationMs))}
+    }.pointerInput(duration,track){
+        detectHorizontalDragGestures(onDragStart={p->
+            val closest=frames.minByOrNull{kotlin.math.abs(it.timeMs.toFloat()/duration*size.width-p.x)}
+            if(closest!=null&&kotlin.math.abs(closest.timeMs.toFloat()/duration*size.width-p.x)<=18.dp.toPx()){
+                draggedTime=closest.timeMs;dragTarget=closest.timeMs;dragStartX=p.x-closest.timeMs.toFloat()/duration*size.width
+            }
+        },onDragEnd={
+            val old=draggedTime;val next=dragTarget
+            if(old!=null&&next!=null&&old!=next)vm.moveTransformKeyframe(layer.common.id,key,old,next)
+            draggedTime=null;dragTarget=null
+        },onDragCancel={draggedTime=null;dragTarget=null}){change,_->
+            if(draggedTime!=null){change.consume();dragTarget=(((change.position.x-dragStartX)/size.width.coerceAtLeast(1))*duration).toLong().coerceIn(0L,duration)}
+        }
     }){
         val y=size.height*.5f
         drawLine(palette.border,Offset(0f,y),Offset(size.width,y),2.dp.toPx())
         frames.forEach{frame->
-            val x=frame.timeMs.toFloat()/duration*size.width
-            val r=4.dp.toPx()
+            val t=if(frame.timeMs==draggedTime)dragTarget?:frame.timeMs else frame.timeMs
+            val x=t.toFloat()/duration*size.width
+            val r=if(frame.timeMs==draggedTime)6.dp.toPx() else 4.dp.toPx()
             val diamond=androidx.compose.ui.graphics.Path().apply{moveTo(x,y-r);lineTo(x+r,y);lineTo(x,y+r);lineTo(x-r,y);close()}
             drawPath(diamond,palette.accent)
         }

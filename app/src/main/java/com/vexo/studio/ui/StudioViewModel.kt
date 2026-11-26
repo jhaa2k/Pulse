@@ -312,7 +312,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         if(p.compositions.none{c->c.layers.any{it.common.id==layerId&&!it.common.locked}})return
         val property="transform."+key
         val track=p.keyframes.firstOrNull{it.targetLayerId==layerId&&it.propertyKey==property}
-        val t=time.coerceAtLeast(0)
+        val t=time.coerceIn(0L,86400000L)
         val frames=(track?.keyframes.orEmpty().filterNot{it.timeMs==t}+com.vexo.studio.model.Keyframe(t,value,mode)).sortedBy{it.timeMs}
         if(frames.size>500)return
         commitProjectChange(p.copy(keyframes=p.keyframes.filterNot{it.targetLayerId==layerId&&it.propertyKey==property}+com.vexo.studio.model.KeyframeTrack(layerId,property,frames)))
@@ -323,13 +323,16 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         val property="transform."+key
         val track=p.keyframes.firstOrNull{it.targetLayerId==layerId&&it.propertyKey==property}?:return
         val frame=track.keyframes.firstOrNull{it.timeMs==oldTime}?:return
-        val t=newTime.coerceAtLeast(0L)
-        val edited=track.copy(keyframes=(track.keyframes.filterNot{it.timeMs==oldTime||it.timeMs==t}+frame.copy(timeMs=t)).sortedBy{it.timeMs})
+        val t=newTime.coerceIn(0L,86400000L)
+        if(t==oldTime)return
+        if(track.keyframes.any{it.timeMs==t}){_uiState.value=_uiState.value.copy(statusBanner="A keyframe already exists at that time");return}
+        val edited=track.copy(keyframes=(track.keyframes.filterNot{it.timeMs==oldTime}+frame.copy(timeMs=t)).sortedBy{it.timeMs})
         commitProjectChange(p.copy(keyframes=p.keyframes.map{if(it==track)edited else it}))
     }
 
     fun removeTransformKeyframe(layerId:String,key:String,time:Long?){
         val p=_uiState.value.project
+        if(p.compositions.none{c->c.layers.any{it.common.id==layerId&&!it.common.locked}})return
         val property="transform."+key
         val tracks=p.keyframes.mapNotNull{t->
             if(t.targetLayerId!=layerId||t.propertyKey!=property)t

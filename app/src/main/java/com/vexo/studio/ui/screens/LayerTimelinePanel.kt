@@ -55,6 +55,7 @@ internal fun ColumnScope.LayerTimelinePanel(vm:StudioViewModel,ui:StudioUiState,
             var draft by remember(layer.common.id,t){mutableStateOf<LayerTiming?>(null)}
             var delta by remember(layer.common.id,t){mutableStateOf(0f)}
             val shown=draft?:t
+            val markers=remember(ui.project.keyframes,layer.common.id){ui.project.keyframes.filter{it.targetLayerId==layer.common.id}.flatMap{it.keyframes}.map{it.timeMs}.distinct().sorted()}
             Row(Modifier.fillMaxWidth().height(42.dp),verticalAlignment=Alignment.CenterVertically){
                 Text(layer.common.name,style=MaterialTheme.typography.labelSmall,color=if(ui.selectedLayerId==layer.common.id)palette.accent else palette.textPrimary,maxLines=2,overflow=TextOverflow.Ellipsis,modifier=Modifier.width(84.dp).clickable{vm.selectLayer(layer.common.id);vm.selectStudioTab(StudioTab.PROPERTIES)})
                 Canvas(Modifier.weight(1f).height(32.dp).background(palette.panelElevated).pointerInput(t,total,mode,layer.common.locked){
@@ -72,6 +73,11 @@ internal fun ColumnScope.LayerTimelinePanel(vm:StudioViewModel,ui:StudioUiState,
                     val fadeOut=(shown.fadeOutMs.toFloat()/total*size.width).coerceIn(0f,width)
                     if(fadeIn>0)drawLine(palette.textPrimary,Offset(start,size.height-4.dp.toPx()),Offset(start+fadeIn,4.dp.toPx()),1.dp.toPx())
                     if(fadeOut>0)drawLine(palette.textPrimary,Offset(end-fadeOut,4.dp.toPx()),Offset(end,size.height-4.dp.toPx()),1.dp.toPx())
+                    markers.filter{it in 0..total}.forEach{time->
+                        val x=time.toFloat()/total*size.width;val y=size.height*.5f;val r=3.dp.toPx()
+                        val path=androidx.compose.ui.graphics.Path().apply{moveTo(x,y-r);lineTo(x+r,y);lineTo(x,y+r);lineTo(x-r,y);close()}
+                        drawPath(path,palette.textPrimary)
+                    }
                     val play=(playback.positionMs.toFloat()/total).coerceIn(0f,1f)*size.width
                     drawLine(palette.textPrimary,Offset(play,0f),Offset(play,size.height),1.dp.toPx())
                 }
