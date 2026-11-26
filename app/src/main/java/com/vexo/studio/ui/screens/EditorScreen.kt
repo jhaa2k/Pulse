@@ -1018,6 +1018,7 @@ private fun PropertiesTab(
                         vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(colorKeyEnabled = k)) }
                     }
                     if(cfg.colorKeyEnabled){
+                        StudioToggleRow("Auto Key (image corner)",cfg.autoDetectColorKey){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.Image).copy(autoDetectColorKey=v))}}
                         StudioColorPickerRow("Key Color",cfg.colorKeyArgb){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.Image).copy(colorKeyArgb=v,autoDetectColorKey=false))}}
                         StudioSlider("Key Strength",cfg.transparencyStrength,0f,1f,1f,"",.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.Image).copy(transparencyStrength=v))}},onCommit=::endDrag)
                     }
@@ -1037,6 +1038,7 @@ private fun PropertiesTab(
                     }
                 }
                 ExpandableSectionHeader("Blur", expandedSections["Image_Blur"] == true, { toggleAccordion(expandedSections, "Image_Blur") }) {
+                    StudioToggleRow("Blurred Border (fit mode)",cfg.blurredBorder){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.Image).copy(blurredBorder=v))}}
                     StudioToggleRow("Image Blur", cfg.blurEnabled) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(blurEnabled = v)) } }
                     if (cfg.blurEnabled) {
                         StudioSlider("Image Blur Radius", cfg.blurRadius.toFloat(), 0f, 64f, 7f, "px", 1f, onValueChange = { v -> beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(blurRadius = v.toInt())) } }, onCommit = ::endDrag)

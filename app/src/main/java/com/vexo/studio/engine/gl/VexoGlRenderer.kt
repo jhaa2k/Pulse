@@ -122,6 +122,7 @@ class VexoGlRenderer(
     private val videoFrames = VideoFrameTextures(context)
     private val textureCache = LinkedHashMap<String,Int>(32,.75f,true)
     private val bitmapSizes = mutableMapOf<Int, Pair<Int, Int>>()
+    private val bitmapKeyColors=mutableMapOf<Int,Int>()
     private val particleSims = mutableMapOf<String, ParticleSimulator>()
     private val barDelayHistory = mutableMapOf<String, ArrayDeque<FloatArray>>()
     private var lastProjectId: String? = null
@@ -184,13 +185,14 @@ class VexoGlRenderer(
         mirrorShader?.release(); mirrorShader = null
         fboPool.releaseAll()
         bitmapSizes.clear()
+        bitmapKeyColors.clear()
         if (textureCache.isNotEmpty()) {
             val ids = textureCache.values.toIntArray()
             GLES20.glDeleteTextures(ids.size, ids, 0)
             textureCache.clear()
         }
         if (artworkTexId != 0) {
-            bitmapSizes.remove(artworkTexId)
+            bitmapSizes.remove(artworkTexId);bitmapKeyColors.remove(artworkTexId)
             GLES20.glDeleteTextures(1, intArrayOf(artworkTexId), 0)
             artworkTexId = 0
         }
@@ -594,7 +596,7 @@ class VexoGlRenderer(
         if (texId == 0) return
 
         val colorBlend = MeasureEvaluator.evaluateScalar(
-            cfg.measureColorBlend, audioSnap, scene.totalTimeSec, scene.playingTimeSec, trackNorm, scene.isPlaying
+            cfg.measureColorBlend, scene.audioSnapshots[cfg.measureColorBlend.providerIndex] ?: audioSnap, scene.totalTimeSec, scene.playingTimeSec, trackNorm, scene.isPlaying
         ).coerceIn(0f, 1f)
         val tint = MeasureEvaluator.blendArgb(cfg.colorArgb, cfg.colorToArgb, colorBlend)
 
@@ -619,11 +621,12 @@ class VexoGlRenderer(
         }
         GLES20.glUniform1i(shader.uniform("uShape"), shapeCode)
         GLES20.glUniform1i(shader.uniform("uColorKeyEnabled"), if (cfg.colorKeyEnabled) 1 else 0)
+        val keyColor=if(cfg.autoDetectColorKey)bitmapKeyColors[texId]?:cfg.colorKeyArgb else cfg.colorKeyArgb
         GLES20.glUniform3f(
             shader.uniform("uKeyColor"),
-            ((cfg.colorKeyArgb ushr 16) and 0xFF) / 255f,
-            ((cfg.colorKeyArgb ushr 8) and 0xFF) / 255f,
-            (cfg.colorKeyArgb and 0xFF) / 255f
+            ((keyColor ushr 16) and 0xFF) / 255f,
+            ((keyColor ushr 8) and 0xFF) / 255f,
+            (keyColor and 0xFF) / 255f
         )
         GLES20.glUniform1f(shader.uniform("uOpacity"), opacity * cfg.opacityStrength.coerceIn(0f, 1f))
 
@@ -637,6 +640,18 @@ class VexoGlRenderer(
         val (drawW, drawH) = if (cfg.keepAspectRatio && !crop && !shapeSquare) {
             if(imageRatio > frameRatio) frameW to frameW / imageRatio else frameH * imageRatio to frameH
         } else frameW to frameH
+        if(cfg.blurredBorder && cfg.keepAspectRatio && !crop && !shapeSquare && (drawW<frameW-.5f || drawH<frameH-.5f)){
+            GLES20.glUniform1i(shader.uniform("uImageFxEnabled"),1)
+            GLES20.glUniform1i(shader.uniform("uShape"),0)
+            GLES20.glUniform1i(shader.uniform("uColorKeyEnabled"),0)
+            GLES20.glUniform1i(shader.uniform("uMaskEnabled"),0)
+            GLES20.glUniform2f(shader.uniform("uUvScale"),minOf(1f,frameRatio/imageRatio),minOf(1f,imageRatio/frameRatio))
+            val radius=maxOf(10f,cfg.blurRadius.toFloat()*2f)
+            GLES20.glUniform2f(shader.uniform("uImageBlurStep"),radius/sourceW.coerceAtLeast(1),radius/sourceH.coerceAtLeast(1))
+            drawTexturedQuad(shader,0f,0f,w.toFloat(),h.toFloat(),flipV=cfg.flipV xor (cfg.sourceType==ImageSourceType.COMPOSITION),flipU=cfg.flipU)
+            GLES20.glUniform1i(shader.uniform("uShape"),shapeCode)
+            GLES20.glUniform1i(shader.uniform("uColorKeyEnabled"),if(cfg.colorKeyEnabled)1 else 0)
+        }
         val uvX = if (crop || shapeSquare) minOf(1f, frameRatio / imageRatio) else 1f
         val uvY = if (crop || shapeSquare) minOf(1f, imageRatio / frameRatio) else 1f
         GLES20.glUniform1i(shader.uniform("uImageFxEnabled"), 1)
@@ -692,7 +707,7 @@ class VexoGlRenderer(
                 val oldestKey = textureCache.keys.firstOrNull { it.startsWith("txt_") }
                 if (oldestKey != null) {
                     val oldId = textureCache.remove(oldestKey) ?: 0
-                    bitmapSizes.remove(oldId)
+                    bitmapSizes.remove(oldId);bitmapKeyColors.remove(oldId)
                     if (oldId != 0) GLES20.glDeleteTextures(1, intArrayOf(oldId), 0)
                 }
             }
@@ -1257,7 +1272,7 @@ class VexoGlRenderer(
 
     private fun uploadArtworkTexture(bitmap: Bitmap?) {
         if (artworkTexId != 0) {
-            bitmapSizes.remove(artworkTexId)
+            bitmapSizes.remove(artworkTexId);bitmapKeyColors.remove(artworkTexId)
             GLES20.glDeleteTextures(1, intArrayOf(artworkTexId), 0)
             artworkTexId = 0
         }
@@ -1316,7 +1331,7 @@ class VexoGlRenderer(
         while(iterator.hasNext() && (bytes>48L*1024*1024 || textureCache.size>48)){
             val entry=iterator.next()
             if(entry.key.startsWith("internalres:"))continue
-            val id=entry.value;val size=bitmapSizes.remove(id)
+            val id=entry.value;val size=bitmapSizes.remove(id);bitmapKeyColors.remove(id)
             if(size!=null)bytes-=size.first.toLong()*size.second*4L
             GLES20.glDeleteTextures(1,intArrayOf(id),0);iterator.remove()
         }
@@ -1460,6 +1475,7 @@ class VexoGlRenderer(
         GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE)
         GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, bitmap, 0)
         bitmapSizes[ids[0]] = bitmap.width to bitmap.height
+        bitmapKeyColors[ids[0]]=runCatching{ bitmap.getPixel(0,0) }.getOrDefault(0xFF00FF00.toInt())
         return ids[0]
     }
 
