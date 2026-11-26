@@ -19,7 +19,7 @@ jobs:
       - name: Prepare Gradle wrapper
         run: chmod +x gradlew
       - name: Run unit tests and lint
-        run: ./gradlew testDebugUnitTest lintDebug
+        run: bash .github/scripts/gradle-ci.sh testDebugUnitTest lintDebug
       - name: Print complete lint report on validation failure
         if: failure()
         shell: bash
@@ -41,7 +41,7 @@ jobs:
             app/build/test-results/testDebugUnitTest/
           if-no-files-found: ignore
       - name: Build Debug APK
-        run: ./gradlew assembleDebug assembleDebugAndroidTest
+        run: bash .github/scripts/gradle-ci.sh assembleDebug assembleDebugAndroidTest
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:

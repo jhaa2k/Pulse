@@ -10,7 +10,7 @@ data class SpectrumStyleRecipe(val name:String,val path:CreativeSpectrumPath,val
         barCount=count,circleRadius=radius,barWidth=width,mirror=mirror,barSpacing=.12f,
         pathAngleDeg=0f,pathGap=0f,pathTurns=turns,pathSpread=spread,
         heightScale=if(path==CreativeSpectrumPath.LEGACY)gain*1.6f else gain,barHeightMultiplier=1f,
-        sampleOffset=0f,sampleRepeats=1,amplitudeCurve=1f,baselineOffset=0f,signedWaveform=waveform,curveSubdivisions=curve,gradientRepeats=colors,
+        sampleOffset=0f,sampleRepeats=1,amplitudeCurve=1f,baselineOffset=0f,signedWaveform=waveform,curveSubdivisions=curve,gradientRepeats=colors,customPathEnabled=false,pathStretchX=1f,pathStretchY=1f,
         minHeightScale=.012f,maxHeightScale=.9f,fixedHeight=0f,flipInput=false,alternatingDirection=false,
         colorFromArgb=from,colorToArgb=to,colorBlendOffset=0f,
         creativeStrokeWidth=3f,creativeTipSize=1f,creativeFillAlpha=.65f,roundness=1f,stepCount=8,

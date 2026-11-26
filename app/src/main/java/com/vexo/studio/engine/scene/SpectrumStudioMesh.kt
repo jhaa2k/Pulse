@@ -15,7 +15,7 @@ object SpectrumStudioMesh {
         fun p(x:Float,y:Float)=origin+tangent*x+normal*y
         fun mix(t:Float)=base+(tip-base)*t
     }
-    private fun closed(c:LayerConfig.Bars)=c.pathGap<=.0001f&&when(c.creativePath){
+    private fun closed(c:LayerConfig.Bars)=if(c.customPathEnabled && c.customPathPoints.size>=2) c.customPathClosed else c.pathGap<=.0001f&&when(c.creativePath){
         CreativeSpectrumPath.LEGACY->c.shapePath==BarsShapePath.CIRCLE||c.shapePath==BarsShapePath.SIDED_POLYGON
         CreativeSpectrumPath.ARC,CreativeSpectrumPath.SPIRAL,CreativeSpectrumPath.SINE,CreativeSpectrumPath.DIAGONAL,CreativeSpectrumPath.ZIGZAG->false
         else->true
@@ -33,8 +33,14 @@ object SpectrumStudioMesh {
         val style=styleFor(c);val closed=closed(c)
         val stroke=(c.creativeStrokeWidth.coerceIn(.25f,24f)*dim/720f).coerceAtLeast(.65f)
         val horizontal=c.creativePath in setOf(CreativeSpectrumPath.SINE,CreativeSpectrumPath.DIAGONAL,CreativeSpectrumPath.ZIGZAG)
-        fun point(t:Float):P{
+        val custom=if(c.customPathEnabled) CustomSpectrumPath.create(c.customPathPoints,c.customPathClosed) else null
+        fun rawPoint(t:Float):P{
             val u=if(closed)((t%1f)+1f)%1f else t.coerceIn(0f,1f)
+            if(custom!=null){
+                val pt=custom.at(u)
+                val angle=c.pathAngleDeg*PI.toFloat()/180f
+                return P(w*.5f+(pt.x*cos(angle)-pt.y*sin(angle))*dim,h*.5f+(pt.x*sin(angle)+pt.y*cos(angle))*dim)
+            }
             if(c.creativePath!=CreativeSpectrumPath.LEGACY){
                 val p=CreativeGeometry.path(c.creativePath,u,c.pathTurns,c.pathSpread,c.circleRadius,c.pathGap,c.pathAngleDeg)
                 return P(w*.5f+p.x*(if(horizontal)w else dim),h*.5f+p.y*dim)
@@ -45,6 +51,10 @@ object SpectrumStudioMesh {
             var r=c.circleRadius*dim
             if(c.shapePath==BarsShapePath.SIDED_POLYGON){val sector=2f*PI.toFloat()/c.polygonSides.coerceIn(3,24);val local=((a%sector)+sector)%sector-sector*.5f;r*=cos(sector*.5f)/cos(local).coerceAtLeast(.2f)}
             return P(w*.5f+cos(a)*r,h*.5f+sin(a)*r)
+        }
+        fun point(t:Float):P {
+            val p=rawPoint(t)
+            return P(w*.5f+(p.x-w*.5f)*c.pathStretchX.coerceIn(.1f,3f),h*.5f+(p.y-h*.5f)*c.pathStretchY.coerceIn(.1f,3f))
         }
         val samples=ArrayList<Sample>(n)
         val gain=c.heightScale*c.barHeightMultiplier

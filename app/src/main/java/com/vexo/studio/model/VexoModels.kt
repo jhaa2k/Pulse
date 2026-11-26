@@ -406,7 +406,12 @@ sealed interface LayerConfig {
         val baselineOffset: Float = 0f,
         val signedWaveform: Boolean = false,
         val curveSubdivisions: Int = 1,
-        val gradientRepeats: Int = 1
+        val gradientRepeats: Int = 1,
+        val customPathEnabled: Boolean = false,
+        val customPathClosed: Boolean = false,
+        val customPathPoints: List<SpectrumPathPoint> = emptyList(),
+        val pathStretchX: Float = 1f,
+        val pathStretchY: Float = 1f
     ) : LayerConfig
 
     @Serializable
@@ -1044,6 +1049,7 @@ data class CreativeImageConfig(
     val apertureY: Float = .5f
 )
 
+@Serializable data class SpectrumPathPoint(val x: Float, val y: Float)
 @Serializable enum class CreativeSpectrumPath { LEGACY, ARC, SPIRAL, HEART, SINE, CIRCLE, OVAL, TRIANGLE, SQUARE, HEXAGON, STAR, FLOWER, FIGURE_EIGHT, BUTTERFLY, LISSAJOUS, DIAGONAL, ZIGZAG }
 @Serializable enum class CreativeSpectrumStyle { BARS, DOTS, STEPS, LINE, FILL, OUTLINE, TRIANGLE, DIAMOND, CAPSULE, DASH, DOUBLE_LINE, RIBBON, ZIGZAG, LOLLIPOP, CROSS, CHEVRON, TAPERED, CAPPED, STACK_DOTS, HOLLOW_DOTS, WAVE_POINTS, SAWTOOTH, STRIPES, FAN, TICKS, PEAKS }
 @Serializable enum class ParticleEmitter { LEGACY, POINT, LINE, BOX, RING, DISC }
