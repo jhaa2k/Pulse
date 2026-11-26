@@ -413,6 +413,10 @@ private fun LayersTab(
     var deleteComp by remember{mutableStateOf(false)}
     var renameLayerTarget by remember { mutableStateOf<LayerNode?>(null) }
     var deleteLayerTarget by remember { mutableStateOf<LayerNode?>(null) }
+    var moveTarget by remember { mutableStateOf<LayerNode?>(null) }
+    var groupTarget by remember { mutableStateOf<LayerNode?>(null) }
+    var searchOpen by remember { mutableStateOf(false) }
+    var layerQuery by remember { mutableStateOf("") }
 
     val activeComp = uiState.project.compositions.firstOrNull { it.index == uiState.selectedCompositionIndex }
         ?: uiState.project.compositions.first()
@@ -433,9 +437,11 @@ private fun LayersTab(
                     if(activeComp.index!=0)DropdownMenuItem(text={Text("Delete composition",color=palette.danger)},onClick={compositionMenu=false;deleteComp=true})
                 }
             }
+            TextButton(onClick={searchOpen=!searchOpen;if(!searchOpen)layerQuery=""}){Text(if(searchOpen)"Close" else "Find")}
             if(uiState.clipboardLayerType!=null)TextButton(onClick=vm::pasteLayer){Text("Paste")}
             TextButton(onClick = { showAddLayerDialog = true }) { Icon(Icons.Default.Add, null, tint = palette.accent); Text("Layer", color = palette.accent) }
         }
+        if(searchOpen)OutlinedTextField(layerQuery,{layerQuery=it},label={Text("Search name, type, group")},singleLine=true,modifier=Modifier.fillMaxWidth().padding(horizontal=6.dp))
         StudioToggleRow("Preview selected composition",uiState.previewSelectedComposition,{_:Boolean->vm.toggleCompositionPreview()})
         var canvasOpen by remember{mutableStateOf(false)}
         if(activeComp.index==0)ExpandableSectionHeader("Canvas background",canvasOpen,{canvasOpen=!canvasOpen}){StudioColorPickerRow("Background",uiState.project.canvas.backgroundColorArgb,vm::setCanvasColor)}
@@ -445,7 +451,7 @@ private fun LayersTab(
                 .padding(horizontal = 6.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            items(activeComp.layers, key = { it.common.id }) { layer ->
+            items(activeComp.layers.filter{layerQuery.isBlank()||it.common.name.contains(layerQuery,true)||it.common.groupName.contains(layerQuery,true)||it.type.label.contains(layerQuery,true)}, key = { it.common.id }) { layer ->
                 val isSelected = layer.common.id == uiState.selectedLayerId
                 Row(
                     modifier = Modifier
@@ -481,7 +487,7 @@ private fun LayersTab(
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            text = layer.type.label,
+                            text = layer.type.label + if(layer.common.groupName.isBlank()) "" else " · "+layer.common.groupName,
                             style = MaterialTheme.typography.labelSmall,
                             color = palette.textSecondary,
                             maxLines = 1
@@ -497,6 +503,10 @@ private fun LayersTab(
                             DropdownMenuItem(text = { Text("Rename") }, onClick = { menu = false; renameLayerTarget = layer })
                             DropdownMenuItem(text = { Text("Duplicate") }, onClick = { menu = false; vm.duplicateLayer(layer.common.id) })
                             DropdownMenuItem(text={Text("Copy layer")},onClick={menu=false;vm.copyLayer(layer.common.id)})
+                            if(!layer.common.locked){
+                                DropdownMenuItem(text={Text("Group label")},onClick={menu=false;groupTarget=layer})
+                                if(uiState.project.compositions.size>1)DropdownMenuItem(text={Text("Move to composition")},onClick={menu=false;moveTarget=layer})
+                            }
                             if(!layer.common.locked&&uiState.clipboardLayerType!=null)DropdownMenuItem(text={Text("Paste transform")},onClick={menu=false;vm.pasteLayerStyle(layer.common.id,true)})
                             if(!layer.common.locked&&uiState.clipboardLayerType==layer.type)DropdownMenuItem(text={Text("Paste style")},onClick={menu=false;vm.pasteLayerStyle(layer.common.id,false)})
                             DropdownMenuItem(text = { Text("Delete", color = palette.danger) }, onClick = { menu = false; deleteLayerTarget = layer })
@@ -508,6 +518,13 @@ private fun LayersTab(
         }
     }
 
+    groupTarget?.let{layer->
+        var name by remember(layer.common.id){mutableStateOf(layer.common.groupName)}
+        AlertDialog(onDismissRequest={groupTarget=null},title={Text("GROUP LABEL")},text={OutlinedTextField(name,{name=it.take(80)},label={Text("Group (blank to clear)")},singleLine=true)},confirmButton={TextButton(onClick={vm.updateLayer(layer.common.id){it.copy(common=it.common.copy(groupName=name.trim()))};groupTarget=null}){Text("SAVE")}},dismissButton={TextButton(onClick={groupTarget=null}){Text("CANCEL")}})
+    }
+    moveTarget?.let{layer->
+        AlertDialog(onDismissRequest={moveTarget=null},title={Text("MOVE TO COMPOSITION")},text={Column(Modifier.heightIn(max=320.dp).verticalScroll(rememberScrollState())){uiState.project.compositions.filter{it.index!=activeComp.index}.forEach{comp->TextButton(onClick={vm.moveLayerToComposition(layer.common.id,comp.index);moveTarget=null}){Text(comp.name)}}}},confirmButton={TextButton(onClick={moveTarget=null}){Text("CANCEL")}})
+    }
     if(renameComp){
         var name by remember{mutableStateOf(activeComp.name)}
         AlertDialog(onDismissRequest={renameComp=false},title={Text("RENAME COMPOSITION")},text={OutlinedTextField(name,{name=it},singleLine=true)},confirmButton={TextButton(onClick={vm.renameComposition(activeComp.index,name);renameComp=false}){Text("SAVE")}},dismissButton={TextButton(onClick={renameComp=false}){Text("CANCEL")}})

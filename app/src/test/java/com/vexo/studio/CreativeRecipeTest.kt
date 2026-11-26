@@ -8,7 +8,7 @@ class CreativeRecipeTest{
     val layers=CreativeRecipes.names.map{LayerNode(LayerType.IMAGE,LayerCommon(name=it),CreativeRecipes.config(it,null))}
     val p=VexoProject(compositions=listOf(CompositionNode(index=0,layers=layers)))
     assertEquals(p,NativeVexCodec.decode(NativeVexCodec.encode(p)))
-    assertEquals(8,layers.size)
+    assertEquals(11,layers.size)
  }
  @Test fun gradientsUseSolidSourceAndEffectsUseComposition(){
     assertEquals(ImageSourceType.SOLID_COLOR,CreativeRecipes.config("Aurora Gradient",2).sourceType)

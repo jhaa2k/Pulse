@@ -423,6 +423,27 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         _uiState.value = _uiState.value.copy(selectedLayerId = remaining?.firstOrNull()?.common?.id)
     }
 
+    fun moveLayerToComposition(layerId:String,target:Int){
+        val p=_uiState.value.project
+        val source=p.compositions.firstOrNull{c->c.layers.any{it.common.id==layerId}}?:return
+        if(source.index==target||p.compositions.none{it.index==target})return
+        val layer=source.layers.first{it.common.id==layerId}
+        if(layer.common.locked)return
+        val next=p.copy(compositions=p.compositions.map{c->when(c.index){
+            source.index->c.copy(layers=c.layers.filterNot{it.common.id==layerId})
+            target->c.copy(layers=c.layers+layer)
+            else->c
+        }})
+        // Validate even hidden references, so enabling a hidden layer cannot introduce a cycle.
+        val allVisible=next.copy(compositions=next.compositions.map{c->c.copy(layers=c.layers.map{it.copy(common=it.common.copy(visible=true))})})
+        if(com.vexo.studio.engine.scene.SceneGraph.resolve(allVisible).hasCycle){
+            _uiState.value=_uiState.value.copy(statusBanner="Cannot move: circular composition reference")
+            return
+        }
+        commitProjectChange(next)
+        _uiState.value=_uiState.value.copy(selectedCompositionIndex=target,selectedLayerId=layerId,statusBanner="Layer moved")
+    }
+
     fun moveLayer(layerId: String, direction: Int) {
         val p = _uiState.value.project
         val compIdx = _uiState.value.selectedCompositionIndex
