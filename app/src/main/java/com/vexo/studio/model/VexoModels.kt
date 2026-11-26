@@ -138,7 +138,8 @@ data class MeasureConfig(
     val amountB: Float = 0f,
     val providerIndex: Int = 1,
     val smoothing: Float = 0.25f,
-    val seed: Int = 1337
+    val seed: Int = 1337,
+    val triggerThreshold: Float = 0f
 )
 
 @Serializable
@@ -385,7 +386,10 @@ sealed interface LayerConfig {
         val polygonSides: Int = 6,
         val pathAngleDeg: Float = 0f,
         val showPeaks: Boolean = true,
-        val alternatingDirection: Boolean = false
+        val alternatingDirection: Boolean = false,
+        val barCount: Int = 0, // 0 follows provider output count
+        val barSpacing: Float = 0f,
+        val roundness: Float = 1f
     ) : LayerConfig
 
     @Serializable

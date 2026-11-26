@@ -343,7 +343,7 @@ class VexoGlRenderer(
         val rawBars = audioSnap?.bars ?: FloatArray(64) { i ->
             0.08f + 0.14f * kotlin.math.abs(sin(i * 0.22f))
         }
-        val delayedBars = applyReactionDelay(layerId, rawBars, cfg.reactionDelay)
+        val delayedBars = applyReactionDelay(layerId, SpectrumGeometry.resample(rawBars, cfg.barCount), (cfg.reactionDelay + cfg.reactionAccumulatedDelay).coerceIn(0, 9))
         val count = delayedBars.size
         if (count == 0) return
         if (cfg.segment1 == BarsSegmentType.LINE && count > 1) {
@@ -353,10 +353,11 @@ class VexoGlRenderer(
         val minDim = minOf(w, h).toFloat()
 
         // Ensure vertex scratch capacity (each bar = 6 vertices = 12 floats pos + 24 floats color)
-        val neededVerts = count * 12
-        if (vertexScratch.size < neededVerts) {
+        val vertsPerBar = if (cfg.segment1 == BarsSegmentType.ROUND_BARS) 48 else 6
+        val neededVerts = count * vertsPerBar * 2
+        if (vertexScratch.size < neededVerts || colorScratch.size < count * vertsPerBar * 4) {
             vertexScratch = FloatArray(neededVerts)
-            colorScratch = FloatArray(count * 24)
+            colorScratch = FloatArray(count * vertsPerBar * 4)
             vertexBuf = allocFloatBuffer(vertexScratch.size)
             colorBuf = allocFloatBuffer(colorScratch.size)
         }
@@ -379,6 +380,18 @@ class VexoGlRenderer(
             val b1 = (argb1 and 0xFF) / 255f
             val a1 = ((argb1 ushr 24) and 0xFF) / 255f
 
+            if (cfg.segment1 == BarsSegmentType.ROUND_BARS && cfg.roundness > 0f) {
+                val mesh = SpectrumGeometry.roundedQuad(x0,y0,x1,y1,x2,y2,x3,y3,cfg.roundness)
+                for (i in mesh.indices step 2) {
+                    vertexScratch[vIdx++] = mesh[i]
+                    vertexScratch[vIdx++] = mesh[i+1]
+                    colorScratch[cIdx++] = (r0+r1)*0.5f
+                    colorScratch[cIdx++] = (g0+g1)*0.5f
+                    colorScratch[cIdx++] = (b0+b1)*0.5f
+                    colorScratch[cIdx++] = (a0+a1)*0.5f
+                }
+                return
+            }
             // Tri 1: 0, 1, 2
             vertexScratch[vIdx++] = x0; vertexScratch[vIdx++] = y0
             vertexScratch[vIdx++] = x1; vertexScratch[vIdx++] = y1
@@ -415,7 +428,7 @@ class VexoGlRenderer(
             when (cfg.shapePath) {
                 BarsShapePath.HORIZONTAL_LINE, BarsShapePath.LETTER -> {
                     val slotW = (w * 0.86f) / count
-                    val bw = (slotW * cfg.barWidth.coerceIn(0.05f, 1.5f)).coerceAtLeast(1.5f)
+                    val bw = (slotW * (cfg.barWidth.coerceIn(0.05f, 1.5f) * (1f - cfg.barSpacing.coerceIn(0f, 0.95f)))).coerceAtLeast(1.5f)
                     val cx = w * 0.07f + i * slotW + slotW * 0.5f
                     val cy = h * 0.5f
                     val topY = if (cfg.mirror) cy - magPx * 0.5f else cy - magPx
@@ -431,7 +444,7 @@ class VexoGlRenderer(
                 }
                 BarsShapePath.VERTICAL_LINE -> {
                     val slotH = (h * 0.86f) / count
-                    val bh = (slotH * cfg.barWidth.coerceIn(0.05f, 1.5f)).coerceAtLeast(1.5f)
+                    val bh = (slotH * (cfg.barWidth.coerceIn(0.05f, 1.5f) * (1f - cfg.barSpacing.coerceIn(0f, 0.95f)))).coerceAtLeast(1.5f)
                     val cy = h * 0.07f + i * slotH + slotH * 0.5f
                     val cx = w * 0.5f
                     val leftX = if (cfg.mirror) cx - magPx * 0.5f else cx
@@ -458,7 +471,7 @@ class VexoGlRenderer(
                     val ny = sin(angle)
                     val px = -ny
                     val py = nx
-                    val halfW = ((2f * PI.toFloat() * baseR) / count) * cfg.barWidth.coerceIn(0.05f, 1.4f) * 0.5f
+                    val halfW = ((2f * PI.toFloat() * baseR) / count) * (cfg.barWidth.coerceIn(0.05f, 1.4f) * (1f - cfg.barSpacing.coerceIn(0f, 0.95f))) * 0.5f
                     val tipW = if (cfg.segment1 == BarsSegmentType.SHARP_BARS) halfW * 0.25f else halfW
 
                     emitQuad(
@@ -632,7 +645,7 @@ class VexoGlRenderer(
             .replace("{Album}", meta.album, ignoreCase = true)
             .replace("{Time}", formatTimeMs(meta.positionMs), ignoreCase = true)
 
-        val key = "txt_${resolved}_${cfg.fontSize}_${cfg.bold}_${cfg.italic}_${cfg.colorArgb}_${cfg.alignment}_${cfg.letterSpacing}_${cfg.lineSpacing}_${cfg.strokeWidth}_${cfg.strokeColorArgb}_${cfg.shadowRadius}"
+        val key = "txt_${resolved}_${cfg.fontSize}_${cfg.bold}_${cfg.italic}_${cfg.colorArgb}_${cfg.alignment}_${cfg.letterSpacing}_${cfg.lineSpacing}_${cfg.strokeWidth}_${cfg.strokeColorArgb}_${cfg.shadowRadius}_${cfg.fontAssetUri}"
         val texId = textureCache[key] ?: run {
             val bmp = renderTextBitmap(resolved, cfg)
             val id = uploadBitmapToGl(bmp)

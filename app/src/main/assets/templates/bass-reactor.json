@@ -1,0 +1,144 @@
+{
+  "format": "VEXO_PROJECT",
+  "version": 1,
+  "project": {
+    "name": "Bass Reactor",
+    "canvas": {
+      "aspectRatio": "RATIO_1_1",
+      "backgroundColorArgb": -16777216
+    },
+    "audioProviders": [
+      {
+        "index": 1,
+        "fftSize": 2048,
+        "sampleOutCount": 96,
+        "lowerHz": 30,
+        "higherHz": 16000
+      }
+    ],
+    "compositions": [
+      {
+        "index": 0,
+        "name": "Final Composition",
+        "layers": [
+          {
+            "type": "RGB_SPLIT_EFFECT",
+            "common": {
+              "name": "Bass RGB Drop",
+              "measurePos": {
+                "measureWhat": "BEAT_CAM_SHAKE_MORE",
+                "amountA": 0.018,
+                "amountB": 0.018,
+                "triggerThreshold": 0.3
+              }
+            },
+            "config": {
+              "layerKind": "com.vexo.studio.model.LayerConfig.RgbSplitEffect",
+              "targetCompositionIndex": 1,
+              "splitMeasure": {
+                "measureWhat": "BASS",
+                "amountA": 0.8,
+                "amountB": 0.3,
+                "triggerThreshold": 0.4
+              }
+            }
+          }
+        ]
+      },
+      {
+        "index": 1,
+        "name": "Scene Bus",
+        "layers": [
+          {
+            "type": "IMAGE",
+            "common": {
+              "name": "Album Backdrop",
+              "opacity": 0.45
+            },
+            "config": {
+              "layerKind": "com.vexo.studio.model.LayerConfig.Image",
+              "sourceType": "ALBUM_ART",
+              "keepAspectRatioAndCropToFit": true,
+              "blurEnabled": true,
+              "blurRadius": 12
+            }
+          },
+          {
+            "type": "PARTICLES",
+            "common": {
+              "name": "Particles",
+              "blendMode": "ADD"
+            },
+            "config": {
+              "layerKind": "com.vexo.studio.model.LayerConfig.Particles",
+              "countLimit": 250,
+              "colorFromArgb": -65536,
+              "colorToArgb": -23296
+            }
+          },
+          {
+            "type": "BARS",
+            "common": {
+              "name": "Spectrum",
+              "measureScale": {
+                "measureWhat": "BASS",
+                "amountA": 0.08,
+                "amountB": 0.08,
+                "triggerThreshold": 0.15
+              }
+            },
+            "config": {
+              "layerKind": "com.vexo.studio.model.LayerConfig.Bars",
+              "shapePath": "CIRCLE",
+              "segment1": "ROUND_BARS",
+              "barCount": 96,
+              "barSpacing": 0.15,
+              "roundness": 1,
+              "colorFromArgb": -65536,
+              "colorToArgb": -23296,
+              "mirror": true,
+              "heightScale": 2
+            }
+          },
+          {
+            "type": "IMAGE",
+            "common": {
+              "name": "Album Logo",
+              "scaleX": 0.32,
+              "scaleY": 0.32,
+              "measureRot": {
+                "measureWhat": "TOTAL_TIME",
+                "amountA": 0.1,
+                "amountB": 0.1
+              },
+              "measureScale": {
+                "measureWhat": "BEAT",
+                "amountA": 0.05,
+                "amountB": 0.05,
+                "triggerThreshold": 0.2
+              }
+            },
+            "config": {
+              "layerKind": "com.vexo.studio.model.LayerConfig.Image",
+              "sourceType": "ALBUM_ART",
+              "shape": "CIRCLE",
+              "keepAspectRatioAndCropToFit": true
+            }
+          },
+          {
+            "type": "TEXT",
+            "common": {
+              "name": "Track title",
+              "posY": 0.86
+            },
+            "config": {
+              "layerKind": "com.vexo.studio.model.LayerConfig.Text",
+              "text": "{title} · {artist}",
+              "fontSize": 32
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

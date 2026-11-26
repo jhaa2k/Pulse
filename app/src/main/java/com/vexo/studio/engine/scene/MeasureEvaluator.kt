@@ -54,13 +54,16 @@ object MeasureEvaluator {
     ): EvaluatedPair {
         if (measure.measureWhat == MeasureWhat.NOTHING) return EvaluatedPair(0f, 0f)
 
-        val beat = snapshot?.beat ?: 0f
-        val beatPulse = snapshot?.beatPulse ?: 0f
-        val bass = snapshot?.bass ?: 0f
-        val mid = snapshot?.mid ?: 0f
-        val treble = snapshot?.treble ?: 0f
-        val rms = snapshot?.rms ?: 0f
-        val peak = snapshot?.peak ?: 0f
+        val threshold = measure.triggerThreshold.coerceIn(0f, 0.999f)
+        fun gate(value: Float): Float = if (!value.isFinite()) 0f
+            else if (threshold == 0f) value else ((value - threshold) / (1f - threshold)).coerceIn(0f, 1f)
+        val beat = gate(snapshot?.beat ?: 0f)
+        val beatPulse = gate(snapshot?.beatPulse ?: 0f)
+        val bass = gate(snapshot?.bass ?: 0f)
+        val mid = gate(snapshot?.mid ?: 0f)
+        val treble = gate(snapshot?.treble ?: 0f)
+        val rms = gate(snapshot?.rms ?: 0f)
+        val peak = gate(snapshot?.peak ?: 0f)
 
         val shakePhase = totalTimeSec * 17.3f + measure.seed * 0.137f
         val shakeX = sin(shakePhase) * 0.6f + cos(shakePhase * 1.73f) * 0.4f
@@ -75,7 +78,7 @@ object MeasureEvaluator {
             MeasureWhat.TOTAL_TIME_AND_BEAT -> (totalTimeSec + beat * 0.5f) to (totalTimeSec + beat * 0.5f)
             MeasureWhat.TRACK_POSITION -> trackPositionNorm to trackPositionNorm
             MeasureWhat.BEAT_RANDOM_SHAKE -> (shakeX * beat) to (shakeY * beat)
-            MeasureWhat.BEAT_CAM_SHAKE_MORE -> (shakeX * (0.25f + beat * 1.4f)) to (shakeY * (0.25f + beat * 1.4f))
+            MeasureWhat.BEAT_CAM_SHAKE_MORE -> (shakeX * beat * 1.65f) to (shakeY * beat * 1.65f)
             MeasureWhat.BEAT_CAM_SHAKE_LESS -> (shakeX * beat * 0.5f) to (shakeY * beat * 0.5f)
             MeasureWhat.BEAT_CAM_SHAKE_ROT_MORE -> (shakeX * beat * 12f) to (shakeX * beat * 12f)
             MeasureWhat.BEAT_CAM_SHAKE_ROT_LESS -> (shakeX * beat * 4f) to (shakeX * beat * 4f)

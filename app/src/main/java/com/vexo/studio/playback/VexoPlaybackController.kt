@@ -56,6 +56,14 @@ class VexoPlaybackController(
     val ringBuffer: PcmRingBuffer
 ) {
     val pcmTap = PcmTapAudioProcessor(ringBuffer)
+    val sessionVisualizer = com.vexo.studio.engine.audio.SessionVisualizer(context)
+    private var visualizerRequested = false
+
+    fun setSessionVisualizerEnabled(enabled: Boolean): Boolean {
+        visualizerRequested = enabled
+        if (!enabled) { sessionVisualizer.close(); return true }
+        return sessionVisualizer.attach(player.audioSessionId)
+    }
 
     private val _state = MutableStateFlow(PlaybackUiState())
     val state: StateFlow<PlaybackUiState> = _state.asStateFlow()
@@ -95,6 +103,10 @@ class VexoPlaybackController(
             .build()
             .apply {
                 addListener(object : Player.Listener {
+                    override fun onAudioSessionIdChanged(audioSessionId: Int) {
+                        if (visualizerRequested) sessionVisualizer.attach(audioSessionId)
+                    }
+
                     override fun onIsPlayingChanged(isPlaying: Boolean) {
                         _state.value = _state.value.copy(isPlaying = isPlaying)
                     }
@@ -318,6 +330,7 @@ class VexoPlaybackController(
     }
 
     fun release() {
+        sessionVisualizer.close()
         player.release()
     }
 

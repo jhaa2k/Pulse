@@ -1,0 +1,273 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Vexo Native Template",
+  "type": "object",
+  "required": [
+    "format",
+    "version",
+    "project"
+  ],
+  "properties": {
+    "format": {
+      "const": "VEXO_PROJECT"
+    },
+    "version": {
+      "const": 1
+    },
+    "project": {
+      "type": "object",
+      "required": [
+        "name",
+        "compositions"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "name": {
+          "type": "string"
+        },
+        "schemaVersion": {
+          "const": 2
+        },
+        "canvas": {
+          "type": "object"
+        },
+        "audioProviders": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "properties": {
+              "index": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "fftSize": {
+                "enum": [
+                  256,
+                  512,
+                  1024,
+                  2048,
+                  4096,
+                  8192
+                ]
+              },
+              "sampleOutCount": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 512
+              },
+              "lowerHz": {
+                "type": "number",
+                "minimum": 0
+              },
+              "higherHz": {
+                "type": "number",
+                "minimum": 0
+              },
+              "beatSensitivity": {
+                "type": "number",
+                "minimum": 0
+              }
+            }
+          }
+        },
+        "compositions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "type": "object",
+            "required": [
+              "index",
+              "layers"
+            ],
+            "properties": {
+              "index": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "name": {
+                "type": "string"
+              },
+              "layers": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/layer"
+                }
+              }
+            }
+          }
+        },
+        "exportSettings": {
+          "type": "object",
+          "properties": {
+            "resolution": {
+              "enum": [
+                "HD_720",
+                "FHD_1080",
+                "QHD_1440",
+                "UHD_4K"
+              ]
+            },
+            "fps": {
+              "enum": [
+                30,
+                60
+              ]
+            },
+            "videoBitrateMbps": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "audioBitrateKbps": {
+              "type": "integer",
+              "minimum": 64
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "measure": {
+      "type": "object",
+      "properties": {
+        "measureWhat": {
+          "type": "string"
+        },
+        "amountA": {
+          "type": "number"
+        },
+        "amountB": {
+          "type": "number"
+        },
+        "providerIndex": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "triggerThreshold": {
+          "type": "number",
+          "minimum": 0,
+          "exclusiveMaximum": 1
+        }
+      }
+    },
+    "layer": {
+      "type": "object",
+      "required": [
+        "type",
+        "common",
+        "config"
+      ],
+      "properties": {
+        "type": {
+          "enum": [
+            "BARS",
+            "IMAGE",
+            "TEXT",
+            "SHAPE",
+            "PARTICLES",
+            "BLUR_EFFECT",
+            "MOTION_BLUR_EFFECT",
+            "MIRROR_EFFECT",
+            "RGB_SPLIT_EFFECT"
+          ]
+        },
+        "common": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "visible": {
+              "type": "boolean"
+            },
+            "opacity": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "blendMode": {
+              "enum": [
+                "ALPHA",
+                "PRE_MUL_ALPHA",
+                "SCREEN",
+                "ADD",
+                "ADD_ALPHA",
+                "MULTIPLY",
+                "OVERWRITE"
+              ]
+            },
+            "posX": {
+              "type": "number"
+            },
+            "posY": {
+              "type": "number"
+            },
+            "scaleX": {
+              "type": "number"
+            },
+            "scaleY": {
+              "type": "number"
+            },
+            "rotationDeg": {
+              "type": "number"
+            },
+            "measurePos": {
+              "$ref": "#/$defs/measure"
+            },
+            "measureScale": {
+              "$ref": "#/$defs/measure"
+            },
+            "measureRot": {
+              "$ref": "#/$defs/measure"
+            },
+            "measureOpacity": {
+              "$ref": "#/$defs/measure"
+            }
+          }
+        },
+        "config": {
+          "type": "object",
+          "required": [
+            "layerKind"
+          ],
+          "properties": {
+            "layerKind": {
+              "enum": [
+                "com.vexo.studio.model.LayerConfig.Bars",
+                "com.vexo.studio.model.LayerConfig.Image",
+                "com.vexo.studio.model.LayerConfig.Text",
+                "com.vexo.studio.model.LayerConfig.Shape",
+                "com.vexo.studio.model.LayerConfig.Particles",
+                "com.vexo.studio.model.LayerConfig.BlurEffect",
+                "com.vexo.studio.model.LayerConfig.MotionBlurEffect",
+                "com.vexo.studio.model.LayerConfig.MirrorEffect",
+                "com.vexo.studio.model.LayerConfig.RgbSplitEffect"
+              ]
+            },
+            "barCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 512
+            },
+            "barSpacing": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 0.95
+            },
+            "roundness": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          }
+        }
+      }
+    }
+  }
+}
