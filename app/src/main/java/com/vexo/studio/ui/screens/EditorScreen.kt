@@ -1401,7 +1401,7 @@ private fun PropertiesTab(
                     MediaAssetButton("IMPORT BLUR MASK"){uri->vm.attachLayerAsset(layer.common.id,uri,"mask")}
                     TextButton(onClick={vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.BlurEffect).copy(maskImage=""))}}){Text("CLEAR MASK")}
                     MeasureBindingControls("Blur Audio Binding",cfg.measureBlur,uiState.project.audioProviders.map{it.index},::beginDrag,::endDrag){v,undo->vm.updateLayer(layer.common.id,undo){it.copy(config=(it.config as LayerConfig.BlurEffect).copy(measureBlur=v))}}
-                    StudioChipSelector("Glow Blend",BlendMode.entries,cfg.blendModeContent,{it.label}){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.BlurEffect).copy(blendModeContent=v))}}
+                    StudioChipSelector("Glow Blend",BlendMode.entries,cfg.glowBlendMode?:cfg.blendModeContent,{it.label}){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.BlurEffect).copy(glowBlendMode=v))}}
                     StudioChipSelector("Original Content Blend",BlendMode.entries,cfg.unblurredBlendMode?:cfg.blendModeContent,{it.label}){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.BlurEffect).copy(unblurredBlendMode=v))}}
                     StudioSlider("Glow 1 Scale",cfg.layer1Scale,0f,4f,1f,"x",.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.BlurEffect).copy(layer1Scale=v))}},onCommit=::endDrag)
                     StudioColorPickerRow("Glow 1 Color",cfg.layer1ColorArgb){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.BlurEffect).copy(layer1ColorArgb=v))}}
@@ -1460,7 +1460,9 @@ private fun PropertiesTab(
                     }
                     StudioSlider("Trail Persistence",cfg.trailPersistence,0f,.95f,.65f,"",.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.MotionBlurEffect).copy(trailPersistence=v))}},onCommit=::endDrag)
                     StudioColorPickerRow("Trail Tint", cfg.colorArgb) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(colorArgb = v)) } }
-                    StudioSlider("Blur Amount", cfg.blurAmountMultiplier, 0.4f, 3f, 0.85f, "x", 0.05f, onValueChange = { v ->
+                    MeasureBindingControls("Motion Blur Audio Binding",cfg.blurAmountMeasure,uiState.project.audioProviders.map{it.index},::beginDrag,::endDrag){v,undo->vm.updateLayer(layer.common.id,undo){it.copy(config=(it.config as LayerConfig.MotionBlurEffect).copy(blurAmountMeasure=v))}}
+                    StudioChipSelector("Motion Effect Blend",BlendMode.entries,cfg.effectBlendMode?:cfg.blendModeContent,{it.label}){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.MotionBlurEffect).copy(effectBlendMode=v))}}
+                    StudioSlider("Blur Amount", cfg.blurAmountMultiplier, 0f, 3f, 0.85f, "x", 0.05f, onValueChange = { v ->
                         beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(blurAmountMultiplier = v)) }
                     }, onCommit = ::endDrag)
                 }

@@ -437,11 +437,12 @@ object AveeJsonCodec {
                 softness = obj.propInt("softness", 6),
                 reactionDelay = obj.propInt("reactionDelay", 0),
                 reactionAccumulatedDelay = obj.propInt("reactionAccumulatedDelay", 0),
-                colorBlendOffset = parseMvarfValue(obj.propString("colorBlendOffset", "Constant 0 0"), 0f),
+                colorBlendOffset = constantMvarf(obj.propString("colorBlendOffset", "Constant 0 0"),0f),
+                colorBlendMeasure = parseMvarf2Measure(obj.propString("colorBlendOffset","Constant 0 0")),
                 circleRadius = obj.propFloat("circleRadius", ((obj.rawProp("ShapePath") as? JsonObject)?.propFloat("radius", 1f) ?: 1f) * 0.28f),
                 polygonSides = obj.propInt("polygonSides", (obj.rawProp("ShapePath") as? JsonObject)?.propInt("sides", 6) ?: 6).coerceIn(3, 24),
                 pathAngleDeg = obj.propFloat("pathAngleDeg", 0f),
-                alternatingDirection = obj.propBool("alternatingDirection", false)
+                alternatingDirection = obj.propBool("alternatingDirection", seg1Obj?.propBool("flipEveryOther",false)?:false)
             )
         )
     }
@@ -531,7 +532,8 @@ object AveeJsonCodec {
             showUnblurredContent = obj.propBool("showUnblurredContent", false),
             showUnblurredContentUnder = obj.propBool("showUnblurredContentUnder", true),
             maskImage = obj.propString("MaskImage", "internalres:transparent"),
-            measureBlur = parseMeasure(obj.entries.firstOrNull { it.key.equals("measureBlur",true) }?.value)
+            measureBlur = parseMeasure(obj.entries.firstOrNull { it.key.equals("measureBlur",true) }?.value),
+            glowBlendMode = BlendMode.fromAvee(obj.propString("blendMode","PreMulAlpha"))
         )
     )
 
@@ -564,7 +566,9 @@ object AveeJsonCodec {
             common = parseCommon(obj, "Motion Blur Effect"),
             config = LayerConfig.MotionBlurEffect(
                 targetCompositionIndex = target,
-                blurAmountMultiplier = obj.propString("blurAmountMultiplier", "Constant 1 1").toFloatOrNull()?.takeIf { it.isFinite() } ?: parseMvarfValue(obj.propString("blurAmountMultiplier", "Constant 1 1"), 1f),
+                blurAmountMultiplier = constantMvarf(obj.propString("blurAmountMultiplier","Constant 1 1"),1f),
+                blurAmountMeasure = parseMvarf2Measure(obj.propString("blurAmountMultiplier","Constant 1 1")),
+                effectBlendMode = BlendMode.fromAvee(obj.propString("blendMode","PreMulAlpha")),
                 manualMotionX = obj.propFloat("manualMotionX", .025f),
                 manualMotionY = obj.propFloat("manualMotionY", 0f),
                 trailPersistence = obj.propFloat("trailPersistence", .65f),
@@ -657,7 +661,7 @@ object AveeJsonCodec {
                 put("softness", propObj(cfg.softness))
                 put("reactionDelay", propObj(cfg.reactionDelay))
                 put("reactionAccumulatedDelay", propObj(cfg.reactionAccumulatedDelay))
-                put("colorBlendOffset", propObj("Constant ${cfg.colorBlendOffset} ${cfg.colorBlendOffset}"))
+                put("colorBlendOffset", propObj(encodeScalarMeasure(cfg.colorBlendOffset,cfg.colorBlendMeasure)))
                 put("circleRadius", propObj(cfg.circleRadius))
                 put("polygonSides", propObj(cfg.polygonSides))
                 put("pathAngleDeg", propObj(cfg.pathAngleDeg))
@@ -750,7 +754,7 @@ object AveeJsonCodec {
             }
             is LayerConfig.MotionBlurEffect -> {
                 put("TargetImage", propObj("composition:${cfg.targetCompositionIndex}"))
-                put("blurAmountMultiplier", propObj("Constant ${cfg.blurAmountMultiplier} ${cfg.blurAmountMultiplier}"))
+                put("blurAmountMultiplier", propObj(encodeScalarMeasure(cfg.blurAmountMultiplier,cfg.blurAmountMeasure)))
                 put("motionSource", propObj(cfg.motionSource.aveeName))
                 put("relativeMotionMode",propObj(if(cfg.relativeMotionMode)1 else 0)); put("manualMotionX",propObj(cfg.manualMotionX)); put("manualMotionY",propObj(cfg.manualMotionY)); put("trailPersistence",propObj(cfg.trailPersistence))
                 put("color",propObj(cfg.colorArgb)); put("blendModeContent",propObj(cfg.blendModeContent.aveeName)); put("showUnblurredContent",propObj(if(cfg.showUnblurredContent)1 else 0)); put("showUnblurredContentUnder",propObj(if(cfg.showUnblurredContentUnder)1 else 0))
@@ -798,6 +802,10 @@ object AveeJsonCodec {
             smoothing = obj.propFloat("smoothing",.25f).coerceIn(0f,1f)
         )
     }
+
+    private fun constantMvarf(raw:String,defaultValue:Float):Float = if(parseMvarf2Measure(raw).measureWhat==MeasureWhat.NOTHING)parseMvarfValue(raw,defaultValue) else 0f
+
+    private fun encodeScalarMeasure(base:Float,m:MeasureConfig):String = if(m.measureWhat==MeasureWhat.NOTHING)"Constant $base $base" else "${m.measureWhat.aveeName} ${m.amountA} ${m.amountB}"
 
     private fun parseMvarfValue(raw: String, defaultVal: Float): Float {
         val parts = raw.trim().split(Regex("\\s+"))

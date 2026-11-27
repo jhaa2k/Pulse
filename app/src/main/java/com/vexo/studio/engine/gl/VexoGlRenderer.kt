@@ -379,7 +379,11 @@ class VexoGlRenderer(
         applyBlendMode(c.blendMode)
 
         when (val cfg = com.vexo.studio.engine.scene.LayerPropertyAnimation.evaluate(layer,scene.project.keyframes,scene.trackMeta.positionMs)) {
-            is LayerConfig.Bars -> drawBarsLayer(c.id, com.vexo.studio.engine.scene.DynamicSpectrum.evaluate(cfg,audioSnap,scene.trackMeta.positionMs), audioSnap, opacity, w, h)
+            is LayerConfig.Bars -> {
+                val offset=MeasureEvaluator.evaluateScalar(cfg.colorBlendMeasure,scene.audioSnapshots[cfg.colorBlendMeasure.providerIndex],scene.totalTimeSec,scene.playingTimeSec,trackNorm,scene.isPlaying)
+                val measured=cfg.copy(colorBlendOffset=(cfg.colorBlendOffset+offset).coerceIn(0f,1f))
+                drawBarsLayer(c.id, com.vexo.studio.engine.scene.DynamicSpectrum.evaluate(measured,audioSnap,scene.trackMeta.positionMs), audioSnap, opacity, w, h)
+            }
             is LayerConfig.Image -> drawImageLayer(cfg, scene, audioSnap, trackNorm, opacity, w, h, compTextures)
             is LayerConfig.Text -> drawTextLayer(cfg, scene, opacity, w, h)
             is LayerConfig.Shape -> {
@@ -389,7 +393,10 @@ class VexoGlRenderer(
             is LayerConfig.Particles -> drawParticlesLayer(c.id, cfg, audioSnap, scene, deltaSec, opacity, w, h)
             is LayerConfig.BlurEffect -> drawBlurEffect(cfg, scene, trackNorm, opacity, w, h, compTextures)
             is LayerConfig.RgbSplitEffect -> drawRgbSplitEffect(cfg, audioSnap, scene, trackNorm, opacity, w, h, compTextures)
-            is LayerConfig.MotionBlurEffect -> drawMotionBlurEffect(c.id, cfg, tx/w, ty/h, deltaSec, opacity, w, h, compTextures)
+            is LayerConfig.MotionBlurEffect -> {
+                val gain=MeasureEvaluator.evaluateScalar(cfg.blurAmountMeasure,scene.audioSnapshots[cfg.blurAmountMeasure.providerIndex],scene.totalTimeSec,scene.playingTimeSec,trackNorm,scene.isPlaying)
+                drawMotionBlurEffect(c.id,cfg.copy(blurAmountMultiplier=(cfg.blurAmountMultiplier+gain).coerceIn(0f,3f)), tx/w, ty/h, deltaSec, opacity, w, h, compTextures)
+            }
             is LayerConfig.MirrorEffect -> drawMirrorEffect(cfg, opacity, w, h, compTextures)
         }
     }
@@ -1019,7 +1026,7 @@ class VexoGlRenderer(
             drawTexturedQuad(img, 0f, 0f, w.toFloat(), h.toFloat(), flipV = true)
         }
 
-        applyBlendMode(cfg.blendModeContent)
+        applyBlendMode(cfg.glowBlendMode ?: cfg.blendModeContent)
         val maskIsComp=cfg.maskImage.startsWith("composition:")
         val mask=when {
             maskIsComp -> cfg.maskImage.substringAfter(':').toIntOrNull()?.let{compTextures[it]} ?: 0
@@ -1181,11 +1188,13 @@ class VexoGlRenderer(
             GLES20.glUniform1f(img.uniform("uOpacity"), opacity)
             drawTexturedQuad(img, 0f, 0f, w.toFloat(), h.toFloat(), flipV = true)
         }
+        applyBlendMode(cfg.effectBlendMode ?: cfg.blendModeContent)
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, trailFbo.textureId)
         GLES20.glUniform4f(img.uniform("uTint"), ((cfg.colorArgb ushr 16) and 255)/255f, ((cfg.colorArgb ushr 8) and 255)/255f, (cfg.colorArgb and 255)/255f, ((cfg.colorArgb ushr 24) and 255)/255f)
         GLES20.glUniform1f(img.uniform("uOpacity"), opacity)
         drawTexturedQuad(img, 0f, 0f, w.toFloat(), h.toFloat(), flipV = true)
         if (cfg.showUnblurredContent) {
+            applyBlendMode(cfg.blendModeContent)
             GLES20.glUniform4f(img.uniform("uTint"), 1f, 1f, 1f, 1f)
             GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, srcTex)
             drawTexturedQuad(img, 0f, 0f, w.toFloat(), h.toFloat(), flipV = true)
