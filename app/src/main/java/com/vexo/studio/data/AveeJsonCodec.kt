@@ -370,7 +370,8 @@ object AveeJsonCodec {
             opacity = obj.propFloat("opacity", 1f),
             measurePos = parseMeasure(obj.entries.firstOrNull { it.key.equals("MeasurePos",true) }?.value),
             measureScale = parseMeasure(obj.entries.firstOrNull { it.key.equals("measureScale",true) }?.value),
-            measureRot = parseMeasure(obj.entries.firstOrNull { it.key.equals("measureRot",true) }?.value),
+            measureRot = parseMeasure(obj.rawProp("measureRot")),
+            measureOpacity = parseMeasure(obj.rawProp("measureOpacity")),
             extraFields = extractExtraFields(obj, emptySet())
         )
     }
@@ -677,6 +678,7 @@ object AveeJsonCodec {
         put("MeasurePos", encodeMeasure(c.measurePos))
         put("measureScale", encodeMeasure(c.measureScale))
         put("measureRot", encodeMeasure(c.measureRot))
+        put("measureOpacity",encodeMeasure(c.measureOpacity))
         when (val cfg = layer.config) {
             is LayerConfig.Bars -> {
                 put("audioProviderIndex", propObj(cfg.audioProviderIndex))
@@ -821,6 +823,11 @@ object AveeJsonCodec {
         put("measureWhat", propObj(m.measureWhat.aveeName))
         put("A", propObj(m.amountA))
         put("B", propObj(m.amountB))
+        put("providerIndex",propObj(m.providerIndex))
+        put("smoothing",propObj(m.smoothing))
+        put("seed",propObj(m.seed))
+        put("triggerThreshold",propObj(m.triggerThreshold))
+        put("vexoLegacyParameters",propObj(if(m.legacyParameterSemantics)1 else 0))
     }
 
     private fun parseMeasure(el: JsonElement?): MeasureConfig {
@@ -836,7 +843,12 @@ object AveeJsonCodec {
             amountB = b,
             providerIndex = obj.propInt("providerIndex",obj.propInt("audioProviderIndex",1)).coerceAtLeast(1),
             triggerThreshold = obj.propFloat("triggerThreshold",0f).coerceIn(0f,.999f),
-            smoothing = obj.propFloat("smoothing",.25f).coerceIn(0f,1f)
+            smoothing = obj.propFloat("smoothing",.25f).coerceIn(0f,1f),
+            seed=obj.propInt("seed",1337),
+            legacyParameterSemantics=obj.propBool("vexoLegacyParameters",
+                obj["t"]?.primitiveString()=="_child" || (obj["B"] as? JsonObject)?.get("hint")?.primitiveString()?.let{
+                    it.equals("Speed",true)||it.equals("Beat Amount",true)
+                }==true)
         )
     }
 

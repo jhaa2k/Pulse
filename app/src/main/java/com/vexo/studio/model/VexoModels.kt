@@ -139,7 +139,8 @@ data class MeasureConfig(
     val providerIndex: Int = 1,
     val smoothing: Float = 0.25f,
     val seed: Int = 1337,
-    val triggerThreshold: Float = 0f
+    val triggerThreshold: Float = 0f,
+    val legacyParameterSemantics: Boolean = false
 )
 
 @Serializable

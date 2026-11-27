@@ -36,6 +36,9 @@ object MeasureEvaluator {
         val threshold = measure.triggerThreshold.takeIf{it.isFinite()}?.coerceIn(0f,0.999f)?:0f
         fun gate(value: Float): Float = if (!value.isFinite()) 0f
             else if (threshold == 0f) value else ((value - threshold) / (1f - threshold)).coerceIn(0f, 1f)
+        if(measure.legacyParameterSemantics){
+            LegacyMeasureMath.evaluate(measure,totalTimeSec,gate(snapshot?.beat?:0f))?.let{return it}
+        }
         // Evaluate only the signal selected by the measure. Ordinary beat, band,
         // and timeline controls need no trigonometry.
         fun same(value: Float) = value to value
@@ -94,7 +97,17 @@ object MeasureEvaluator {
             isPlaying = isPlaying,
             keyframeValue = keyframeValue
         )
-        return pair.mean()
+        return scalarValue(measure,pair)
+    }
+
+    fun scalarValue(measure:MeasureConfig,pair:EvaluatedPair):Float =
+        if(measure.legacyParameterSemantics)pair.x.takeIf{it.isFinite()}?:0f else pair.mean()
+
+    fun colorProgress(measure:MeasureConfig,value:Float):Float {
+        val v=value.takeIf{it.isFinite()}?:0f
+        return if(measure.legacyParameterSemantics&&measure.measureWhat in LegacyMeasureMath.cyclicColorSources)
+            (v.toDouble()-kotlin.math.floor(v.toDouble())).toFloat()
+        else v.coerceIn(0f,1f)
     }
 
     fun blendArgb(colorFrom: Int, colorTo: Int, t: Float): Int {

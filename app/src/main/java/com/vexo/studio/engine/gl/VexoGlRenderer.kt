@@ -424,7 +424,7 @@ class VexoGlRenderer(
         }
         fun scalar(key:String,m:com.vexo.studio.model.MeasureConfig):Float {
             val pair=measured(key,m)
-            return pair.mean()
+            return MeasureEvaluator.scalarValue(m,pair)
         }
         val dPos=measured("position",c.measurePos,keyframePos)
         val dScale=measured("scale",c.measureScale)
@@ -458,10 +458,10 @@ class VexoGlRenderer(
         when (val cfg = com.vexo.studio.engine.scene.LayerPropertyAnimation.evaluate(layer,tracks,scene.trackMeta.positionMs)) {
             is LayerConfig.Bars -> {
                 val offset=scalar("gradient",cfg.colorBlendMeasure)
-                val measured=cfg.copy(colorBlendOffset=(cfg.colorBlendOffset+offset).coerceIn(0f,1f))
+                val measured=cfg.copy(colorBlendOffset=MeasureEvaluator.colorProgress(cfg.colorBlendMeasure,cfg.colorBlendOffset+offset))
                 drawBarsLayer(c.id, com.vexo.studio.engine.scene.DynamicSpectrum.evaluate(measured,audioSnap,scene.trackMeta.positionMs), audioSnap, opacity, w, h)
             }
-            is LayerConfig.Image -> drawImageLayer(cfg, scene, scalar("imageColor",cfg.measureColorBlend),scalar("imageCreative",cfg.creative.audio), opacity, w, h, compTextures)
+            is LayerConfig.Image -> drawImageLayer(cfg, scene, MeasureEvaluator.colorProgress(cfg.measureColorBlend,scalar("imageColor",cfg.measureColorBlend)),scalar("imageCreative",cfg.creative.audio), opacity, w, h, compTextures)
             is LayerConfig.Text -> drawTextLayer(cfg, scene, scalar("textAnimation",cfg.animationAudio), opacity, w, h)
             is LayerConfig.Shape -> {
                 drawShapeLayer(cfg.copy(radius=(cfg.radius+scalar("shapeRadius",cfg.pulse)*.15f).coerceIn(.005f,.8f),strokeWidth=(cfg.strokeWidth+scalar("shapeStroke",cfg.strokePulse)*12f).coerceIn(0f,32f)),opacity,w,h)
