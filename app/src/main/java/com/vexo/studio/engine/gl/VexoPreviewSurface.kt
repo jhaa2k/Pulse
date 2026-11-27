@@ -60,9 +60,10 @@ fun VexoPreviewSurface(
 
     val renderer = remember { VexoGlRenderer(context, isExportRenderer = false) }
     var diagnostics by remember{mutableStateOf(PreviewDiagnostics())}
+    var renderError by remember{mutableStateOf<String?>(null)}
     LaunchedEffect(showDiagnostics){
         renderer.diagnosticsEnabled=showDiagnostics
-        if(showDiagnostics){while(true){diagnostics=renderer.diagnostics;delay(500)}}
+        while(true){if(showDiagnostics)diagnostics=renderer.diagnostics;renderError=renderer.previewError;delay(500)}
     }
     val glView = remember {
         GLSurfaceView(context).apply {
@@ -160,10 +161,13 @@ fun VexoPreviewSurface(
             update = {},
             modifier = surfaceModifier.onSizeChanged{viewSize=it}
         )
+        if(renderError!=null){
+            Text(renderError.orEmpty(),modifier=Modifier.align(Alignment.Center).background(Color.Black.copy(alpha=.9f)).padding(12.dp),style=MaterialTheme.typography.bodySmall,color=LocalVexoPalette.current.textPrimary)
+        }
         if(showDiagnostics){
             val palette=LocalVexoPalette.current
             val d=diagnostics
-            Text("%.1f FPS · %.1f ms CPU\n%d × %d · %d comps / %d layers\n%.1f MiB textures + %.1f MiB FBO".format(d.fps,d.cpuFrameMs,d.width,d.height,d.compositions,d.layers,d.textureBytes/1048576.0,d.framebufferBytes/1048576.0),modifier=Modifier.align(Alignment.TopStart).background(Color.Black.copy(alpha=.85f)).padding(5.dp),style=MaterialTheme.typography.labelSmall,color=palette.accent)
+            Text("%.1f FPS · %.1f ms CPU\n%d × %d · %d comps / %d layers\n%d composition slots · %.1f MiB textures + %.1f MiB FBO".format(d.fps,d.cpuFrameMs,d.width,d.height,d.compositions,d.layers,d.compositionSlots,d.textureBytes/1048576.0,d.framebufferBytes/1048576.0),modifier=Modifier.align(Alignment.TopStart).background(Color.Black.copy(alpha=.85f)).padding(5.dp),style=MaterialTheme.typography.labelSmall,color=palette.accent)
         }
     }
 }

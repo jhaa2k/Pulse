@@ -15,11 +15,24 @@ data class GlFbo(
  */
 class FboPool {
     private val allocated = mutableMapOf<String, GlFbo>()
+    private var maxDimension=0
+    private fun limit():Int{
+        if(maxDimension==0){
+            val tex=IntArray(1);val viewport=IntArray(2)
+            GLES20.glGetIntegerv(GLES20.GL_MAX_TEXTURE_SIZE,tex,0)
+            GLES20.glGetIntegerv(GLES20.GL_MAX_VIEWPORT_DIMS,viewport,0)
+            maxDimension=minOf(tex[0],viewport[0],viewport[1])
+            check(maxDimension>=16){"Cannot query GPU framebuffer limits"}
+        }
+        return maxDimension
+    }
     fun allocatedBytes():Long=allocated.values.sumOf{it.width.toLong()*it.height*4L}
 
     fun obtain(key: String, width: Int, height: Int): GlFbo {
-        val w = width.coerceIn(16, 4096)
-        val h = height.coerceIn(16, 4096)
+        val w = width.coerceAtLeast(16)
+        val h = height.coerceAtLeast(16)
+        val max=limit()
+        check(w<=max&&h<=max){"GPU framebuffer limit is $max px; requested ${w}×${h}. Reduce preview scale or export resolution."}
         val existing = allocated[key]
         if (existing != null && existing.width == w && existing.height == h) {
             return existing
@@ -52,6 +65,7 @@ class FboPool {
     fun releaseAll() {
         allocated.values.forEach { deleteFbo(it) }
         allocated.clear()
+        maxDimension=0
     }
 
     private fun createFbo(width: Int, height: Int): GlFbo {
@@ -87,7 +101,7 @@ class FboPool {
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, previousTex[0])
         if (status != GLES20.GL_FRAMEBUFFER_COMPLETE) {
             deleteFbo(GlFbo(fboIds[0], texIds[0], width, height))
-            error("Framebuffer incomplete: status=0x${status.toString(16)}")
+            error("GPU cannot allocate ${width}×${height} framebuffer (0x${status.toString(16)}). Reduce preview scale or export resolution.")
         }
         return GlFbo(fboIds[0], texIds[0], width, height)
     }

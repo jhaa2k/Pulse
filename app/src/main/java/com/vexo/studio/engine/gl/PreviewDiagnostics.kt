@@ -8,7 +8,8 @@ data class PreviewDiagnostics(
     val compositions:Int=0,
     val layers:Int=0,
     val textureBytes:Long=0L,
-    val framebufferBytes:Long=0L
+    val framebufferBytes:Long=0L,
+    val compositionSlots:Int=0
 )
 internal class FrameDiagnosticsCounter{
     private var start=0L

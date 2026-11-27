@@ -135,6 +135,9 @@ class VexoGlRenderer(
     private var lastProjectId: String? = null
     private var graphProject: com.vexo.studio.model.VexoProject?=null
     private var cachedGraph: com.vexo.studio.engine.scene.ResolvedSceneGraph?=null
+    private var cachedSlots: com.vexo.studio.engine.scene.CompositionSlotPlan?=null
+    @Volatile var previewError:String?=null
+        private set
     private var cachedReachable: Set<Int> = emptySet()
     private var cachedDisplay = -1
     private var cachedLayerIds: Set<String> = emptySet()
@@ -152,6 +155,9 @@ class VexoGlRenderer(
     }
 
     override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
+        if(viewportW!=width.coerceAtLeast(16)||viewportH!=height.coerceAtLeast(16)){
+            fboPool.releaseByPrefix("trail_");previousMotion.clear();previousMotionTarget.clear();measureFilter.clear()
+        }
         viewportW = width.coerceAtLeast(16)
         viewportH = height.coerceAtLeast(16)
         GLES20.glViewport(0, 0, viewportW, viewportH)
@@ -164,7 +170,15 @@ class VexoGlRenderer(
 
         val snap = pendingScene.get()
         if (snap != null) {
-            renderScene(snap, deltaSec, targetWidth = viewportW, targetHeight = viewportH)
+            try{
+                renderScene(snap, deltaSec, targetWidth = viewportW, targetHeight = viewportH)
+                previewError=null
+            }catch(e:IllegalStateException){
+                previewError=e.message?.take(240)?: "Preview rendering failed"
+                GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER,0)
+                GLES20.glViewport(0,0,viewportW,viewportH)
+                clearBackground(0xFF000000.toInt())
+            }
         } else {
             GLES20.glClearColor(0f, 0f, 0f, 1f)
             GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
@@ -173,7 +187,7 @@ class VexoGlRenderer(
         lastFrameDurationMs = (System.nanoTime() - nowNs) / 1_000_000f
         if(diagnosticsEnabled){
             diagnosticCounter.frame(nowNs,lastFrameDurationMs)?.let{(fps,ms)->
-                diagnostics=PreviewDiagnostics(fps,ms,viewportW,viewportH,cachedReachable.size,cachedLayerIds.size,bitmapSizes.values.sumOf{it.first.toLong()*it.second*4L},fboPool.allocatedBytes())
+                diagnostics=PreviewDiagnostics(fps,ms,viewportW,viewportH,cachedReachable.size,cachedLayerIds.size,bitmapSizes.values.sumOf{it.first.toLong()*it.second*4L},fboPool.allocatedBytes(),cachedSlots?.slotCount?:0)
             }
         }else diagnosticCounter.reset()
     }
@@ -193,7 +207,7 @@ class VexoGlRenderer(
     fun releaseGlResources() {
         videoFrames.close()
         diagnosticCounter.reset();diagnostics=PreviewDiagnostics()
-        graphProject=null;cachedGraph=null;cachedReachable=emptySet();cachedDisplay=-1;cachedLayerIds=emptySet();cachedTrails=emptySet()
+        graphProject=null;cachedGraph=null;cachedSlots=null;previewError=null;cachedReachable=emptySet();cachedDisplay=-1;cachedLayerIds=emptySet();cachedTrails=emptySet()
         particleSims.clear();barDelayHistory.clear()
         lastProjectId=null;lastPositionMs=-1L;lastArtworkVersion=-1
         particleShader?.release(); particleShader=null
@@ -254,6 +268,7 @@ class VexoGlRenderer(
             graphProject=scene.project;cachedDisplay=displayIndex
             cachedGraph=SceneGraph.resolve(scene.project)
             cachedReachable=SceneGraph.reachable(scene.project,displayIndex)
+            cachedSlots=com.vexo.studio.engine.scene.CompositionSlotPlan.create(checkNotNull(cachedGraph).order,cachedReachable,displayIndex)
             val activeLayers=scene.project.compositions.filter{it.index in cachedReachable}.flatMap{it.layers}.filter{it.common.visible}
             cachedLayerIds=activeLayers.map{it.common.id}.toSet()
             cachedTrails=activeLayers.filter{it.config is LayerConfig.MotionBlurEffect}.map{it.common.id}.toSet()
@@ -262,15 +277,17 @@ class VexoGlRenderer(
             previousMotionTarget.keys.retainAll(cachedTrails)
             particleSims.keys.retainAll(cachedLayerIds)
             barDelayHistory.keys.removeAll{it.removeSuffix("_segment2") !in cachedLayerIds}
-            fboPool.retainSceneBuffers(cachedReachable-displayIndex,cachedTrails)
+            fboPool.retainSceneBuffers((0 until checkNotNull(cachedSlots).slotCount).toSet(),cachedTrails)
             if(activeLayers.none{it.config is LayerConfig.BlurEffect})fboPool.releaseByPrefix("blur_")
         }
         val resolved=checkNotNull(cachedGraph)
-
-        // Render sub-compositions first (index != 0) into offscreen FBOs
+        val slots=checkNotNull(cachedSlots)
+        // Render in dependency order, reusing only slots whose previous output is dead.
         for (comp in resolved.order) {
             if (comp.index !in cachedReachable || comp.index == displayIndex) continue
-            val fbo = fboPool.obtain("comp_${comp.index}", viewportW, viewportH)
+            val slot=slots.slotByComposition.getValue(comp.index)
+            slots.retireBefore[comp.index].orEmpty().forEach{compTextures.remove(it)}
+            val fbo = fboPool.obtain("comp_$slot", viewportW, viewportH)
             GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, fbo.fboId)
             GLES20.glViewport(0, 0, fbo.width, fbo.height)
             clearBackground(if(comp.index==0)scene.project.canvas.backgroundColorArgb else 0x00000000)
