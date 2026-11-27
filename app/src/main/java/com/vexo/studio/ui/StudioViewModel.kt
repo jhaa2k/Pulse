@@ -728,7 +728,8 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
 
     fun applyPreset(template:VexoProject){
         val state=_uiState.value
-        if(state.unsaved&&state.canUndo){_uiState.value=state.copy(pendingPreset=template);return}
+        // A recovered or newly created draft can be unsaved with no undo history.
+        if(state.unsaved){_uiState.value=state.copy(pendingPreset=template);return}
         applyPresetNow(template)
     }
     fun resolvePresetSwitch(save:Boolean,discard:Boolean){

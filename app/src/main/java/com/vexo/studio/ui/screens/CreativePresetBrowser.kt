@@ -46,6 +46,9 @@ internal fun CreativePresetBrowser(vm:StudioViewModel){
     Text("Preview designs before applying. Current music and canvas ratio stay unchanged.",style=MaterialTheme.typography.bodySmall,color=palette.textSecondary)
     if(open){
         val filtered=remember(templates,query,category){templates.filter{PresetPreviewData.matches(it,query,category)}}
+        LaunchedEffect(filtered,selected?.id){
+            if(selected!=null&&filtered.none{it.id==selected?.id}){selected=null;animated=false}
+        }
         AlertDialog(onDismissRequest={open=false;animated=false;selected=null},title={Text("CREATIVE PRESETS · "+filtered.size)},text={
             Column(Modifier.fillMaxWidth(),verticalArrangement=Arrangement.spacedBy(6.dp)){
                 CompactStudioSearch(query,{query=it.take(80)},"Search name / shape / effect",Modifier.fillMaxWidth())

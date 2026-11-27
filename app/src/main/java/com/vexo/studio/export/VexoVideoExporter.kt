@@ -143,10 +143,9 @@ class VexoVideoExporter(private val context: Context) {
             if (startUs > 0) extractor.seekTo(startUs, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
 
             val srcMime = srcAudioFormat.getString(MediaFormat.KEY_MIME)!!
-            audioDecoder = MediaCodec.createDecoderByType(srcMime).apply {
-                configure(srcAudioFormat, null, null, 0)
-                start()
-            }
+            audioDecoder = MediaCodec.createDecoderByType(srcMime)
+            audioDecoder.configure(srcAudioFormat, null, null, 0)
+            audioDecoder.start()
 
             val pcmDecoded = decodeTrimmedPcm(
                 extractor = extractor,
@@ -202,10 +201,9 @@ class VexoVideoExporter(private val context: Context) {
                 setInteger(MediaFormat.KEY_BIT_RATE, settings.audioBitrateKbps.coerceIn(96,320) * 1000)
                 setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 16384)
             }
-            audioEncoder = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_AAC).apply {
-                configure(audioOutFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
-                start()
-            }
+            audioEncoder = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_AAC)
+            audioEncoder.configure(audioOutFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+            audioEncoder.start()
 
             // Initialize EGL14 Context on encoderSurface
             eglDisplay = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY)
@@ -238,8 +236,9 @@ class VexoVideoExporter(private val context: Context) {
             }
             check(bound){"Cannot bind a recordable EGL surface. Try disabling smooth edges or reducing export quality."}
 
-            val renderer = VexoGlRenderer(context, isExportRenderer = true,highResolutionTextures=settings.highResolutionTextures).apply { initGlResources() }
+            val renderer = VexoGlRenderer(context, isExportRenderer = true,highResolutionTextures=settings.highResolutionTextures)
             glRenderer = renderer
+            renderer.initGlResources()
             val engines = project.audioProviders.associate { it.index to AudioProviderEngine(it) }
 
             val activeMuxer = MediaMuxer(tempFile.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
@@ -310,10 +309,11 @@ class VexoVideoExporter(private val context: Context) {
                             tryStartMuxer()
                         }
                         outIdx >= 0 -> {
-                            val buf = videoEncoder.getOutputBuffer(outIdx)
-                            if (buf != null) writeEncoded(videoTrackMuxer,buf,videoBufferInfo)
                             val eos = (videoBufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0
-                            videoEncoder.releaseOutputBuffer(outIdx, false)
+                            try {
+                                val buf = videoEncoder.getOutputBuffer(outIdx)
+                                if (buf != null) writeEncoded(videoTrackMuxer,buf,videoBufferInfo)
+                            } finally { videoEncoder.releaseOutputBuffer(outIdx, false) }
                             if (eos) {
                                 videoDone = true
                                 break
@@ -329,7 +329,7 @@ class VexoVideoExporter(private val context: Context) {
                     exportContext.ensureActive()
                     val inIdx = audioEncoder.dequeueInputBuffer(0)
                     if (inIdx < 0) break
-                    val inBuf = audioEncoder.getInputBuffer(inIdx) ?: break
+                    val inBuf = checkNotNull(audioEncoder.getInputBuffer(inIdx)){"AAC encoder returned no input buffer"}
                     inBuf.clear()
                     val remainingBytes = totalPcmBytes - audioSampleCursor
                     if (remainingBytes <= 0) {
@@ -356,10 +356,11 @@ class VexoVideoExporter(private val context: Context) {
                             tryStartMuxer()
                         }
                         outIdx >= 0 -> {
-                            val buf = audioEncoder.getOutputBuffer(outIdx)
-                            if (buf != null) writeEncoded(audioTrackMuxer,buf,audioBufferInfo)
                             val eos = (audioBufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0
-                            audioEncoder.releaseOutputBuffer(outIdx, false)
+                            try {
+                                val buf = audioEncoder.getOutputBuffer(outIdx)
+                                if (buf != null) writeEncoded(audioTrackMuxer,buf,audioBufferInfo)
+                            } finally { audioEncoder.releaseOutputBuffer(outIdx, false) }
                             if (eos) {
                                 audioDone = true
                                 break
@@ -455,11 +456,9 @@ class VexoVideoExporter(private val context: Context) {
 
             renderer.releaseGlResources(); glRenderer=null
             check(muxerStarted) { "Encoder did not produce both MP4 tracks" }
-            if (muxerStarted) {
-                muxer.stop()
-                muxerStarted = false
-            }
-            muxer.release(); muxer = null
+            // Do not attempt stop a second time if the first stop throws.
+            muxerStarted = false
+            try { muxer.stop() } finally { muxer.release(); muxer = null }
 
             onProgress(ExportProgress(isRunning = true, progress = 0.98f, statusText = "Verifying & publishing MP4"))
 
@@ -478,11 +477,9 @@ class VexoVideoExporter(private val context: Context) {
             )
             return publishedUri
         } catch (ce: CancellationException) {
-            tempFile.delete()
             onProgress(ExportProgress(isRunning = false, progress = 0f, statusText = "Export cancelled"))
             throw ce
         } catch (e: Exception) {
-            tempFile.delete()
             onProgress(
                 ExportProgress(
                     isRunning = false,
@@ -500,10 +497,8 @@ class VexoVideoExporter(private val context: Context) {
             runCatching { audioDecoder?.stop() }; runCatching { audioDecoder?.release() }
             runCatching { videoEncoder?.stop() }; runCatching { videoEncoder?.release() }
             runCatching { audioEncoder?.stop() }; runCatching { audioEncoder?.release() }
-            runCatching {
-                if (muxerStarted) muxer?.stop()
-                muxer?.release()
-            }
+            if (muxerStarted) runCatching { muxer?.stop() }
+            runCatching { muxer?.release() }
             if (eglDisplay != EGL14.EGL_NO_DISPLAY) {
                 EGL14.eglMakeCurrent(eglDisplay, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_CONTEXT)
                 if (eglSurface != EGL14.EGL_NO_SURFACE) EGL14.eglDestroySurface(eglDisplay, eglSurface)

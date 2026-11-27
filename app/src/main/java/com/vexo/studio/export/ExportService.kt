@@ -90,8 +90,13 @@ class ExportService : Service() {
     override fun onDestroy() {
         scope.cancel()
         val job=activeJob
-        if(job==null||job.isCompleted)busy.set(false)else job.invokeOnCompletion{busy.set(false)}
-        renderDispatcher.close()
+        if(job==null||job.isCompleted){
+            renderDispatcher.close()
+            busy.set(false)
+        }else job.invokeOnCompletion{
+            renderDispatcher.close()
+            busy.set(false)
+        }
         super.onDestroy()
     }
 
