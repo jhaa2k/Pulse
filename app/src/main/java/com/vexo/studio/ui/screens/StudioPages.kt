@@ -353,33 +353,8 @@ fun TemplatesScreen(
             }
         }
 
-        val templates = remember { vm.availableTemplates() }
-        var templateQuery by remember { mutableStateOf("") }
-        OutlinedTextField(value=templateQuery,onValueChange={templateQuery=it},label={Text("Search templates")},singleLine=true,modifier=Modifier.fillMaxWidth())
-        templates.filter { it.name.contains(templateQuery,ignoreCase=true) }.forEach { tpl ->
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(1.dp, palette.border, palette.shape)
-                    .background(palette.glassPanel, palette.shape)
-                    .clickable { vm.applyPreset(tpl) }
-                    .padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(tpl.name, style = MaterialTheme.typography.titleMedium)
-                    Text(tpl.canvas.aspectRatio.label, style = MaterialTheme.typography.labelSmall, color = palette.accent)
-                }
-                Text(
-                    "${tpl.compositions.size} compositions · ${tpl.compositions.sumOf { it.layers.size }} layers · FFT ${tpl.audioProviders.first().fftSize}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = palette.textSecondary
-                )
-            }
-        }
+        CreativePresetBrowser(vm)
+
     }
 }
 

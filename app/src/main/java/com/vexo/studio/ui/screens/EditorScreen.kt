@@ -1874,28 +1874,8 @@ private fun PresetsTab(
             }
         }
 
-        val builtIns = remember { vm.availableTemplates() }
-        var query by rememberSaveable { mutableStateOf("") }
-        Text("CREATIVE PROJECT PRESETS · ${builtIns.size}", style = MaterialTheme.typography.labelSmall, color = palette.textSecondary)
-        CompactStudioSearch(query,{query=it.take(80)},"Find a preset",Modifier.fillMaxWidth())
-        builtIns.filter { it.name.contains(query, ignoreCase = true) }.forEach { tpl ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(1.dp, palette.border, palette.shape)
-                    .background(palette.glassPanel, palette.shape)
-                    .clickable { vm.applyPreset(tpl) }
-                    .padding(12.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
-                    Text(tpl.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                    Text("${tpl.compositions.sumOf { it.layers.size }} layers · Current canvas ratio", style = MaterialTheme.typography.labelSmall, color = palette.textSecondary)
-                }
-                Text("APPLY", style = MaterialTheme.typography.labelSmall, color = palette.accent)
-            }
-        }
+        CreativePresetBrowser(vm)
+
     }
 }
 

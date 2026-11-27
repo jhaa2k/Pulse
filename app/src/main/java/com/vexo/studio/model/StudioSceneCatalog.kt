@@ -20,6 +20,7 @@ object StudioSceneCatalog {
     fun all():List<VexoProject> = (SpectrumStyleLibrary.recipes+extra).mapIndexed(::scene)
     private fun scene(i:Int,r:SpectrumStyleRecipe):VexoProject{
         val layout=i%8
+        val variation=(i/8)%8
         val from=r.from;val to=r.to
         val bg=when(layout){
             0,4->0xFF08090D.toInt()
@@ -50,16 +51,17 @@ object StudioSceneCatalog {
             final+=LayerNode(LayerType.IMAGE,LayerCommon(name="Soft album artwork",opacity=.22f),LayerConfig.Image(sourceType=ImageSourceType.ALBUM_ART,keepAspectRatioAndCropToFit=true,saturation=.45f,blurEnabled=true,blurRadius=24))
         }
         if(layout in listOf(1,4,5,7)){
-            final+=LayerNode(LayerType.PARTICLES,LayerCommon(name="Rhythmic particles",blendMode=BlendMode.ADD,opacity=.65f),LayerConfig.Particles(emitter=if(layout==4)ParticleEmitter.LINE else if(layout==5)ParticleEmitter.BOX else ParticleEmitter.RING,countLimit=180,spawnTimeSec=.04f,burstCount=18,burstThreshold=.45f,burstProvider=1,burstSource=ParticleBurstSource.BEAT_PULSE,colorFromArgb=from,colorToArgb=to,trailLength=if(layout==5).3f else 0f))
+            final+=LayerNode(LayerType.PARTICLES,LayerCommon(name="Rhythmic particles",blendMode=BlendMode.ADD,opacity=.65f),LayerConfig.Particles(emitter=if(layout==4)ParticleEmitter.LINE else if(layout==5)ParticleEmitter.BOX else ParticleEmitter.RING,countLimit=180,spawnTimeSec=.04f,burstCount=18,burstThreshold=.45f,burstProvider=1,burstSource=ParticleBurstSource.BEAT_PULSE,turbulence=if(variation%2==0).4f else 1.1f,centerForce=when(variation%3){0->-.3f;1->.25f;else->0f},burstSpeedMultiplier=1.4f,reactiveEmission=.6f,colorFromArgb=from,colorToArgb=to,trailLength=if(layout==5).3f else 0f))
         }
         if(layout in listOf(0,1,3,5,6)){
-            final+=LayerNode(LayerType.BLUR_EFFECT,LayerCommon(name="Spectrum bloom",blendMode=BlendMode.ADD),LayerConfig.BlurEffect(sourceCompositionIndex=1,blurRadius=3.5f,blurMultiplier=3f,layer1ColorArgb=0xAAFFFFFF.toInt(),layer2Scale=1.02f,layer2ColorArgb=0x44FFFFFF,blendModeContent=BlendMode.ADD,showUnblurredContent=true,showUnblurredContentUnder=false,unblurredBlendMode=BlendMode.PRE_MUL_ALPHA))
+            final+=LayerNode(LayerType.BLUR_EFFECT,LayerCommon(name="Spectrum bloom",blendMode=BlendMode.ADD),LayerConfig.BlurEffect(sourceCompositionIndex=1,blurRadius=if(variation%2==0)3.5f else 5f,blurMultiplier=3f,bloomThreshold=if(variation%3==0).15f else 0f,bloomIntensity=1.15f,blurCrossAxis=if(variation==5).2f else 1f,blurAngleDeg=if(variation==5)35f else 0f,layer1ColorArgb=0xAAFFFFFF.toInt(),layer2Scale=1.02f,layer2ColorArgb=0x44FFFFFF,blendModeContent=BlendMode.ADD,showUnblurredContent=true,showUnblurredContentUnder=false,unblurredBlendMode=BlendMode.PRE_MUL_ALPHA))
         }else{
             final+=LayerNode(LayerType.IMAGE,LayerCommon(name="Spectrum bus"),LayerConfig.Image(sourceType=ImageSourceType.COMPOSITION,sourceCompositionIndex=1,keepAspectRatio=false))
         }
         if(layout==7)final+=LayerNode(LayerType.MOTION_BLUR_EFFECT,LayerCommon(name="Motion echo",opacity=.35f,blendMode=BlendMode.ADD),LayerConfig.MotionBlurEffect(targetCompositionIndex=1,motionSource=MotionSource.MANUAL,manualMotionX=.015f,trailPersistence=.6f))
         if(layout in listOf(1,6))final+=LayerNode(LayerType.IMAGE,LayerCommon(name="Center artwork",scaleX=.28f,scaleY=.28f,scaleIsUniform=true,measureScale=MeasureConfig(MeasureWhat.BEAT,.035f,.035f)),LayerConfig.Image(sourceType=ImageSourceType.ALBUM_ART,shape=ImageShape.CIRCLE,keepAspectRatioAndCropToFit=true))
+        if(variation==3||variation==6)final+=LayerNode(LayerType.RGB_SPLIT_EFFECT,LayerCommon(name="Chromatic accent",opacity=.16f,blendMode=BlendMode.ADD),LayerConfig.RgbSplitEffect(aberrationMode=AberrationMode.RADIAL,aberrationMix=.65f))
         if(layout!=0)final+=LayerNode(LayerType.TEXT,LayerCommon(name="Track title",posY=if(layout==3).5f else .84f),LayerConfig.Text(text="{Title}",fontSize=if(layout==3)28 else 38,bold=true,colorArgb=0xFFFFFFFF.toInt(),animation=TextMotion.BEAT_SCALE,animationAmount=.12f))
-        return VexoProject(name=r.name,canvas=CanvasConfig(backgroundColorArgb=bg),audioProviders=providers,compositions=listOf(CompositionNode(index=0,layers=final),CompositionNode(index=1,name="Editable spectrum layers",layers=bus)))
+        return VexoProject(name=r.name,canvas=CanvasConfig(backgroundColorArgb=bg,camera=ProjectCamera(enabled=variation==4||variation==7,source=SpectrumReactiveSource.BASS,pulseZoom=.055f,shake=.006f,rollDeg=.8f)),audioProviders=providers,compositions=listOf(CompositionNode(index=0,layers=final),CompositionNode(index=1,name="Editable spectrum layers",layers=bus)))
     }
 }
