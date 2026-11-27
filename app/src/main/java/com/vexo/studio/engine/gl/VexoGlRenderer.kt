@@ -128,6 +128,9 @@ class VexoGlRenderer(
     // Caches & simulation state
     private val videoFrames = VideoFrameTextures(context,isExportRenderer)
     private val textureCache = LinkedHashMap<String,Int>(32,.75f,true)
+    private val failedImageUntil=LinkedHashMap<String,Long>()
+    private var imageDecodeLimit=2048
+    private val lowRamDevice=(context.getSystemService(Context.ACTIVITY_SERVICE) as? android.app.ActivityManager)?.isLowRamDevice==true
     private val bitmapSizes = mutableMapOf<Int, Pair<Int, Int>>()
     private val bitmapKeyColors=mutableMapOf<Int,Int>()
     private val particleSims = mutableMapOf<String, ParticleSimulator>()
@@ -201,6 +204,9 @@ class VexoGlRenderer(
         mirrorShader = GlShaderProgram(VexoShaders.TEXTURE_VERTEX, VexoShaders.MIRROR_FRAGMENT)
         motionShader = GlShaderProgram(VexoShaders.TEXTURE_VERTEX,VexoShaders.MOTION_FRAGMENT)
         particleShader = GlShaderProgram(VexoShaders.PARTICLE_VERTEX,VexoShaders.PARTICLE_FRAGMENT)
+        val maxTexture=IntArray(1)
+        GLES20.glGetIntegerv(GLES20.GL_MAX_TEXTURE_SIZE,maxTexture,0)
+        imageDecodeLimit=minOf(if(!isExportRenderer&&lowRamDevice)1024 else 2048,maxTexture[0].coerceAtLeast(16))
         ensureInternalTextures()
     }
 
@@ -222,6 +228,7 @@ class VexoGlRenderer(
         fboPool.releaseAll()
         bitmapSizes.clear()
         bitmapKeyColors.clear()
+        failedImageUntil.clear()
         if (textureCache.isNotEmpty()) {
             val ids = textureCache.values.toIntArray()
             GLES20.glDeleteTextures(ids.size, ids, 0)
@@ -254,7 +261,7 @@ class VexoGlRenderer(
             barDelayHistory.clear()
             previousMotion.clear(); previousMotionTarget.clear(); measureFilter.clear()
         }
-        if (lastProjectId != scene.project.id) { fboPool.releaseByPrefix("comp_"); videoFrames.close() }
+        if (lastProjectId != scene.project.id) { fboPool.releaseByPrefix("comp_"); videoFrames.close(); failedImageUntil.clear() }
         lastProjectId = scene.project.id
         lastPositionMs = position
         if (scene.trackMeta.artworkVersion != lastArtworkVersion || (artworkTexId == 0 && scene.trackMeta.artwork != null)) {
@@ -1468,7 +1475,15 @@ class VexoGlRenderer(
     private fun ensureUriTex(uriStr: String?): Int {
         if (uriStr.isNullOrBlank()) return 0
         textureCache[uriStr]?.let { return it }
-        val bmp = decodeBoundedBitmap(uriStr) ?: return 0
+        val now=android.os.SystemClock.elapsedRealtime()
+        if((failedImageUntil[uriStr]?:0L)>now)return 0
+        val bmp=decodeBoundedBitmap(uriStr)
+        if(bmp==null){
+            if(failedImageUntil.size>=128)failedImageUntil.remove(failedImageUntil.keys.first())
+            failedImageUntil[uriStr]=now+5000L
+            return 0
+        }
+        failedImageUntil.remove(uriStr)
         val id = uploadBitmapToGl(bmp)
         bmp.recycle()
         textureCache[uriStr] = id
@@ -1482,10 +1497,8 @@ class VexoGlRenderer(
             context.contentResolver.openInputStream(uri)?.use {
                 BitmapFactory.decodeStream(it, null, bounds)
             }
-            var sample = 1
-            while (bounds.outWidth / sample > 2048 || bounds.outHeight / sample > 2048) {
-                sample *= 2
-            }
+            if(bounds.outWidth<=0||bounds.outHeight<=0)return null
+            val sample=com.vexo.studio.engine.gl.TextureDecodePolicy.sampleSize(bounds.outWidth,bounds.outHeight,imageDecodeLimit)
             val opts = BitmapFactory.Options().apply { inSampleSize = sample }
             val raw = context.contentResolver.openInputStream(uri)?.use {
                 BitmapFactory.decodeStream(it, null, opts)

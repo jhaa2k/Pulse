@@ -761,6 +761,7 @@ data class AppSettings(
     val defaultFftSize: Int = 1024,
     val defaultHopSize: Int = 256,
     val previewScale: Float = 1.0f,
+    val adaptivePreview: Boolean = false,
     val showPreviewDiagnostics: Boolean = false,
     val pauseBehavior: PauseBehavior = PauseBehavior.DECAY,
     val showPropertyHelpHints: Boolean = true,

@@ -598,10 +598,11 @@ fun SettingsScreen(
         StudioSlider("Preview area", settings.previewShare * 100f, 30f, 65f, 44f, "%", 1f, onValueChange = { value -> vm.updateSettings { it.copy(previewShare = value / 100f) } })
         StudioChipSelector("Preview FPS limit", listOf(15, 24, 30, 60), settings.previewFps, { "$it FPS" }) { fps -> vm.updateSettings { it.copy(previewFps = fps) } }
         StudioChipSelector("Preview render quality",listOf(.5f,.75f,1f),settings.previewScale,{"${(it*100).toInt()}%"}){v->vm.updateSettings{it.copy(previewScale=v)}}
+        StudioToggleRow("Adaptive preview quality",settings.adaptivePreview){v->vm.updateSettings{it.copy(adaptivePreview=v)}}
         StudioToggleRow("Live preview diagnostics",settings.showPreviewDiagnostics){v->vm.updateSettings{it.copy(showPreviewDiagnostics=v)}}
         Text("Reports measured render callbacks, CPU submission time and estimated texture/FBO allocation. Not total GPU memory or GPU execution time.",style=MaterialTheme.typography.labelSmall)
         Text("Lower preview resolution reduces GPU load. MP4 export resolution stays unchanged.",style=MaterialTheme.typography.labelSmall)
-        TextButton(onClick = { vm.updateSettings { current -> current.copy(themePreset = ThemePreset.LIME_STUDIO, customAccentArgb = 0xFFC5F84A.toInt(), glassEnabled = true, glassOpacity = 0.82f, backdropBlurDp = 24f, cornerRadiusDp = 12f, controlScale = 1f, uiTextScale = 1f, previewFps = 30, previewScale=1f, showPreviewDiagnostics=false, previewShare = 0.44f, portraitOverlay = false) } }) { Text("RESET INTERFACE SETTINGS") }
+        TextButton(onClick = { vm.updateSettings { current -> current.copy(themePreset = ThemePreset.LIME_STUDIO, customAccentArgb = 0xFFC5F84A.toInt(), glassEnabled = true, glassOpacity = 0.82f, backdropBlurDp = 24f, cornerRadiusDp = 12f, controlScale = 1f, uiTextScale = 1f, previewFps = 30, previewScale=1f, adaptivePreview=false, showPreviewDiagnostics=false, previewShare = 0.41f, portraitOverlay = false) } }) { Text("RESET INTERFACE SETTINGS") }
 
         }
         ExpandableSectionHeader("Audio analysis", sections["audio"] == true, { toggleAccordion(sections,"audio") }) {

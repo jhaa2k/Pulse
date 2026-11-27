@@ -50,7 +50,8 @@ fun VexoPreviewSurface(
     targetFps: Int = 60,
     continuousRendering: Boolean = true,
     renderScale: Float = 1f,
-    showDiagnostics:Boolean=false
+    showDiagnostics:Boolean=false,
+    adaptiveQuality:Boolean=false
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -61,9 +62,22 @@ fun VexoPreviewSurface(
     val renderer = remember { VexoGlRenderer(context, isExportRenderer = false) }
     var diagnostics by remember{mutableStateOf(PreviewDiagnostics())}
     var renderError by remember{mutableStateOf<String?>(null)}
-    LaunchedEffect(showDiagnostics){
-        renderer.diagnosticsEnabled=showDiagnostics
-        while(true){if(showDiagnostics)diagnostics=renderer.diagnostics;renderError=renderer.previewError;delay(500)}
+    val controller=remember(renderScale,targetFps,adaptiveQuality){AdaptivePreviewController(renderScale,targetFps)}
+    var effectiveScale by remember(controller){mutableStateOf(controller.scale)}
+    val currentPlaying by rememberUpdatedState(sceneSnapshot?.isPlaying==true)
+    LaunchedEffect(showDiagnostics,controller,resumed,continuousRendering){
+        renderer.diagnosticsEnabled=showDiagnostics||adaptiveQuality
+        var last:PreviewDiagnostics?=renderer.diagnostics
+        while(true){
+            val d=renderer.diagnostics
+            if(showDiagnostics)diagnostics=d
+            renderError=renderer.previewError
+            if(adaptiveQuality&&resumed&&continuousRendering&&currentPlaying&&d!==last){
+                effectiveScale=controller.observe(d.fps,d.cpuFrameMs,renderError!=null)
+            }
+            last=d
+            delay(500)
+        }
     }
     val glView = remember {
         GLSurfaceView(context).apply {
@@ -82,9 +96,9 @@ fun VexoPreviewSurface(
     }
 
     var viewSize by remember { mutableStateOf(IntSize.Zero) }
-    LaunchedEffect(viewSize,renderScale){
+    LaunchedEffect(viewSize,effectiveScale){
         if(viewSize.width>0&&viewSize.height>0){
-            val scale=renderScale.coerceIn(.5f,1f)
+            val scale=effectiveScale.coerceIn(.5f,1f)
             glView.holder.setFixedSize((viewSize.width*scale).toInt().coerceAtLeast(16),(viewSize.height*scale).toInt().coerceAtLeast(16))
             glView.requestRender()
         }
@@ -167,7 +181,7 @@ fun VexoPreviewSurface(
         if(showDiagnostics){
             val palette=LocalVexoPalette.current
             val d=diagnostics
-            Text("%.1f FPS · %.1f ms CPU\n%d × %d · %d comps / %d layers\n%d composition slots · %.1f MiB textures + %.1f MiB FBO".format(d.fps,d.cpuFrameMs,d.width,d.height,d.compositions,d.layers,d.compositionSlots,d.textureBytes/1048576.0,d.framebufferBytes/1048576.0),modifier=Modifier.align(Alignment.TopStart).background(Color.Black.copy(alpha=.85f)).padding(5.dp),style=MaterialTheme.typography.labelSmall,color=palette.accent)
+            Text("%.1f FPS · %.1f ms CPU · %d%% preview\n%d × %d · %d comps / %d layers\n%d composition slots · %.1f MiB textures + %.1f MiB FBO".format(d.fps,d.cpuFrameMs,(effectiveScale*100).toInt(),d.width,d.height,d.compositions,d.layers,d.compositionSlots,d.textureBytes/1048576.0,d.framebufferBytes/1048576.0),modifier=Modifier.align(Alignment.TopStart).background(Color.Black.copy(alpha=.85f)).padding(5.dp),style=MaterialTheme.typography.labelSmall,color=palette.accent)
         }
     }
 }
