@@ -57,6 +57,7 @@ class AudioProviderEngine(initialConfig: AudioProviderConfig) {
     private var trebleEnergy = 0f
     private var rmsEnergy = 0f
     private var peakEnergy = 0f
+    private val bandTargets=FloatArray(3)
 
     private var lastStreamGen = -1
     private var lastAnalysisFrame = -1L
@@ -109,6 +110,7 @@ class AudioProviderEngine(initialConfig: AudioProviderConfig) {
         trebleEnergy = 0f
         rmsEnergy = 0f
         peakEnergy = 0f
+        bandTargets.fill(0f)
     }
 
     fun process(
@@ -172,11 +174,7 @@ class AudioProviderEngine(initialConfig: AudioProviderConfig) {
 
         // Resample waveform for waveform layer/mode
         val nOut = outputBars.size
-        val step = rawSampleWindow.size.toFloat() / nOut
-        for (i in 0 until nOut) {
-            val idx = (i * step).toInt().coerceIn(0, rawSampleWindow.lastIndex)
-            outputWaveform[i] = rawSampleWindow[idx]
-        }
+        SpectrumDynamics.resampleWaveform(rawSampleWindow,outputWaveform)
 
         fft.computeLinearMagnitudes(rawSampleWindow, linearSpectrum)
         if (config.sampleProvider == SampleProviderType.WAVEFORM) {
@@ -311,33 +309,33 @@ class AudioProviderEngine(initialConfig: AudioProviderConfig) {
 
     private fun applyGeometryAndEnvelopes(dtMs: Float) {
         val n = outputBars.size
-        val attackCoeff = if (config.attackMs <= 0.5f) 1f else 1f - exp(-dtMs / config.attackMs)
-        val releaseCoeff = if (config.releaseMs <= 0.5f) 1f else 1f - exp(-dtMs / config.releaseMs)
+        val attackCoeff = SpectrumDynamics.referenceCoefficient(config.attackMs)
+        val releaseCoeff = SpectrumDynamics.referenceCoefficient(config.releaseMs)
         val smoothBlend = (1f-config.smooth.coerceIn(.05f,1f))*.5f
-        val preBlend = (config.preSmooth.coerceIn(0f,1f)*.8f).pow(dtMs/16.6667f)
+        val preBlend = config.preSmooth.coerceIn(0f,1f)*.8f
+        val attack=SpectrumDynamics.responseCoefficient(attackCoeff,preBlend,dtMs)
+        val release=SpectrumDynamics.responseCoefficient(releaseCoeff,preBlend,dtMs)
+        val hold=config.peakHoldMs.takeIf{it.isFinite()}?.coerceAtLeast(0f)?:0f
+        val decay=config.peakDecay.takeIf{it.isFinite()}?.coerceIn(.5f,.995f)?:.85f
 
         for (i in 0 until n) {
             val prev = envelopeBars[i]
-            val target = mappedBars[i].coerceAtLeast(0f)*(1f-preBlend)+prev*preBlend
-            val env = if (target >= prev) {
-                prev + (target - prev) * attackCoeff
-            } else {
-                prev + (target - prev) * releaseCoeff
-            }
+            val target = mappedBars[i].takeIf{it.isFinite()}?.coerceAtLeast(0f)?:0f
+            val env = prev+(target-prev)*(if(target>=prev)attack else release)
             envelopeBars[i] = env
-
-            // Peak hold tracking
-            if (env >= peakHoldBars[i]) {
-                peakHoldBars[i] = env
-                peakHoldTimersMs[i] = config.peakHoldMs
-            } else {
-                peakHoldTimersMs[i] -= dtMs
-                if (peakHoldTimersMs[i] <= 0f) {
-                    peakHoldBars[i] = (peakHoldBars[i] * config.peakDecay.coerceIn(0.5f, 0.995f).pow(dtMs/16.6667f))
-                }
-            }
-
             outputBars[i] = env * (1f - smoothBlend) + prev * smoothBlend
+            updatePeak(i,maxOf(env,outputBars[i]),dtMs,hold,decay)
+        }
+    }
+
+    private fun updatePeak(i:Int,level:Float,dt:Float,hold:Float,decay:Float){
+        if(level>=peakHoldBars[i]){
+            peakHoldBars[i]=level
+            peakHoldTimersMs[i]=hold
+        }else{
+            val decayTime=(dt-peakHoldTimersMs[i].coerceAtLeast(0f)).coerceAtLeast(0f)
+            peakHoldTimersMs[i]=(peakHoldTimersMs[i]-dt).coerceAtLeast(0f)
+            peakHoldBars[i]=SpectrumDynamics.decayPeak(peakHoldBars[i],level,decayTime,decay)
         }
     }
 
@@ -347,8 +345,8 @@ class AudioProviderEngine(initialConfig: AudioProviderConfig) {
             envelopeBars[i] *= (1f - releaseCoeff)
             outputBars[i] = envelopeBars[i]
             outputWaveform[i]*=(1f-releaseCoeff)
-            peakHoldTimersMs[i]-=dtMs
-            if(peakHoldTimersMs[i]<=0f)peakHoldBars[i]*=config.peakDecay.coerceIn(.5f,.995f).pow(dtMs/16.6667f)
+            updatePeak(i,outputBars[i],dtMs,config.peakHoldMs.takeIf{it.isFinite()}?.coerceAtLeast(0f)?:0f,
+                config.peakDecay.takeIf{it.isFinite()}?.coerceIn(.5f,.995f)?:.85f)
         }
         beatEnvelope *= (1f - releaseCoeff)
         beatPulseState=(beatPulseState-dtMs/config.beatPulseDurationMs.coerceIn(40,600)).coerceAtLeast(0f)
@@ -422,10 +420,15 @@ class AudioProviderEngine(initialConfig: AudioProviderConfig) {
             return ln(1.0 + (s / (l - f + 1)) * 18.0).toFloat().coerceIn(0f, 1f)
         }
 
+        if(fresh){
+            bandTargets[0]=bandAvg(20f,250f)
+            bandTargets[1]=bandAvg(250f,4000f)
+            bandTargets[2]=bandAvg(4000f,16000f)
+        }
         val retention=.4f.pow(dtMs/16.6667f)
-        bassEnergy = bassEnergy*retention+bandAvg(20f,250f)*(1f-retention)
-        midEnergy = midEnergy*retention+bandAvg(250f,4000f)*(1f-retention)
-        trebleEnergy = trebleEnergy*retention+bandAvg(4000f,16000f)*(1f-retention)
+        bassEnergy = bassEnergy*retention+bandTargets[0]*(1f-retention)
+        midEnergy = midEnergy*retention+bandTargets[1]*(1f-retention)
+        trebleEnergy = trebleEnergy*retention+bandTargets[2]*(1f-retention)
     }
 
     private fun snapshot(): AudioProviderSnapshot = AudioProviderSnapshot(

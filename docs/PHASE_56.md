@@ -1,0 +1,3 @@
+# Phase 56 — spectrum dynamics
+
+Signed peak-bucket waveform downsampling preserves short transients; interpolation handles output sizes above input. Combined attack/release and pre-smoothing retention is normalized to elapsed frame time, preserving the reference 60 Hz behavior. Peak decay applies only after the hold interval and never drops beneath the current spectrum output. Frequency band targets recompute only on fresh FFT windows while smoothing continues on every step. Five regression tests added. This changes waveform sampling for all providers; no device performance or exact Avee parity claims. Main unchanged.
