@@ -637,7 +637,12 @@ object AveeJsonCodec {
         put("ver", "10")
         put("visible", propObj(if (c.visible) 1 else 0))
         put("vexoLocked", propObj(if (c.locked) 1 else 0))
-        put("blendMode", propObj(c.blendMode.aveeName))
+        val effectBlend=when(val cfg=layer.config){
+            is LayerConfig.BlurEffect->cfg.glowBlendMode
+            is LayerConfig.MotionBlurEffect->cfg.effectBlendMode
+            else->null
+        }
+        put("blendMode", propObj((effectBlend?:c.blendMode).aveeName))
         put("position", propObj("${c.posX} ${c.posY}"))
         put("alignmentPosition", propObj("${c.alignmentX} ${c.alignmentY}"))
         put("anchorX", propObj(c.anchorX.aveeName))
