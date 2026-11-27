@@ -117,11 +117,14 @@ object LayerPropertyAnimation{
         }
     }
     fun evaluate(layer:LayerNode,tracks:List<KeyframeTrack>,timeMs:Long):LayerConfig{
-        val relevant=tracks.filter{it.targetLayerId==layer.common.id&&it.propertyKey.startsWith("property.")}
-        if(relevant.isEmpty())return layer.config
+        return evaluate(layer,PreparedLayerTracks.create(tracks.filter{it.targetLayerId==layer.common.id}),timeMs)
+    }
+    fun evaluate(layer:LayerNode,tracks:PreparedLayerTracks,timeMs:Long):LayerConfig{
+        if(!tracks.hasProperties)return layer.config
         fun at(key:String,base:Float):Float{
-            val t=relevant.firstOrNull{it.propertyKey==trackKey(key)}?:return base
-            return KeyframeEvaluator.evaluate(t,timeMs,base).takeIf{it.isFinite()}?.let{clamp(key,it)}?:base
+            val t=trackKey(key)
+            if(!tracks.contains(t))return base
+            return tracks.evaluate(t,timeMs,base).takeIf{it.isFinite()}?.let{clamp(key,it)}?:base
         }
         return when(val c=layer.config){
             is LayerConfig.Bars->c.copy(heightScale=at("bars.height",c.heightScale),barWidth=at("bars.width",c.barWidth),circleRadius=at("bars.radius",c.circleRadius),

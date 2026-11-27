@@ -12,24 +12,9 @@ import kotlin.math.sin
 data class EvaluatedPair(val x: Float, val y: Float)
 
 object KeyframeEvaluator {
-    fun evaluate(track: KeyframeTrack?, timeMs: Long, defaultValue: Float): Float {
-        if (track == null || track.keyframes.isEmpty()) return defaultValue
-        val sorted = track.keyframes.sortedBy { it.timeMs }
-        if (timeMs <= sorted.first().timeMs) return sorted.first().value
-        if (timeMs >= sorted.last().timeMs) return sorted.last().value
-
-        for (i in 0 until sorted.lastIndex) {
-            val a = sorted[i]
-            val b = sorted[i + 1]
-            if (timeMs == b.timeMs) return b.value
-            if (timeMs in a.timeMs until b.timeMs) {
-                val span = (b.timeMs - a.timeMs).coerceAtLeast(1L)
-                val t = ((timeMs - a.timeMs).toFloat() / span.toFloat()).coerceIn(0f, 1f)
-                return a.value + (b.value - a.value) * AnimationCurves.ease(a.interpolation,t)
-            }
-        }
-        return sorted.last().value
-    }
+    /** Callers without a compiled index may supply unordered imported tracks. */
+    fun evaluate(track: KeyframeTrack?, timeMs: Long, defaultValue: Float): Float =
+        PreparedKeyframeTrack.create(track).evaluate(timeMs,defaultValue)
 }
 
 /**

@@ -143,6 +143,7 @@ class VexoGlRenderer(
     private val barDelayHistory = mutableMapOf<String, ArrayDeque<FloatArray>>()
     private var lastProjectId: String? = null
     private var graphProject: com.vexo.studio.model.VexoProject?=null
+    private var animationTracks=com.vexo.studio.engine.scene.PreparedAnimationIndex.EMPTY
     private var cachedGraph: com.vexo.studio.engine.scene.ResolvedSceneGraph?=null
     private var cachedSlots: com.vexo.studio.engine.scene.CompositionSlotPlan?=null
     @Volatile var previewError:String?=null
@@ -221,7 +222,7 @@ class VexoGlRenderer(
     fun releaseGlResources() {
         videoFrames.close()
         diagnosticCounter.reset();diagnostics=PreviewDiagnostics()
-        graphProject=null;cachedGraph=null;cachedSlots=null;previewError=null;cachedReachable=emptySet();cachedDisplay=-1;cachedLayerIds=emptySet();cachedTrails=emptySet()
+        graphProject=null;animationTracks=com.vexo.studio.engine.scene.PreparedAnimationIndex.EMPTY;cachedGraph=null;cachedSlots=null;previewError=null;cachedReachable=emptySet();cachedDisplay=-1;cachedLayerIds=emptySet();cachedTrails=emptySet()
         particleSims.clear();barDelayHistory.clear()
         lastProjectId=null;lastPositionMs=-1L;lastArtworkVersion=-1
         particleShader?.release(); particleShader=null
@@ -283,6 +284,7 @@ class VexoGlRenderer(
         val compTextures = mutableMapOf<Int, Int>()
         val displayIndex=if(isExportRenderer)0 else scene.previewCompositionIndex.takeIf{idx->scene.project.compositions.any{it.index==idx}}?:0
         if(graphProject!==scene.project || cachedDisplay!=displayIndex){
+            if(graphProject!==scene.project)animationTracks=com.vexo.studio.engine.scene.PreparedAnimationIndex.create(scene.project.keyframes)
             graphProject=scene.project;cachedDisplay=displayIndex
             cachedGraph=SceneGraph.resolve(scene.project)
             cachedReachable=SceneGraph.reachable(scene.project,displayIndex)
@@ -396,7 +398,8 @@ class VexoGlRenderer(
         h: Int,
         compTextures: Map<Int, Int>
     ) {
-        val c = com.vexo.studio.engine.scene.TransformAnimation.evaluate(layer.common,scene.project.keyframes,scene.trackMeta.positionMs)
+        val tracks=animationTracks.forLayer(layer.common.id)
+        val c = com.vexo.studio.engine.scene.TransformAnimation.evaluate(layer.common,tracks,scene.trackMeta.positionMs)
         val providerIdx = when (val cfg = layer.config) {
             is LayerConfig.Bars -> cfg.audioProviderIndex
             else -> c.measurePos.providerIndex
@@ -406,11 +409,7 @@ class VexoGlRenderer(
             (scene.trackMeta.positionMs.toFloat() / scene.trackMeta.durationMs).coerceIn(0f, 1f)
         } else 0f
 
-        val keyframePos = KeyframeEvaluator.evaluate(
-            scene.project.keyframes.firstOrNull { it.targetLayerId == c.id && it.propertyKey == "posX" },
-            scene.trackMeta.positionMs,
-            0f
-        )
+        val keyframePos=if(c.measurePos.measureWhat==com.vexo.studio.model.MeasureWhat.KEYFRAME)tracks.evaluate("posX",scene.trackMeta.positionMs,0f)else 0f
 
         fun measured(key:String,m:com.vexo.studio.model.MeasureConfig,k:Float?=null):com.vexo.studio.engine.scene.EvaluatedPair {
             val raw=MeasureEvaluator.evaluatePair(m,scene.audioSnapshots[m.providerIndex],scene.totalTimeSec,scene.playingTimeSec,trackNorm,scene.isPlaying,k)
@@ -449,7 +448,7 @@ class VexoGlRenderer(
 
         applyBlendMode(c.blendMode)
 
-        when (val cfg = com.vexo.studio.engine.scene.LayerPropertyAnimation.evaluate(layer,scene.project.keyframes,scene.trackMeta.positionMs)) {
+        when (val cfg = com.vexo.studio.engine.scene.LayerPropertyAnimation.evaluate(layer,tracks,scene.trackMeta.positionMs)) {
             is LayerConfig.Bars -> {
                 val offset=scalar("gradient",cfg.colorBlendMeasure)
                 val measured=cfg.copy(colorBlendOffset=(cfg.colorBlendOffset+offset).coerceIn(0f,1f))
