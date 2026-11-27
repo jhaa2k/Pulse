@@ -30,6 +30,8 @@ class ParticleSimulator(maxPool: Int = 3000) {
     private val life = FloatArray(capacity)
     private val sizeRand = FloatArray(capacity)
     private val phase = FloatArray(capacity)
+    private val sineFreqOffset = FloatArray(capacity)
+    private val sineMagOffset = FloatArray(capacity)
 
     private val emission=ParticleEmissionClock()
     private val burstGate=ParticleBurstGate()
@@ -144,8 +146,10 @@ class ParticleSimulator(maxPool: Int = 3000) {
             vx[i] = (vx[i]+ax*cappedDt)*damping
             vy[i] = (vy[i]+ay*cappedDt)*damping
 
-            val sineOffset = if (cfg.sideSineWaveMag != 0f) {
-                sin(age[i] * cfg.sideSineWaveFreq + phase[i]) * cfg.sideSineWaveMag * 0.01f * cappedDt
+            val frequency=cfg.sideSineWaveFreq+sineFreqOffset[i]
+            val magnitude=cfg.sideSineWaveMag+sineMagOffset[i]
+            val sineOffset = if (magnitude.isFinite()&&frequency.isFinite()&&magnitude!=0f) {
+                sin(age[i] * frequency + phase[i]) * magnitude * 0.01f * cappedDt
             } else 0f
 
             val oldX=x[i];val oldY=y[i];val oldZ=z[i]
@@ -193,6 +197,8 @@ class ParticleSimulator(maxPool: Int = 3000) {
         life[i] = (cfg.lifetimeSec * (0.7f + rng.nextFloat() * 0.6f)).coerceIn(0.2f, 15f)
         sizeRand[i] = rng.nextFloat() * cfg.endSizeRandom
         phase[i] = rng.nextFloat() * (2f * PI.toFloat())
+        sineFreqOffset[i]=if(cfg.sideSineWaveFreqRandom.isFinite()&&cfg.sideSineWaveFreqRandom!=0f)(rng.nextFloat()-.5f)*cfg.sideSineWaveFreqRandom else 0f
+        sineMagOffset[i]=if(cfg.sideSineWaveMagRandom.isFinite()&&cfg.sideSineWaveMagRandom!=0f)(rng.nextFloat()-.5f)*cfg.sideSineWaveMagRandom else 0f
 
         when (cfg.spawnArea) {
             SpawnAreaType.HORIZONTAL_LINE -> {

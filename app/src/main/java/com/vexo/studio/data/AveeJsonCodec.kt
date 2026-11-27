@@ -511,6 +511,9 @@ object AveeJsonCodec {
                 trailLength = obj.propFloat("trailLength", 0f),
                 sideSineWaveFreq = obj.propFloat("sideSineWaveFreq", 0f),
                 sideSineWaveMag = obj.propFloat("sideSineWaveMag", 0f),
+                sideSineWaveFreqRandom = obj.propFloat("sideSineWaveFreqRandom",0f),
+                sideSineWaveMagRandom = obj.propFloat("sideSineWaveMagRandom",0f),
+                sizeAspectRatio = obj.propFloat("sizeAspectRatio",1f),
                 measureOverallSpeed = parseMeasure(obj["MeasureOverallSpeed"]),
                 customImage = obj.propString("customImage", "internalres:particle_circle_blur4")
             )
@@ -756,6 +759,15 @@ object AveeJsonCodec {
                 put("fadeInAndOutTime", propObj(cfg.fadeInAndOutTime))
                 put("endSizeRandom", propObj(cfg.endSizeRandom)); put("perspectiveDepth", propObj(cfg.perspectiveDepth)); put("perspectiveFov", propObj(cfg.perspectiveFov))
                 put("nearCameraFadeOutDistance", propObj(cfg.nearCameraFadeOutDistance)); put("sideSineWaveFreq", propObj(cfg.sideSineWaveFreq)); put("sideSineWaveMag", propObj(cfg.sideSineWaveMag))
+                put("sideSineWaveFreqRandom",propObj(cfg.sideSineWaveFreqRandom))
+                put("sideSineWaveMagRandom",propObj(cfg.sideSineWaveMagRandom))
+                put("sizeAspectRatio",propObj(cfg.sizeAspectRatio))
+                put("fadeInSize",propObj(cfg.fadeInSize))
+                put("velocityAngle",propObj(if(cfg.velocityAngle)1 else 0))
+                put("mirrorX",propObj(if(cfg.mirrorX)1 else 0))
+                put("mirrorY",propObj(if(cfg.mirrorY)1 else 0))
+                put("trailLength",propObj(cfg.trailLength))
+                put("MeasureOverallSpeed",encodeMeasure(cfg.measureOverallSpeed))
                 put("SpawnArea", buildJsonObject { put("v", cfg.spawnArea.aveeName); put("vectorAngle", propObj(cfg.vectorAngleDeg)); put("vectorAngleZ", propObj(cfg.vectorAngleZ)); put("useRandomVectorInstead", propObj(if (cfg.useRandomVectorInstead) 1 else 0)); put("vectorRelativeToCenter", propObj(if (cfg.vectorRelativeToCenter) 1 else 0)) })
             }
             is LayerConfig.BlurEffect -> {

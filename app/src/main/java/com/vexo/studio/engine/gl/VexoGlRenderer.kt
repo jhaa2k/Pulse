@@ -1021,7 +1021,10 @@ class VexoGlRenderer(
             val a=((col ushr 24) and 255)/255f*sim.outAlpha[i]*((cfg.colorArgb ushr 24) and 255)/255f
             if(a<=.001f||sim.outSize[i]<=0f)continue
             val half=sim.outSize[i]*minDim*.5f
-            val length=half*com.vexo.studio.engine.scene.ParticleTrailMath.stretch(
+            val aspect=cfg.sizeAspectRatio.takeIf{it.isFinite()}?.coerceIn(.05f,20f)?:1f
+            val widthHalf=half*kotlin.math.sqrt(aspect)
+            val heightHalf=half/kotlin.math.sqrt(aspect)
+            val length=widthHalf*com.vexo.studio.engine.scene.ParticleTrailMath.stretch(
                 cfg.trailLength,sim.outVx[i],sim.outVy[i],w,h)
             for(mx in 0 until if(cfg.mirrorX)2 else 1) for(my in 0 until if(cfg.mirrorY)2 else 1){
                 val px=(if(mx==1)1f-sim.outX[i] else sim.outX[i])*w
@@ -1032,8 +1035,8 @@ class VexoGlRenderer(
                     vertexScratch[vIdx++]=px+x*ca-y*sa;vertexScratch[vIdx++]=py+x*sa+y*ca
                     colorScratch[cIdx++]=r;colorScratch[cIdx++]=green;colorScratch[cIdx++]=b;colorScratch[cIdx++]=a
                 }
-                point(-length,-half);point(half,-half);point(-length,half)
-                point(-length,half);point(half,-half);point(half,half)
+                point(-length,-heightHalf);point(widthHalf,-heightHalf);point(-length,heightHalf)
+                point(-length,heightHalf);point(widthHalf,-heightHalf);point(widthHalf,heightHalf)
                 particleUv.put(spriteUv)
             }
         }
@@ -1522,6 +1525,15 @@ class VexoGlRenderer(
                     Shader.TileMode.CLAMP
                 )
                 canvas.drawRect(0f, 0f, 256f, 256f, paint)
+            }
+            com.vexo.studio.engine.scene.LegacySpriteProfile.supports(resKey) -> {
+                val pixels=IntArray(256*256)
+                for(y in 0 until 256)for(x in 0 until 256){
+                    val dx=(x-127.5f)/127.5f;val dy=(y-127.5f)/127.5f
+                    val a=(com.vexo.studio.engine.scene.LegacySpriteProfile.alpha(resKey,kotlin.math.hypot(dx,dy))*255f+.5f).toInt().coerceIn(0,255)
+                    pixels[y*256+x]=(a shl 24) or 0x00FFFFFF
+                }
+                bmp.setPixels(pixels,0,256,0,0,256,256)
             }
             resKey.contains("particle") || resKey.contains("flare") -> {
                 paint.shader = RadialGradient(

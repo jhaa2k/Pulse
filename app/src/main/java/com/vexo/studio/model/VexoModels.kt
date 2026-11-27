@@ -579,7 +579,10 @@ sealed interface LayerConfig {
         val burstSpeedMultiplier: Float = 1f,
         val reactiveEmission: Float = 0f,
         val turbulence: Float = 0f,
-        val centerForce: Float = 0f
+        val centerForce: Float = 0f,
+        val sideSineWaveFreqRandom: Float = 0f,
+        val sideSineWaveMagRandom: Float = 0f,
+        val sizeAspectRatio: Float = 1f
     ) : LayerConfig
 
     @Serializable
