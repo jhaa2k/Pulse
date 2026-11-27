@@ -417,7 +417,7 @@ class VexoGlRenderer(
         }
         fun scalar(key:String,m:com.vexo.studio.model.MeasureConfig):Float {
             val pair=measured(key,m)
-            return (pair.x+pair.y)*.5f
+            return pair.mean()
         }
         val dPos=measured("position",c.measurePos,keyframePos)
         val dScale=measured("scale",c.measureScale)
