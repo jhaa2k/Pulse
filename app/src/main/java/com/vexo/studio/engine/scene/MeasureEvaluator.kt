@@ -48,7 +48,7 @@ object MeasureEvaluator {
     ): EvaluatedPair {
         if (measure.measureWhat == MeasureWhat.NOTHING) return EvaluatedPair(0f, 0f)
 
-        val threshold = measure.triggerThreshold.coerceIn(0f, 0.999f)
+        val threshold = measure.triggerThreshold.takeIf{it.isFinite()}?.coerceIn(0f,0.999f)?:0f
         fun gate(value: Float): Float = if (!value.isFinite()) 0f
             else if (threshold == 0f) value else ((value - threshold) / (1f - threshold)).coerceIn(0f, 1f)
         val beat = gate(snapshot?.beat ?: 0f)
@@ -89,7 +89,7 @@ object MeasureEvaluator {
             MeasureWhat.KEYFRAME -> (keyframeValue ?: 0f) to (keyframeValue ?: 0f)
         }
 
-        return EvaluatedPair(nx * measure.amountA, ny * measure.amountB)
+        return EvaluatedPair((nx*measure.amountA).takeIf{it.isFinite()}?:0f,(ny*measure.amountB).takeIf{it.isFinite()}?:0f)
     }
 
     fun evaluateScalar(
@@ -114,7 +114,7 @@ object MeasureEvaluator {
     }
 
     fun blendArgb(colorFrom: Int, colorTo: Int, t: Float): Int {
-        val c = t.coerceIn(0f, 1f)
+        val c = t.takeIf{it.isFinite()}?.coerceIn(0f,1f)?:0f
         val a0 = (colorFrom ushr 24) and 0xFF
         val r0 = (colorFrom ushr 16) and 0xFF
         val g0 = (colorFrom ushr 8) and 0xFF

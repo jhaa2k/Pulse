@@ -7,7 +7,10 @@ import kotlin.math.exp
 class ReactiveMeasureFilter {
     private data class Entry(val config:MeasureConfig,val pair:EvaluatedPair)
     private val history=mutableMapOf<Pair<String,String>,Entry>()
-    private val continuous=setOf(MeasureWhat.BEAT,MeasureWhat.BASS,MeasureWhat.MID,MeasureWhat.TREBLE,MeasureWhat.RMS,MeasureWhat.PEAK)
+    companion object{
+        private val continuous=setOf(MeasureWhat.BEAT,MeasureWhat.BASS,MeasureWhat.MID,MeasureWhat.TREBLE,MeasureWhat.RMS,MeasureWhat.PEAK)
+        fun isContinuous(what:MeasureWhat)=what in continuous
+    }
     fun apply(id:String,key:String,c:MeasureConfig,raw:EvaluatedPair,deltaSec:Float):EvaluatedPair{
         val k=id to key
         val safe=EvaluatedPair(raw.x.takeIf{it.isFinite()}?:0f,raw.y.takeIf{it.isFinite()}?:0f)

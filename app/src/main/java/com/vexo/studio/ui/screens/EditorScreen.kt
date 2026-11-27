@@ -816,79 +816,29 @@ private fun PropertiesTab(
             expanded = expandedSections["measures"] ?: false,
             onToggle = { toggleAccordion(expandedSections, "measures") }
         ) {
-            StudioChipSelector(
-                label = "Measure Scale",
-                options = MeasureWhat.entries.filter { it != MeasureWhat.KEYFRAME },
-                selected = layer.common.measureScale.measureWhat,
-                optionLabel = { it.label },
-                onSelect = { mw ->
-                    vm.updateLayer(layer.common.id) {
-                        it.copy(common = it.common.copy(measureScale = it.common.measureScale.copy(measureWhat = mw)))
-                    }
+            val ids=uiState.project.audioProviders.map{it.index}
+            var binding by rememberSaveable(layer.common.id){mutableStateOf("SCALE")}
+            StudioChipSelector("Property",listOf("POSITION","SCALE","ROTATION","OPACITY"),binding,{it}){binding=it}
+            val measure=when(binding){
+                "POSITION"->layer.common.measurePos
+                "ROTATION"->layer.common.measureRot
+                "OPACITY"->layer.common.measureOpacity
+                else->layer.common.measureScale
+            }
+            if(binding=="SCALE"&&layer.common.scaleIsUniform)Text("Uniform scale uses Amount X for both axes.",style=MaterialTheme.typography.labelSmall,color=palette.textSecondary)
+            val scalar=binding=="ROTATION"||binding=="OPACITY"
+            if(binding=="ROTATION")Text("Rotation amount is multiplied by 20 degrees.",style=MaterialTheme.typography.labelSmall,color=palette.textSecondary)
+            val range=when(binding){"POSITION"->-.5f.. .5f;"SCALE"->-1f..2f;"ROTATION"->-5f..5f;else->-1f..1f}
+            TransformMeasureControls(measure,ids,range,scalar,binding=="SCALE"&&layer.common.scaleIsUniform,::beginDrag,::endDrag){m,record->
+                vm.updateLayer(layer.common.id,record){l->
+                    l.copy(common=when(binding){
+                        "POSITION"->l.common.copy(measurePos=m)
+                        "ROTATION"->l.common.copy(measureRot=m)
+                        "OPACITY"->l.common.copy(measureOpacity=m)
+                        else->l.common.copy(measureScale=m)
+                    })
                 }
-            )
-            StudioSlider(
-                label = "Scale Amount X",
-                value = layer.common.measureScale.amountA,
-                min = -1f, max = 2f, defaultValue = 0f, step = 0.02f,
-                onValueChange = { v ->
-                    beginDrag()
-                    vm.updateLayer(layer.common.id, false) {
-                        it.copy(common = it.common.copy(measureScale = it.common.measureScale.copy(amountA = v)))
-                    }
-                },
-                onCommit = ::endDrag
-            )
-            StudioSlider("Scale Trigger Threshold", layer.common.measureScale.triggerThreshold, 0f, 0.99f, 0f, "", 0.01f, onValueChange = { v -> beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(common=it.common.copy(measureScale=it.common.measureScale.copy(triggerThreshold=v))) } }, onCommit=::endDrag)
-            StudioSlider("Scale Amount Y", layer.common.measureScale.amountB, -1f, 2f, 0f, "", 0.01f, onValueChange = { v -> beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(common = it.common.copy(measureScale = it.common.measureScale.copy(amountB = v))) } }, onCommit = ::endDrag)
-            StudioChipSelector(
-                label = "Measure Position",
-                options = MeasureWhat.entries.filter { it != MeasureWhat.KEYFRAME },
-                selected = layer.common.measurePos.measureWhat,
-                optionLabel = { it.label },
-                onSelect = { mw ->
-                    vm.updateLayer(layer.common.id) {
-                        it.copy(common = it.common.copy(measurePos = it.common.measurePos.copy(measureWhat = mw)))
-                    }
-                }
-            )
-            StudioSlider(
-                label = "Position Amount X",
-                value = layer.common.measurePos.amountA,
-                min = 0f, max = 0.5f, defaultValue = 0f, step = 0.01f,
-                onValueChange = { v ->
-                    beginDrag()
-                    vm.updateLayer(layer.common.id, false) {
-                        it.copy(common = it.common.copy(measurePos = it.common.measurePos.copy(amountA = v)))
-                    }
-                },
-                onCommit = ::endDrag
-            )
-            StudioSlider("Position Trigger Threshold", layer.common.measurePos.triggerThreshold, 0f, 0.99f, 0f, "", 0.01f, onValueChange = { v -> beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(common=it.common.copy(measurePos=it.common.measurePos.copy(triggerThreshold=v))) } }, onCommit=::endDrag)
-            StudioSlider("Position Amount Y", layer.common.measurePos.amountB, -0.5f, 0.5f, 0f, "", 0.01f, onValueChange = { v -> beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(common = it.common.copy(measurePos = it.common.measurePos.copy(amountB = v))) } }, onCommit = ::endDrag)
-            StudioChipSelector(
-                label = "Measure Rotation",
-                options = MeasureWhat.entries.filter { it != MeasureWhat.KEYFRAME },
-                selected = layer.common.measureRot.measureWhat,
-                optionLabel = { it.label },
-                onSelect = { mw ->
-                    vm.updateLayer(layer.common.id) {
-                        it.copy(common = it.common.copy(measureRot = it.common.measureRot.copy(measureWhat = mw)))
-                    }
-                }
-            )
-            StudioSlider(
-                label = "Rot Amount",
-                value = layer.common.measureRot.amountA,
-                min = -5f, max = 5f, defaultValue = 0f, step = 0.05f,
-                onValueChange = { v ->
-                    beginDrag()
-                    vm.updateLayer(layer.common.id, false) {
-                        it.copy(common = it.common.copy(measureRot = it.common.measureRot.copy(amountA = v, amountB = v)))
-                    }
-                },
-                onCommit = ::endDrag
-            )
+            }
         }
 
         ExpandableSectionHeader("Quick layer tools",expandedSections["quick_tools"]==true,{toggleAccordion(expandedSections,"quick_tools")}){
@@ -922,17 +872,6 @@ private fun PropertiesTab(
         ExpandableSectionHeader("Keyframe animation",expandedSections["keyframes"]==true,{toggleAccordion(expandedSections,"keyframes")}){
             MotionPresetPanel(vm,layer)
             TransformKeyframePanel(vm,uiState,layer)
-        }
-        ExpandableSectionHeader("Advanced audio bindings", expandedSections["bindings"] == true, { toggleAccordion(expandedSections, "bindings") }) {
-            val ids = uiState.project.audioProviders.map { it.index }
-            StudioChipSelector("Position Provider", ids, layer.common.measurePos.providerIndex, { "#$it" }) { v -> vm.updateLayer(layer.common.id) { it.copy(common=it.common.copy(measurePos=it.common.measurePos.copy(providerIndex=v))) } }
-            StudioChipSelector("Scale Provider", ids, layer.common.measureScale.providerIndex, { "#$it" }) { v -> vm.updateLayer(layer.common.id) { it.copy(common=it.common.copy(measureScale=it.common.measureScale.copy(providerIndex=v))) } }
-            StudioChipSelector("Rotation Provider", ids, layer.common.measureRot.providerIndex, { "#$it" }) { v -> vm.updateLayer(layer.common.id) { it.copy(common=it.common.copy(measureRot=it.common.measureRot.copy(providerIndex=v))) } }
-            StudioSlider("Rotation Threshold", layer.common.measureRot.triggerThreshold, 0f, .99f, 0f, "", .01f, onValueChange={v -> beginDrag(); vm.updateLayer(layer.common.id,false){it.copy(common=it.common.copy(measureRot=it.common.measureRot.copy(triggerThreshold=v))) }}, onCommit=::endDrag)
-            StudioChipSelector("Opacity Trigger", MeasureWhat.entries.filter { it != MeasureWhat.KEYFRAME }, layer.common.measureOpacity.measureWhat, { it.label }) { v -> vm.updateLayer(layer.common.id) { it.copy(common=it.common.copy(measureOpacity=it.common.measureOpacity.copy(measureWhat=v))) } }
-            StudioChipSelector("Opacity Provider", ids, layer.common.measureOpacity.providerIndex, { "#$it" }) { v -> vm.updateLayer(layer.common.id) { it.copy(common=it.common.copy(measureOpacity=it.common.measureOpacity.copy(providerIndex=v))) } }
-            StudioSlider("Opacity Amount", layer.common.measureOpacity.amountA, -1f, 1f, 0f, "", .01f, onValueChange={v -> beginDrag(); vm.updateLayer(layer.common.id,false){it.copy(common=it.common.copy(measureOpacity=it.common.measureOpacity.copy(amountA=v,amountB=v))) }}, onCommit=::endDrag)
-            StudioSlider("Opacity Threshold", layer.common.measureOpacity.triggerThreshold, 0f, .99f, 0f, "", .01f, onValueChange={v -> beginDrag(); vm.updateLayer(layer.common.id,false){it.copy(common=it.common.copy(measureOpacity=it.common.measureOpacity.copy(triggerThreshold=v))) }}, onCommit=::endDrag)
         }
 
         when (val cfg = layer.config) {
@@ -1890,6 +1829,20 @@ private fun MediaAssetButton(label:String,onPicked:(android.net.Uri)->Unit){
     val picker=androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()){uri->pending=uri}
     TextButton(onClick={picker.launch(arrayOf("image/*"))}){Text(label)}
     pending?.let{uri->AlertDialog(onDismissRequest={pending=null},title={Text("Apply asset?")},text={Text("Use selected image for this property?")},confirmButton={TextButton(onClick={onPicked(uri);pending=null}){Text("APPLY")}},dismissButton={TextButton(onClick={pending=null}){Text("CANCEL")}})}
+}
+
+@Composable
+private fun TransformMeasureControls(cfg:com.vexo.studio.model.MeasureConfig,ids:List<Int>,range:ClosedFloatingPointRange<Float>,scalar:Boolean,uniform:Boolean,begin:()->Unit,end:()->Unit,onChange:(com.vexo.studio.model.MeasureConfig,Boolean)->Unit){
+    StudioChipSelector("Measure",MeasureWhat.entries.filter{it!=MeasureWhat.KEYFRAME},cfg.measureWhat,{it.label}){v->onChange(cfg.copy(measureWhat=v),true)}
+    StudioChipSelector("Audio Provider",(ids+cfg.providerIndex).distinct(),cfg.providerIndex,{"#$it"}){v->onChange(cfg.copy(providerIndex=v),true)}
+    if(cfg.measureWhat!=MeasureWhat.NOTHING){
+        val x=if(scalar)(cfg.amountA+cfg.amountB)*.5f else cfg.amountA
+        StudioSlider(if(scalar)"Amount" else if(uniform)"Uniform Amount" else "Amount X",x,range.start,range.endInclusive,0f,"",.01f,onValueChange={v->begin();onChange(cfg.copy(amountA=v,amountB=if(scalar||uniform)v else cfg.amountB),false)},onCommit=end)
+        if(!scalar&&!uniform)StudioSlider("Amount Y",cfg.amountB,range.start,range.endInclusive,0f,"",.01f,onValueChange={v->begin();onChange(cfg.copy(amountB=v),false)},onCommit=end)
+        StudioSlider("Response Smoothing",cfg.smoothing,0f,1f,.25f,"",.01f,onValueChange={v->begin();onChange(cfg.copy(smoothing=v),false)},onCommit=end)
+        StudioSlider("Trigger Threshold",cfg.triggerThreshold,0f,.99f,0f,"",.01f,onValueChange={v->begin();onChange(cfg.copy(triggerThreshold=v),false)},onCommit=end)
+        TextButton(onClick={onChange(com.vexo.studio.model.MeasureConfig(providerIndex=cfg.providerIndex),true)}){Text("RESET BINDING")}
+    }
 }
 
 @Composable

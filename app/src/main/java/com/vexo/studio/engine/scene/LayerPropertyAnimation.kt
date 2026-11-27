@@ -16,7 +16,7 @@ object LayerPropertyAnimation{
         "motion.amount" to "Motion blur amount", "motion.trail" to "Trail persistence",
         "motion.x" to "Manual motion X", "motion.y" to "Manual motion Y"
     )
-    fun keys(layer:LayerNode):List<String> = TransformAnimation.keys + when(layer.config){
+    fun keys(layer:LayerNode):List<String> = TransformAnimation.keys.filter{it!="scaleY"||!layer.common.scaleIsUniform} + when(layer.config){
         is LayerConfig.Bars->labels.keys.filter{it.startsWith("bars.")}
         is LayerConfig.Shape->labels.keys.filter{it.startsWith("shape.")}
         is LayerConfig.BlurEffect->labels.keys.filter{it.startsWith("blur.")}
@@ -29,8 +29,12 @@ object LayerPropertyAnimation{
     }
     fun trackKey(key:String)=if(key in TransformAnimation.keys)"transform."+key else "property."+key
     fun clamp(key:String,v:Float):Float{
+        val safe=v.takeIf{it.isFinite()}?:0f
         val range=when(key){
-            "bars.height"->0f..8f
+            "posX","posY"->-1f..2f
+            "scaleX","scaleY"->-2f..4f
+            "rotationDeg"->-360f..360f
+            "bars.height"->-8f..8f
             "bars.width"->.05f..1.5f
             "bars.radius"->.01f.. .8f
             "bars.angle"->-360f..360f
@@ -49,9 +53,9 @@ object LayerPropertyAnimation{
             "motion.amount"->0f..3f
             "motion.trail"->0f.. .95f
             "motion.x","motion.y"->-.25f.. .25f
-            else->return v
+            else->return safe
         }
-        return v.coerceIn(range.start,range.endInclusive)
+        return safe.coerceIn(range.start,range.endInclusive)
     }
     fun value(layer:LayerNode,key:String):Float{
         if(key in TransformAnimation.keys)return TransformAnimation.value(layer.common,key)

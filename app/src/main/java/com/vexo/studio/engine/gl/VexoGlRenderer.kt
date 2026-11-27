@@ -455,13 +455,12 @@ class VexoGlRenderer(
                 val measured=cfg.copy(colorBlendOffset=(cfg.colorBlendOffset+offset).coerceIn(0f,1f))
                 drawBarsLayer(c.id, com.vexo.studio.engine.scene.DynamicSpectrum.evaluate(measured,audioSnap,scene.trackMeta.positionMs), audioSnap, opacity, w, h)
             }
-            is LayerConfig.Image -> drawImageLayer(cfg, scene, audioSnap, trackNorm, opacity, w, h, compTextures)
-            is LayerConfig.Text -> drawTextLayer(cfg, scene, opacity, w, h)
+            is LayerConfig.Image -> drawImageLayer(cfg, scene, scalar("imageColor",cfg.measureColorBlend),scalar("imageCreative",cfg.creative.audio), opacity, w, h, compTextures)
+            is LayerConfig.Text -> drawTextLayer(cfg, scene, scalar("textAnimation",cfg.animationAudio), opacity, w, h)
             is LayerConfig.Shape -> {
-                fun measure(m:com.vexo.studio.model.MeasureConfig)=MeasureEvaluator.evaluateScalar(m,scene.audioSnapshots[m.providerIndex],scene.totalTimeSec,scene.playingTimeSec,trackNorm,scene.isPlaying)
-                drawShapeLayer(cfg.copy(radius=(cfg.radius+measure(cfg.pulse)*.15f).coerceIn(.005f,.8f),strokeWidth=(cfg.strokeWidth+measure(cfg.strokePulse)*12f).coerceIn(0f,32f)),opacity,w,h)
+                drawShapeLayer(cfg.copy(radius=(cfg.radius+scalar("shapeRadius",cfg.pulse)*.15f).coerceIn(.005f,.8f),strokeWidth=(cfg.strokeWidth+scalar("shapeStroke",cfg.strokePulse)*12f).coerceIn(0f,32f)),opacity,w,h)
             }
-            is LayerConfig.Particles -> drawParticlesLayer(c.id, cfg, audioSnap, scene, deltaSec, opacity, w, h)
+            is LayerConfig.Particles -> drawParticlesLayer(c.id, cfg, scene, deltaSec, opacity, w, h,scalar("particleSpeed",cfg.measureOverallSpeed))
             is LayerConfig.BlurEffect -> drawBlurEffect(cfg, scalar("blur",cfg.measureBlur), opacity, w, h, compTextures)
             is LayerConfig.RgbSplitEffect -> drawRgbSplitEffect(cfg,measured("rgbSplit",cfg.splitMeasure),opacity,w,h,compTextures)
             is LayerConfig.MotionBlurEffect -> {
@@ -711,8 +710,8 @@ class VexoGlRenderer(
     private fun drawImageLayer(
         cfg: LayerConfig.Image,
         scene: RenderSceneSnapshot,
-        audioSnap: AudioProviderSnapshot?,
-        trackNorm: Float,
+        colorReactive:Float,
+        creativeReactive:Float,
         opacity: Float,
         w: Int,
         h: Int,
@@ -727,9 +726,7 @@ class VexoGlRenderer(
         }
         if (texId == 0) return
 
-        val colorBlend = MeasureEvaluator.evaluateScalar(
-            cfg.measureColorBlend, scene.audioSnapshots[cfg.measureColorBlend.providerIndex], scene.totalTimeSec, scene.playingTimeSec, trackNorm, scene.isPlaying
-        ).coerceIn(0f, 1f)
+        val colorBlend=colorReactive.coerceIn(0f,1f)
         val tint = MeasureEvaluator.blendArgb(cfg.colorArgb, cfg.colorToArgb, colorBlend)
 
         val sourceIsFbo=cfg.sourceType==ImageSourceType.COMPOSITION
@@ -763,7 +760,7 @@ class VexoGlRenderer(
             ((tint ushr 24) and 0xFF) / 255f
         )
         GLES20.glUniform1f(shader.uniform("uSaturation"), cfg.saturation)
-        bindCreativeImage(shader,cfg.creative,scene,trackNorm,w,h)
+        bindCreativeImage(shader,cfg.creative,scene,creativeReactive,w,h)
         val shapeCode = when (cfg.shape) {
             ImageShape.NONE -> 0
             ImageShape.CIRCLE -> 1
@@ -835,6 +832,7 @@ class VexoGlRenderer(
     private fun drawTextLayer(
         cfg: LayerConfig.Text,
         scene: RenderSceneSnapshot,
+        reactive:Float,
         opacity: Float,
         w: Int,
         h: Int
@@ -874,7 +872,6 @@ class VexoGlRenderer(
         val ratio = size.first.toFloat()/size.second.coerceAtLeast(1)
         val progress=com.vexo.studio.engine.scene.CreativeGeometry.animationProgress(meta.positionMs,cfg.animationDelay,cfg.animationDuration,cfg.animationLoop)
         val amount=cfg.animationAmount.coerceIn(0f,1f)
-        val reactive=MeasureEvaluator.evaluateScalar(cfg.animationAudio,scene.audioSnapshots[cfg.animationAudio.providerIndex],scene.totalTimeSec,scene.playingTimeSec,if(meta.durationMs>0)meta.positionMs.toFloat()/meta.durationMs else 0f,scene.isPlaying)
         var scale=1f;var dx=0f;var alpha=opacity
         when(cfg.animation){
             com.vexo.studio.model.TextMotion.NONE->Unit
@@ -975,12 +972,12 @@ class VexoGlRenderer(
     private fun drawParticlesLayer(
         layerId: String,
         cfg: LayerConfig.Particles,
-        audioSnap: AudioProviderSnapshot?,
         scene: RenderSceneSnapshot,
         deltaSec: Float,
         opacity: Float,
         w: Int,
-        h: Int
+        h: Int,
+        reactiveSpeed:Float
     ) {
         val sim = particleSims.getOrPut(layerId) { ParticleSimulator() }
         sim.step(
@@ -991,6 +988,7 @@ class VexoGlRenderer(
             playingTimeSec = scene.playingTimeSec,
             isPlaying = scene.isPlaying,
             burstSnapshot=scene.audioSnapshots[cfg.burstProvider],
+            speedOverride=if(com.vexo.studio.engine.scene.ReactiveMeasureFilter.isContinuous(cfg.measureOverallSpeed.measureWhat))reactiveSpeed else null,
             trackPositionNorm=if(scene.trackMeta.durationMs>0)(scene.trackMeta.positionMs.toFloat()/scene.trackMeta.durationMs).coerceIn(0f,1f)else 0f
         )
         val count = sim.activeCount
@@ -1610,8 +1608,7 @@ class VexoGlRenderer(
         return result
     }
 
-    private fun bindCreativeImage(shader:GlShaderProgram,cfg:com.vexo.studio.model.CreativeImageConfig,scene:RenderSceneSnapshot,trackNorm:Float,w:Int,h:Int){
-        val reactive=MeasureEvaluator.evaluateScalar(cfg.audio,scene.audioSnapshots[cfg.audio.providerIndex],scene.totalTimeSec,scene.playingTimeSec,trackNorm,scene.isPlaying)
+    private fun bindCreativeImage(shader:GlShaderProgram,cfg:com.vexo.studio.model.CreativeImageConfig,scene:RenderSceneSnapshot,reactive:Float,w:Int,h:Int){
         val amount=(cfg.amount+reactive).coerceIn(0f,1f)
         GLES20.glUniform1i(shader.uniform("uCreativeGradient"),cfg.gradient.ordinal)
         GLES20.glUniform1i(shader.uniform("uCreativeDistortion"),cfg.distortion.ordinal)

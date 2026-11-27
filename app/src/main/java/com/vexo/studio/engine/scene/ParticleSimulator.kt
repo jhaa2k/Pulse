@@ -66,7 +66,8 @@ class ParticleSimulator(maxPool: Int = 3000) {
         playingTimeSec: Float,
         isPlaying: Boolean,
         burstSnapshot: AudioProviderSnapshot? = snapshot,
-        trackPositionNorm: Float = 0f
+        trackPositionNorm: Float = 0f,
+        speedOverride:Float?=null
     ) {
         if (cfg.seed != lastSeed) reset(cfg.seed)
         val dt=deltaSec.takeIf{it.isFinite()}?.coerceIn(0f,.1f)?:0f
@@ -74,7 +75,7 @@ class ParticleSimulator(maxPool: Int = 3000) {
         val fixed=1.0/120.0
         val steps=((stepAccumulator+1e-8)/fixed).toInt().coerceAtMost(12)
         for(i in 0 until steps){
-            integrate(cfg,snapshot,fixed.toFloat(),totalTimeSec-(steps-1-i)*fixed.toFloat(),playingTimeSec,isPlaying,burstSnapshot,trackPositionNorm)
+            integrate(cfg,snapshot,fixed.toFloat(),totalTimeSec-(steps-1-i)*fixed.toFloat(),playingTimeSec,isPlaying,burstSnapshot,trackPositionNorm,speedOverride)
         }
         stepAccumulator=(stepAccumulator-steps*fixed).coerceIn(0.0,fixed)
     }
@@ -82,17 +83,17 @@ class ParticleSimulator(maxPool: Int = 3000) {
     private fun integrate(
         cfg:LayerConfig.Particles,snapshot:AudioProviderSnapshot?,cappedDt:Float,
         totalTimeSec:Float,playingTimeSec:Float,isPlaying:Boolean,
-        burstSnapshot:AudioProviderSnapshot?,trackPositionNorm:Float
+        burstSnapshot:AudioProviderSnapshot?,trackPositionNorm:Float,speedOverride:Float?
     ){
         val limit = cfg.countLimit.coerceIn(1, capacity)
-        val speedFactor = 1f + MeasureEvaluator.evaluateScalar(
+        val speedFactor = (1f + (speedOverride ?: MeasureEvaluator.evaluateScalar(
             measure = cfg.measureOverallSpeed,
             snapshot = snapshot,
             totalTimeSec = totalTimeSec,
             playingTimeSec = playingTimeSec,
             trackPositionNorm = trackPositionNorm,
             isPlaying = isPlaying
-        ) * 2.5f
+        )) * 2.5f).coerceIn(-20f,20f)
 
         val energy=ParticleBurstGate.signal(cfg.burstSource,burstSnapshot)
         val rate=1f+cfg.reactiveEmission.coerceIn(0f,5f)*energy

@@ -127,7 +127,7 @@ enum class MeasureWhat(val aveeName: String, val label: String) {
 
     companion object {
         fun fromAvee(raw: String?): MeasureWhat =
-            entries.firstOrNull { it.aveeName.equals(raw, ignoreCase = true) } ?: NOTHING
+            entries.firstOrNull { it.aveeName.equals(raw, ignoreCase = true) } ?: if(raw.equals("TotalTimeAndBack",ignoreCase=true))TOTAL_TIME_BACKWARD else NOTHING
     }
 }
 
