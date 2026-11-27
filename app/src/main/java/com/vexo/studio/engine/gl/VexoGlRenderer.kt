@@ -1099,6 +1099,12 @@ class VexoGlRenderer(
                     else if(it<plan.rounds-1)pass("${prefix}_b",plan.width,plan.height,0,0f,0f,0f)
                 }
             }
+            // Reuse earlier, now-unused reduction targets for tent reconstruction.
+            // The source is the Gaussian ping-pong result or previous smaller level.
+            for(index in plan.reconstructionIndices(targetW,targetH,quality,mode!=0)){
+                val size=plan.reductions[index]
+                pass("${prefix}_down_$index",size.first,size.second,4,0f,0f,0f)
+            }
             return tex
         }finally{
             GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER,saved[0])

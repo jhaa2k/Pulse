@@ -3,6 +3,17 @@ import com.vexo.studio.model.BlurQuality
 import kotlin.math.*
 
 data class SmoothBlurPlan(val reductions:List<Pair<Int,Int>>,val width:Int,val height:Int,val sigmaX:Float,val sigmaY:Float,val rounds:Int){
+    /** Reconstruct broad filters progressively into existing pyramid buffers.
+     * Stop at the largest level inside the output budget; final display uses linear filtering.
+     * Fast mode deliberately keeps the low-resolution result. */
+    fun reconstructionIndices(targetW:Int,targetH:Int,quality:BlurQuality,radial:Boolean=false):List<Int>{
+        if(radial||quality==BlurQuality.FAST||reductions.size<2)return emptyList()
+        val limit=maxOf(targetW,targetH,16)
+        return (reductions.lastIndex-1 downTo 0).filter{index->
+            val (w,h)=reductions[index]
+            maxOf(w,h)<=limit
+        }
+    }
     companion object{
         fun create(sw:Int,sh:Int,tw:Int,th:Int,sigma:Float,cross:Float,quality:BlurQuality,radial:Boolean=false):SmoothBlurPlan{
             var w=sw.coerceAtLeast(16);var h=sh.coerceAtLeast(16)

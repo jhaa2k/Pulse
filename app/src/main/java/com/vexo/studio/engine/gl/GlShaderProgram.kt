@@ -332,23 +332,51 @@ object VexoShaders {
                 gl_FragColor=(brightSample(vUv+uBoxStep)+brightSample(vUv-uBoxStep)+brightSample(vUv+vec2(uBoxStep.x,-uBoxStep.y))+brightSample(vUv+vec2(-uBoxStep.x,uBoxStep.y)))*0.25;
                 return;
             }
+            // 3x3 tent reconstruction on the progressively enlarged pyramid.
+            // Filter premultiplied RGBA together to avoid dark transparent fringes.
+            if(uFilterMode==4){
+                vec2 d=uBoxStep;
+                vec4 s=brightSample(vUv)*4.0;
+                s+=(brightSample(vUv+vec2(d.x,0.0))+brightSample(vUv-vec2(d.x,0.0))
+                   +brightSample(vUv+vec2(0.0,d.y))+brightSample(vUv-vec2(0.0,d.y)))*2.0;
+                s+=brightSample(vUv+d)+brightSample(vUv-d)
+                   +brightSample(vUv+vec2(d.x,-d.y))+brightSample(vUv+vec2(-d.x,d.y));
+                gl_FragColor=s/16.0;
+                return;
+            }
+            // Denser radial samples suppress separated ghost rings at high strengths.
+            if(uFilterMode==1 || uFilterMode==2){
+                vec4 s=vec4(0.0);
+                float ws=0.0;
+                for(int i=-12;i<=12;i++){
+                    float t=float(i)/12.0;
+                    float weight=exp(-2.88*t*t);
+                    vec2 uv=uCenter+(vUv-uCenter)*(1.0+t*uRadialStrength);
+                    if(uFilterMode==2){
+                        vec2 p=vUv-uCenter;
+                        p.x*=uAspect;
+                        float a=t*uRadialStrength*3.14159265;
+                        p=vec2(cos(a)*p.x-sin(a)*p.y,sin(a)*p.x+cos(a)*p.y);
+                        p.x/=max(0.001,uAspect);
+                        uv=uCenter+p;
+                    }
+                    s+=brightSample(uv)*weight;
+                    ws+=weight;
+                }
+                gl_FragColor=s/ws;
+                return;
+            }
+            if(uRadius<=0.001){
+                gl_FragColor=brightSample(vUv);
+                return;
+            }
             vec4 sum = vec4(0.0);
             float weightSum = 0.0;
             // Dense, symmetric separable Gaussian sampling avoids sparse ghost copies.
             for(int i=-6;i<=6;i++){
                 float x=float(i);
                 float weight=exp(-0.5*x*x/6.25);
-                float t=x/6.0;
                 vec2 uv=vUv+uDirection*uRadius*x/3.0;
-                if(uFilterMode==1)uv=uCenter+(vUv-uCenter)*(1.0+t*uRadialStrength);
-                else if(uFilterMode==2){
-                    vec2 p=vUv-uCenter;
-                    p.x*=uAspect;
-                    float a=t*uRadialStrength*3.14159265;
-                    p=vec2(cos(a)*p.x-sin(a)*p.y,sin(a)*p.x+cos(a)*p.y);
-                    p.x/=max(0.001,uAspect);
-                    uv=uCenter+p;
-                }
                 sum+=brightSample(uv)*weight;
                 weightSum+=weight;
             }
@@ -387,7 +415,11 @@ object VexoShaders {
     """
 
     const val MOTION_FRAGMENT = """
+        #ifdef GL_FRAGMENT_PRECISION_HIGH
+        precision highp float;
+        #else
         precision mediump float;
+        #endif
         uniform sampler2D uTex;
         uniform vec2 uMotion;
         uniform vec2 uMotionExtra;
@@ -395,6 +427,10 @@ object VexoShaders {
         uniform float uOpacity;
         varying vec2 vUv;
         void main(){
+            if(all(equal(uMotion,vec2(0.0))) && all(equal(uMotionExtra,vec2(0.0)))){
+                gl_FragColor=texture2D(uTex,vUv)*uOpacity;
+                return;
+            }
             vec4 sum=vec4(0.0);
             float weights=0.0;
             for(int i=0;i<13;i++){
