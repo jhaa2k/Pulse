@@ -11,6 +11,7 @@ object LayerPropertyAnimation{
         "bars.gradient" to "Gradient offset", "bars.waveWidth" to "Wave line width", "bars.baseline" to "Baseline offset",
         "shape.radius" to "Shape radius", "shape.stroke" to "Shape stroke", "shape.corner" to "Corner radius",
         "blur.radius" to "Blur radius", "blur.multiplier" to "Blur multiplier",
+        "blur.radial" to "Radial strength", "blur.intensity" to "Bloom intensity", "blur.threshold" to "Bloom threshold",
         "blur.glow1" to "Glow scale 1", "blur.glow2" to "Glow scale 2", "blur.glow3" to "Glow scale 3",
         "motion.amount" to "Motion blur amount", "motion.trail" to "Trail persistence",
         "motion.x" to "Manual motion X", "motion.y" to "Manual motion Y"
@@ -42,6 +43,8 @@ object LayerPropertyAnimation{
             "shape.corner"->0f.. .5f
             "blur.radius"->0f..24f
             "blur.multiplier"->0f..8f
+            "blur.radial","blur.threshold"->0f..1f
+            "blur.intensity"->0f..4f
             "blur.glow1","blur.glow2","blur.glow3"->0f..3f
             "motion.amount"->0f..3f
             "motion.trail"->0f.. .95f
@@ -59,7 +62,7 @@ object LayerPropertyAnimation{
                 "bars.waveWidth"->c.creativeStrokeWidth;"bars.baseline"->c.baselineOffset;else->0f
             }
             is LayerConfig.Shape->when(key){"shape.radius"->c.radius;"shape.stroke"->c.strokeWidth;"shape.corner"->c.cornerRadius;else->0f}
-            is LayerConfig.BlurEffect->when(key){"blur.radius"->c.blurRadius;"blur.multiplier"->c.blurMultiplier;"blur.glow1"->c.layer1Scale;"blur.glow2"->c.layer2Scale;"blur.glow3"->c.layer3Scale;else->0f}
+            is LayerConfig.BlurEffect->when(key){"blur.radius"->c.blurRadius;"blur.multiplier"->c.blurMultiplier;"blur.radial"->c.radialStrength;"blur.intensity"->c.bloomIntensity;"blur.threshold"->c.bloomThreshold;"blur.glow1"->c.layer1Scale;"blur.glow2"->c.layer2Scale;"blur.glow3"->c.layer3Scale;else->0f}
             is LayerConfig.MotionBlurEffect->when(key){"motion.amount"->c.blurAmountMultiplier;"motion.trail"->c.trailPersistence;"motion.x"->c.manualMotionX;"motion.y"->c.manualMotionY;else->0f}
             else->0f
         }
@@ -76,7 +79,7 @@ object LayerPropertyAnimation{
                 pathAngleDeg=at("bars.angle",c.pathAngleDeg),barStrokeWidth=at("bars.stroke",c.barStrokeWidth),barFillOpacity=at("bars.fill",c.barFillOpacity),
                 colorBlendOffset=at("bars.gradient",c.colorBlendOffset),creativeStrokeWidth=at("bars.waveWidth",c.creativeStrokeWidth),baselineOffset=at("bars.baseline",c.baselineOffset))
             is LayerConfig.Shape->c.copy(radius=at("shape.radius",c.radius),strokeWidth=at("shape.stroke",c.strokeWidth),cornerRadius=at("shape.corner",c.cornerRadius))
-            is LayerConfig.BlurEffect->c.copy(blurRadius=at("blur.radius",c.blurRadius),blurMultiplier=at("blur.multiplier",c.blurMultiplier),layer1Scale=at("blur.glow1",c.layer1Scale),layer2Scale=at("blur.glow2",c.layer2Scale),layer3Scale=at("blur.glow3",c.layer3Scale))
+            is LayerConfig.BlurEffect->c.copy(blurRadius=at("blur.radius",c.blurRadius),blurMultiplier=at("blur.multiplier",c.blurMultiplier),radialStrength=at("blur.radial",c.radialStrength),bloomIntensity=at("blur.intensity",c.bloomIntensity),bloomThreshold=at("blur.threshold",c.bloomThreshold),layer1Scale=at("blur.glow1",c.layer1Scale),layer2Scale=at("blur.glow2",c.layer2Scale),layer3Scale=at("blur.glow3",c.layer3Scale))
             is LayerConfig.MotionBlurEffect->c.copy(blurAmountMultiplier=at("motion.amount",c.blurAmountMultiplier),trailPersistence=at("motion.trail",c.trailPersistence),manualMotionX=at("motion.x",c.manualMotionX),manualMotionY=at("motion.y",c.manualMotionY))
             else->layer.config
         }
