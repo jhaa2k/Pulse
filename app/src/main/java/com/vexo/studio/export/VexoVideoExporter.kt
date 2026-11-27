@@ -65,7 +65,7 @@ class VexoVideoExporter(private val context: Context) {
         val settings = project.exportSettings
         val (width, height) = computeDimensions(settings.aspectRatio.widthRatio, settings.aspectRatio.heightRatio, settings.resolution.shortSide)
         val fps = settings.fps.coerceIn(24, 60)
-        val bitrate = settings.videoBitrateMbps.coerceIn(2, 80) * 1_000_000
+        val bitrate = ExportEncoderPolicy.targetBitrate(settings)
 
         val tempFile = File.createTempFile("vexo_export_", ".mp4", context.cacheDir)
 
@@ -119,27 +119,39 @@ class VexoVideoExporter(private val context: Context) {
             require(sampleRate in 8000..192000) {"Unsupported audio sample rate: $sampleRate"}
             val requestedDurationUs = endUs - startUs
 
-            val required=ExportBudget.workingBytes(requestedDurationUs,bitrate,settings.audioBitrateKbps.coerceIn(96,320)*1000,sampleRate,channels)
-            check(context.cacheDir.usableSpace>=required){"Not enough free cache storage. Need about %.0f MB".format(required/1_000_000.0)}
             // Select supported encoder before spending time decoding audio.
-            fun format(mime:String)=MediaFormat.createVideoFormat(mime,width,height).apply{
+            fun format(mime:String,bps:Int)=MediaFormat.createVideoFormat(mime,width,height).apply{
                 setInteger(MediaFormat.KEY_COLOR_FORMAT,MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
-                setInteger(MediaFormat.KEY_BIT_RATE,bitrate)
+                setInteger(MediaFormat.KEY_BIT_RATE,bps)
                 setInteger(MediaFormat.KEY_FRAME_RATE,fps)
                 setInteger(MediaFormat.KEY_I_FRAME_INTERVAL,1)
             }
             val codecList=MediaCodecList(MediaCodecList.REGULAR_CODECS)
             val candidates=if(settings.useHevcIfSupported)listOf(MediaFormat.MIMETYPE_VIDEO_HEVC,MediaFormat.MIMETYPE_VIDEO_AVC) else listOf(MediaFormat.MIMETYPE_VIDEO_AVC)
+            data class Candidate(val mime:String,val format:MediaFormat,val name:String,val bps:Int,val hardware:Boolean)
             val supported = candidates.flatMap { mime ->
-                val f = format(mime)
-                val preferred=runCatching { codecList.findEncoderForFormat(f) }.getOrNull()
-                val alternatives=codecList.codecInfos.filter{info->
-                    info.isEncoder && info.supportedTypes.any{it.equals(mime,true)} &&
-                        runCatching{info.getCapabilitiesForType(mime).isFormatSupported(f)}.getOrDefault(false)
-                }.map{it.name}
-                (listOfNotNull(preferred)+alternatives).distinct().map{Triple(mime,format(mime),it)}
-            }
-            check(supported.isNotEmpty()) { "No compatible encoder for selected resolution, FPS and bitrate. Try a lower resolution, FPS or bitrate." }
+                val preferred=runCatching{codecList.findEncoderForFormat(format(mime,bitrate))}.getOrNull()
+                codecList.codecInfos.asSequence().filter{it.isEncoder&&it.supportedTypes.any{type->type.equals(mime,true)}}
+                    .mapNotNull{info->runCatching{
+                        val caps=info.getCapabilitiesForType(mime)
+                        val video=caps.videoCapabilities?:return@runCatching null
+                        if(MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface !in caps.colorFormats)return@runCatching null
+                        if(!video.areSizeAndRateSupported(width,height,fps.toDouble()))return@runCatching null
+                        val range=video.bitrateRange
+                        val bps=ExportEncoderPolicy.fitBitrate(bitrate,range.lower,range.upper,settings.adaptiveVideoBitrate)
+                            ?:return@runCatching null
+                        val f=format(mime,bps)
+                        if(!caps.isFormatSupported(f))return@runCatching null
+                        val hardware=if(Build.VERSION.SDK_INT>=29)info.isHardwareAccelerated else
+                            !info.name.startsWith("OMX.google.",true)&&!info.name.startsWith("c2.android.",true)
+                        Candidate(mime,f,info.name,bps,hardware)
+                    }.getOrNull()}.sortedWith(compareByDescending<Candidate>{it.hardware}
+                        .thenBy{ kotlin.math.abs(it.bps.toLong()-bitrate) }.thenByDescending{it.name==preferred})
+                    .toList()
+            }.sortedByDescending{it.hardware}
+            check(supported.isNotEmpty()) { "No compatible encoder for selected resolution, FPS and bitrate. Try automatic bitrate or a lower resolution/FPS." }
+            val required=ExportBudget.workingBytes(requestedDurationUs,supported.maxOf{it.bps},settings.audioBitrateKbps.coerceIn(96,320)*1000,sampleRate,channels)
+            check(context.cacheDir.usableSpace>=required){"Not enough free cache storage. Need about %.0f MB".format(required/1_000_000.0)}
             onProgress(ExportProgress(isRunning=true,progress=.01f,statusText="Decoding audio"))
             // Decode entire trimmed PCM window into disk spool
             extractor.selectTrack(audioTrackIndex)
@@ -170,7 +182,9 @@ class VexoVideoExporter(private val context: Context) {
 
             // Configure selected video encoder + EGL surface
             var lastEncoderError: Exception? = null
-            val configured = supported.firstNotNullOfOrNull { (mime, videoFormat, encoderName) ->
+            var selectedBitrate=bitrate
+            var selectedEncoderName=""
+            val configured = supported.firstNotNullOfOrNull { (mime, videoFormat, encoderName,bps,_) ->
                 exportContext.ensureActive()
                 var codec: MediaCodec? = null
                 var surface: Surface? = null
@@ -181,6 +195,8 @@ class VexoVideoExporter(private val context: Context) {
                     val input = candidate.createInputSurface()
                     surface = input
                     candidate.start()
+                    selectedBitrate=bps
+                    selectedEncoderName=encoderName
                     Triple(mime, candidate, input)
                 } catch (e: Exception) {
                     lastEncoderError = e
@@ -192,7 +208,9 @@ class VexoVideoExporter(private val context: Context) {
             val videoMime = configured.first
             videoEncoder = configured.second
             encoderSurface = configured.third
-            onProgress(ExportProgress(isRunning=true,progress=.10f,statusText="Rendering · " + if(videoMime==MediaFormat.MIMETYPE_VIDEO_HEVC) "HEVC" else "H.264"))
+            val codecLabel=if(videoMime==MediaFormat.MIMETYPE_VIDEO_HEVC)"HEVC" else "H.264"
+            val renderLabel="$codecLabel · %.1f Mbps".format(selectedBitrate/1_000_000.0)
+            onProgress(ExportProgress(isRunning=true,progress=.10f,statusText="Rendering · $renderLabel · $selectedEncoderName"))
 
             // Configure AAC Audio Encoder
             val audioOutFormat = MediaFormat.createAudioFormat(
@@ -255,7 +273,7 @@ class VexoVideoExporter(private val context: Context) {
             val monoWindow = FloatArray(8192)
             val leftWindow=FloatArray(8192)
             val rightWindow=FloatArray(8192)
-            val exportStartMs = System.currentTimeMillis()
+            val exportStartMs = android.os.SystemClock.elapsedRealtime()
 
             var audioSampleCursor = 0L
             val frameBytes = 2 * channels
@@ -434,14 +452,14 @@ class VexoVideoExporter(private val context: Context) {
                 if (frameIdx % 4 == 0 || frameIdx == totalFrames - 1) {
                     val fraction = (frameIdx + 1).toFloat() / totalFrames
                     val p = .10f + .86f * fraction
-                    val elapsedSec = ((System.currentTimeMillis() - exportStartMs) / 1000.0).coerceAtLeast(0.5)
+                    val elapsedSec = ((android.os.SystemClock.elapsedRealtime() - exportStartMs) / 1000.0).coerceAtLeast(0.5)
                     val eta = if (fraction > 0.02f) ((elapsedSec / fraction) * (1f - fraction)).toLong() else 0L
                     onProgress(
                         ExportProgress(
                             isRunning = true,
                             progress = p,
                             etaSeconds = eta,
-                            statusText = "Rendering frame ${frameIdx + 1} / $totalFrames"
+                            statusText = "Rendering $renderLabel frame ${frameIdx + 1} / $totalFrames"
                         )
                     )
                 }

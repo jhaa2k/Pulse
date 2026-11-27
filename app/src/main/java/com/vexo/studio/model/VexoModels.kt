@@ -744,7 +744,8 @@ data class ExportSettings(
     val smoothEdges: Boolean = true,
     val offscreenSmoothEdges: Boolean = true,
     val highResolutionTextures: Boolean = true,
-    val customOutputUri: String? = null
+    val customOutputUri: String? = null,
+    val adaptiveVideoBitrate:Boolean=false
 )
 
 @Serializable

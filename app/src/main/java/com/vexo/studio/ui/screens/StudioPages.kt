@@ -390,7 +390,8 @@ fun ExportScreen(
         StudioChipSelector("Frame Rate", listOf(24, 25, 30, 50, 60), exp.fps, { "$it FPS" }) { fps ->
             vm.updateExportSettings { it.copy(fps = fps) }
         }
-        StudioSlider(
+        StudioToggleRow("Automatic video bitrate",exp.adaptiveVideoBitrate){v->vm.updateExportSettings{it.copy(adaptiveVideoBitrate=v)}}
+        if(!exp.adaptiveVideoBitrate)StudioSlider(
             label = "Video Bitrate",
             value = exp.videoBitrateMbps.toFloat(),
             min = 2f,
@@ -407,7 +408,9 @@ fun ExportScreen(
         StudioToggleRow("High resolution image textures",exp.highResolutionTextures){v->vm.updateExportSettings{it.copy(highResolutionTextures=v)}}
         Text("HEVC is used only if the device reports support; otherwise H.264 is selected.",style=MaterialTheme.typography.labelSmall,color=palette.textSecondary)
         val estimatedMs=(if(exp.trimEndMs>exp.trimStartMs)minOf(trackDurMs,exp.trimEndMs) else trackDurMs)-exp.trimStartMs
-        val estimatedBytes=com.vexo.studio.export.ExportBudget.encodedBytes(estimatedMs.coerceAtLeast(0L)*1000L,exp.videoBitrateMbps.coerceIn(2,80)*1_000_000,exp.audioBitrateKbps*1000)
+        val targetBitrate=com.vexo.studio.export.ExportEncoderPolicy.targetBitrate(exp)
+        if(exp.adaptiveVideoBitrate)Text("Automatic target: %.1f Mbps · adjusted to codec limits".format(targetBitrate/1_000_000.0),style=MaterialTheme.typography.labelSmall,color=palette.textSecondary)
+        val estimatedBytes=com.vexo.studio.export.ExportBudget.encodedBytes(estimatedMs.coerceAtLeast(0L)*1000L,targetBitrate,exp.audioBitrateKbps*1000)
         Text("Estimated output: %.1f MB".format(estimatedBytes/1_000_000.0),style=MaterialTheme.typography.labelMedium,color=palette.accent)
         StudioChipSelector("AAC Audio Bitrate", listOf(96,128,192,256,320), exp.audioBitrateKbps, { "$it kbps" }) { v -> vm.updateExportSettings { it.copy(audioBitrateKbps=v) } }
         Text("Video + AAC · Encoder capability and temporary storage are checked before rendering.", style=MaterialTheme.typography.bodySmall, color=palette.textSecondary)
