@@ -47,6 +47,7 @@ class AudioProviderEngine(initialConfig: AudioProviderConfig) {
     private var outputWaveform = FloatArray(mappedBars.size)
 
     private var beatEnvelope = 0f
+    private var beatBaseline = 0f
     private var beatPulseState = 0f
     private var prevBeatTriggered = false
     private var bassEnergy = 0f
@@ -96,6 +97,7 @@ class AudioProviderEngine(initialConfig: AudioProviderConfig) {
         outputBars.fill(0f)
         outputWaveform.fill(0f)
         beatEnvelope = 0f
+        beatBaseline = 0f
         beatPulseState = 0f
         prevBeatTriggered = false
         bassEnergy = 0f
@@ -371,8 +373,15 @@ class AudioProviderEngine(initialConfig: AudioProviderConfig) {
 
         val loVal = config.beatRangeValueLower.coerceAtLeast(0f) * 0.1f
         val hiVal = maxOf(loVal+.01f,config.beatRangeValueHigher.coerceAtLeast(0f)*.08f)
-        val normalizedBeat = (((rawBeatAvg - loVal) / (hiVal - loVal)) * config.beatSensitivity)
-            .coerceIn(0f, 1.5f)
+        // Large legacy thresholds are in a different magnitude domain. Adaptive mode
+        // compares current energy with a slowly moving reference instead of assuming that domain.
+        val baseline=beatBaseline
+        val adapt=1f-exp(-dtMs/650f)
+        beatBaseline+= (rawBeatAvg-beatBaseline)*adapt
+        val normalizedBeat = if(config.adaptiveBeat){
+            val onset=((rawBeatAvg-baseline)/maxOf(.035f,baseline*.8f)).coerceAtLeast(0f)
+            (onset*config.beatSensitivity).coerceIn(0f,1.5f)
+        }else (((rawBeatAvg - loVal) / (hiVal - loVal)) * config.beatSensitivity).coerceIn(0f, 1.5f)
 
         val bSmooth = 1f-(1f-config.beatSmooth.coerceIn(.05f,1f)).pow(dtMs/16.6667f)
         beatEnvelope = beatEnvelope * (1f - bSmooth) + normalizedBeat * bSmooth

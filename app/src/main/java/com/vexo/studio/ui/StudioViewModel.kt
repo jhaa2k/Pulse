@@ -691,9 +691,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         )
     }
 
-    fun availableTemplates(): List<VexoProject> = runCatching {
-        com.vexo.studio.data.BuiltInTemplateRepository.load(app)
-    }.getOrDefault(emptyList()) + VexoTemplates.allTemplates() + com.vexo.studio.model.CreativeSceneTemplates.all()
+    fun availableTemplates(): List<VexoProject> = com.vexo.studio.model.StudioSceneCatalog.all()
 
     fun applyArtworkPalette() {
         val bitmap = playbackState.value.trackMeta.artwork

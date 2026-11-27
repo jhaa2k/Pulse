@@ -276,14 +276,17 @@ object VexoShaders {
         uniform vec2 uDirection;
         uniform float uRadius;
         void main() {
-            vec4 sum = texture2D(uTex, vUv) * 0.227027;
-            vec2 off1 = uDirection * uRadius * 1.384615;
-            vec2 off2 = uDirection * uRadius * 3.230769;
-            sum += texture2D(uTex, clamp(vUv + off1, 0.0, 1.0)) * 0.316216;
-            sum += texture2D(uTex, clamp(vUv - off1, 0.0, 1.0)) * 0.316216;
-            sum += texture2D(uTex, clamp(vUv + off2, 0.0, 1.0)) * 0.070270;
-            sum += texture2D(uTex, clamp(vUv - off2, 0.0, 1.0)) * 0.070270;
-            gl_FragColor = sum;
+            vec4 sum = vec4(0.0);
+            float weightSum = 0.0;
+            // Dense, symmetric separable Gaussian sampling avoids sparse ghost copies.
+            for(int i=-6;i<=6;i++){
+                float x=float(i);
+                float weight=exp(-0.5*x*x/6.25);
+                vec2 uv=clamp(vUv+uDirection*uRadius*x/3.0,0.0,1.0);
+                sum+=texture2D(uTex,uv)*weight;
+                weightSum+=weight;
+            }
+            gl_FragColor=sum/weightSum;
         }
     """
 

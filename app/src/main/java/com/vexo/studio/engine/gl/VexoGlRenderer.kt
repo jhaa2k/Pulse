@@ -989,7 +989,7 @@ class VexoGlRenderer(
         GLES20.glUniform1i(shader.uniform("uTex"), 0)
         GLES20.glUniform2f(shader.uniform("uDirection"), 1f / ping.width, 0f)
         val reactive=MeasureEvaluator.evaluateScalar(cfg.measureBlur,scene.audioSnapshots[cfg.measureBlur.providerIndex],scene.totalTimeSec,scene.playingTimeSec,trackNorm,scene.isPlaying)
-        GLES20.glUniform1f(shader.uniform("uRadius"), (cfg.blurRadius + reactive).coerceIn(0f,16f) * cfg.blurMultiplier.coerceIn(0f,8f) * 0.5f)
+        GLES20.glUniform1f(shader.uniform("uRadius"), (cfg.blurRadius + reactive).coerceIn(0f,24f) * cfg.blurMultiplier.coerceIn(0f,8f) * 0.75f)
         drawTexturedQuad(shader, 0f, 0f, ping.width.toFloat(), ping.height.toFloat(), flipV = true)
 
         // Pass 2: Vertical into pong

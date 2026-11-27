@@ -1814,7 +1814,7 @@ private fun PresetsTab(
 
         val builtIns = remember { vm.availableTemplates() }
         var query by rememberSaveable { mutableStateOf("") }
-        Text("BUILT-IN PRESETS · ${builtIns.size}", style = MaterialTheme.typography.labelSmall, color = palette.textSecondary)
+        Text("CREATIVE PROJECT PRESETS · ${builtIns.size}", style = MaterialTheme.typography.labelSmall, color = palette.textSecondary)
         CompactStudioSearch(query,{query=it.take(80)},"Find a preset",Modifier.fillMaxWidth())
         builtIns.filter { it.name.contains(query, ignoreCase = true) }.forEach { tpl ->
             Row(

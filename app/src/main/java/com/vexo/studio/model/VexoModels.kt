@@ -310,6 +310,7 @@ data class AudioProviderConfig(
     val beatRangeValueLower: Float = 0.7f,
     val beatRangeValueHigher: Float = 35f,
     val beatSensitivity: Float = 1.2f,
+    val adaptiveBeat: Boolean = false,
     val extraFields: Map<String, String> = emptyMap()
 )
 
@@ -728,7 +729,7 @@ data class AppSettings(
     val controlScale: Float = 1f,
     val uiTextScale: Float = 1f,
     val previewFps: Int = 30,
-    val previewShare: Float = 0.44f,
+    val previewShare: Float = 0.41f,
     val portraitOverlay: Boolean = false
 )
 

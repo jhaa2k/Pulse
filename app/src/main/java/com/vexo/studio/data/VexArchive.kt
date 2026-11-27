@@ -109,12 +109,19 @@ object VexArchive {
                                 file.outputStream().use { total += copyLimited(zip, it, MAX_BYTES-total) }
                                 assets[name] = file
                             }
-                            LegacyAssetReferences.isMedia(name) -> {
+                            LegacyAssetReferences.isMedia(name) || LegacyAssetReferences.isNumericAsset(name) -> {
                                 require(name !in legacyAssets) { "Duplicate preset asset" }
-                                val ext=name.substringAfterLast('.').lowercase()
-                                val file=File(dir,"legacy_${legacyAssets.size}.$ext")
+                                val numeric=LegacyAssetReferences.isNumericAsset(name)
+                                val file=File(dir,"legacy_${count}.${if(numeric)"bin" else name.substringAfterLast('.').lowercase()}")
                                 file.outputStream().use{total+=copyLimited(zip,it,minOf(MAX_BYTES-total,64L*1024*1024))}
-                                legacyAssets[name]=file
+                                if(numeric){
+                                    val ext=LegacyAssetReferences.imageExtension(file.inputStream().use{it.readNBytes(12)})
+                                    if(ext==null)file.delete() else {
+                                        val typed=File(dir,"legacy_${count}.$ext")
+                                        check(file.renameTo(typed)){"Cannot store bundled image"}
+                                        legacyAssets[name]=typed
+                                    }
+                                }else legacyAssets[name]=file
                             }
                             else -> total += copyLimited(zip, object : OutputStream() { override fun write(b: Int) {} ; override fun write(b: ByteArray, off: Int, len: Int) {} }, MAX_BYTES-total)
                         }

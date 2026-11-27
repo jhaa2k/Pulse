@@ -301,7 +301,9 @@ object AveeJsonCodec {
     }
 
     private fun parseAudioProvider(obj: JsonObject, index: Int): AudioProviderConfig {
-        val rawFftPower = obj.propInt("fftSize", 10)
+        val durationMs=obj.propInt("audioDurationMs",0)
+        val derivedPower=if(durationMs>0) kotlin.math.round(kotlin.math.log2((durationMs.coerceIn(20,500)*44.1))).toInt().coerceIn(7,13) else 10
+        val rawFftPower = obj.propInt("fftSize", derivedPower)
         val fftSize = if (rawFftPower in 7..13) 1 shl rawFftPower else rawFftPower
         return AudioProviderConfig(
             index = index,
@@ -314,7 +316,8 @@ object AveeJsonCodec {
             mirrorSamples = obj.propBool("mirrorSamples", false),
             repeatSamples = obj.propInt("repeatSamples", 1).coerceIn(1, 6),
             startAndEndGap = obj.propInt("starAndEndGap", 0).coerceIn(0, 30),
-            smooth = obj.propFloat("smooth", 0.75f),
+            smooth = obj.propFloat("smooth", 0.75f).let{if(it>1f)1f/it else it}.coerceIn(.05f,1f),
+            adaptiveBeat = obj.propFloat("beatRangeValueHigher",35f)>100f,
             preSmooth = obj.propFloat("preSmooth", 0.5f),
             filterRadius = obj.propInt("filterRadius", 1),
             filterStrength = obj.propFloat("filterStrength", 0.623f),
@@ -502,6 +505,14 @@ object AveeJsonCodec {
         )
     }
 
+    // Legacy f2 scales use a pair; native scalar scale uses the mean.
+    private fun legacyGlowScale(obj:JsonObject,key:String,alias:String,default:Float):Float{
+        val name=if(obj.rawProp(key)!=null)key else alias
+        val scalar=obj.propString(name,"").toFloatOrNull()?.takeIf{it.isFinite()}
+        if(scalar!=null)return scalar.coerceIn(0f,10f)
+        val (x,y)=obj.propFloat2(name,default,default)
+        return ((x+y)*.5f).coerceIn(0f,10f)
+    }
     private fun parseBlurEffect(obj: JsonObject): LayerNode = LayerNode(
         type = LayerType.BLUR_EFFECT,
         common = parseCommon(obj, "Blur Effect"),
@@ -509,9 +520,9 @@ object AveeJsonCodec {
             sourceCompositionIndex = obj.propInt("sourceCompositionIndex", 1),
             blurRadius = obj.propFloat("blurRadius", 2f),
             blurMultiplier = obj.propFloat("blurMultiplier", 4.1f),
-            layer1Scale = obj.propFloat("1layerScale", obj.propFloat("layer1Scale", 1f)),
-            layer2Scale = obj.propFloat("2layerScale", obj.propFloat("layer2Scale", 0f)),
-            layer3Scale = obj.propFloat("3layerScale", obj.propFloat("layer3Scale", 0f)),
+            layer1Scale = legacyGlowScale(obj,"1layerScale","layer1Scale",1f),
+            layer2Scale = legacyGlowScale(obj,"2layerScale","layer2Scale",0f),
+            layer3Scale = legacyGlowScale(obj,"3layerScale","layer3Scale",0f),
             layer1ColorArgb = obj.propInt("1layerColor", -1),
             layer2ColorArgb = obj.propInt("2layerColor", -1),
             layer3ColorArgb = obj.propInt("3layerColor", -1),
@@ -781,7 +792,10 @@ object AveeJsonCodec {
         return MeasureConfig(
             measureWhat = MeasureWhat.fromAvee(whatName),
             amountA = a,
-            amountB = b
+            amountB = b,
+            providerIndex = obj.propInt("providerIndex",obj.propInt("audioProviderIndex",1)).coerceAtLeast(1),
+            triggerThreshold = obj.propFloat("triggerThreshold",0f).coerceIn(0f,.999f),
+            smoothing = obj.propFloat("smoothing",.25f).coerceIn(0f,1f)
         )
     }
 
