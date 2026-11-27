@@ -263,6 +263,7 @@ class VexoGlRenderer(
             particleSims.keys.retainAll(cachedLayerIds)
             barDelayHistory.keys.removeAll{it.removeSuffix("_segment2") !in cachedLayerIds}
             fboPool.retainSceneBuffers(cachedReachable-displayIndex,cachedTrails)
+            if(activeLayers.none{it.config is LayerConfig.BlurEffect})fboPool.releaseByPrefix("blur_")
         }
         val resolved=checkNotNull(cachedGraph)
 
@@ -311,6 +312,17 @@ class VexoGlRenderer(
             Matrix.scaleM(tempMatrix, 0, scene.zoom, scene.zoom, 1f)
             Matrix.translateM(tempMatrix, 0, -w * 0.5f, -h * 0.5f, 0f)
             Matrix.multiplyMM(orthoMatrix, 0, orthoMatrix.copyOf(), 0, tempMatrix, 0)
+        }
+
+        val camera=scene.project.canvas.camera
+        if(applyCamera&&comp.index==0&&camera.enabled){
+            val pose=com.vexo.studio.engine.scene.CinematicCamera.evaluate(camera,scene.audioSnapshots[camera.providerIndex],scene.trackMeta.positionMs,w,h)
+            Matrix.setIdentityM(tempMatrix,0)
+            Matrix.translateM(tempMatrix,0,w*.5f+pose.offsetX,h*.5f+pose.offsetY,0f)
+            Matrix.rotateM(tempMatrix,0,pose.rotationDeg,0f,0f,1f)
+            Matrix.scaleM(tempMatrix,0,pose.zoom,pose.zoom,1f)
+            Matrix.translateM(tempMatrix,0,-w*.5f,-h*.5f,0f)
+            Matrix.multiplyMM(orthoMatrix,0,orthoMatrix.copyOf(),0,tempMatrix,0)
         }
 
         for (layer in comp.layers) {
@@ -974,9 +986,12 @@ class VexoGlRenderer(
         compTextures: Map<Int, Int>
     ) {
         val srcTex = compTextures[cfg.sourceCompositionIndex] ?: return
+        val radius=(cfg.blurRadius+reactive).coerceIn(0f,24f)*cfg.blurMultiplier.coerceIn(0f,8f)*.75f
+        val hasGlow=listOf(cfg.layer1Scale to cfg.layer1ColorArgb,cfg.layer2Scale to cfg.layer2ColorArgb,cfg.layer3Scale to cfg.layer3ColorArgb).any{(scale,col)->scale>0f && (col ushr 24)>0}
+        var filteredTex=srcTex
+        if(hasGlow&&radius>.001f){
         val shader = blurShader ?: return
         val ping = fboPool.obtain("blur_ping", w / 2, h / 2)
-        val pong = fboPool.obtain("blur_pong", w / 2, h / 2)
 
         val savedFbo = IntArray(1)
         GLES20.glGetIntegerv(GLES20.GL_FRAMEBUFFER_BINDING, savedFbo, 0)
@@ -996,21 +1011,27 @@ class VexoGlRenderer(
         val angle=cfg.blurAngleDeg.coerceIn(-360f,360f)*PI.toFloat()/180f
         val dx=kotlin.math.cos(angle);val dy=kotlin.math.sin(angle)
         GLES20.glUniform2f(shader.uniform("uDirection"), dx / ping.width, dy / ping.height)
-        GLES20.glUniform1f(shader.uniform("uRadius"), (cfg.blurRadius + reactive).coerceIn(0f,24f) * cfg.blurMultiplier.coerceIn(0f,8f) * 0.75f)
+        GLES20.glUniform1f(shader.uniform("uRadius"), radius)
         drawTexturedQuad(shader, 0f, 0f, ping.width.toFloat(), ping.height.toFloat(), flipV = true)
 
-        // Pass 2: Vertical into pong
+        filteredTex=ping.textureId
+        val cross=cfg.blurCrossAxis.coerceIn(0f,2f)
+        if(cross>.001f){
+        val pong=fboPool.obtain("blur_pong",w/2,h/2)
+        // Pass 2: perpendicular into pong
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, pong.fboId)
         GLES20.glViewport(0, 0, pong.width, pong.height)
         clearBackground(0x00000000)
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, ping.textureId)
-        val cross=cfg.blurCrossAxis.coerceIn(0f,2f)
         GLES20.glUniform2f(shader.uniform("uDirection"), -dy*cross / pong.width, dx*cross / pong.height)
         drawTexturedQuad(shader, 0f, 0f, pong.width.toFloat(), pong.height.toFloat(), flipV = true)
+        filteredTex=pong.textureId
+        }
 
         // Restore target FBO
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, savedFbo[0])
         GLES20.glViewport(0, 0, w, h)
+        }
 
         val img = imageShader ?: return
         resetImageState(img)
@@ -1044,10 +1065,10 @@ class VexoGlRenderer(
             GLES20.glUniform1i(img.uniform("uMaskTex"),1)
         }
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D,pong.textureId)
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D,filteredTex)
         GLES20.glUniform1f(img.uniform("uOpacity"),opacity)
         fun glow(scale:Float,argb:Int) {
-            if(scale<=0f)return
+            if(scale<=0f||(argb ushr 24)==0)return
             val factor=scale.coerceIn(.01f,4f)
             val dx=w*(1f-factor)*.5f;val dy=h*(1f-factor)*.5f
             GLES20.glUniform4f(img.uniform("uTint"),((argb ushr 16) and 255)/255f,((argb ushr 8) and 255)/255f,(argb and 255)/255f,((argb ushr 24) and 255)/255f)

@@ -484,6 +484,13 @@ private fun LayersTab(
         if(searchOpen)CompactStudioSearch(layerQuery,{layerQuery=it.take(80)},"Search layers",Modifier.fillMaxWidth().padding(horizontal=6.dp))
         var canvasOpen by remember{mutableStateOf(false)}
         if(activeComp.index==0)ExpandableSectionHeader("Canvas background",canvasOpen,{canvasOpen=!canvasOpen}){StudioColorPickerRow("Background",uiState.project.canvas.backgroundColorArgb,vm::setCanvasColor)}
+        if(activeComp.index==0){
+            var cameraOpen by remember(uiState.project.id){mutableStateOf(false)}
+            TextButton(onClick={cameraOpen=true},modifier=Modifier.fillMaxWidth()){
+                Text(if(uiState.project.canvas.camera.enabled)"PROJECT CAMERA • ON" else "PROJECT CAMERA • OFF",color=if(uiState.project.canvas.camera.enabled)palette.accent else palette.textSecondary)
+            }
+            if(cameraOpen)ProjectCameraDialog(uiState.project.canvas.camera,uiState.project.audioProviders.map{it.index},onDismiss={cameraOpen=false},onApply={vm.setProjectCamera(it);cameraOpen=false})
+        }
         LazyColumn(
             modifier = Modifier
                 .weight(1f).fillMaxWidth()

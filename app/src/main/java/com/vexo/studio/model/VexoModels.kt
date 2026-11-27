@@ -677,10 +677,26 @@ data class AudioTrackItem(
 )
 
 @Serializable
+data class ProjectCamera(
+    val enabled:Boolean=false,
+    val providerIndex:Int=1,
+    val source:SpectrumReactiveSource=SpectrumReactiveSource.BEAT,
+    val baseZoom:Float=1f,
+    val pulseZoom:Float=.12f,
+    val shake:Float=.02f,
+    val rollDeg:Float=2f,
+    val drift:Float=0f,
+    val frequency:Float=3f,
+    val seed:Int=1337,
+    val autoOverscan:Boolean=true
+)
+
+@Serializable
 data class CanvasConfig(
     val aspectRatio: AspectRatioPreset = AspectRatioPreset.RATIO_16_9,
     val backgroundColorArgb: Int = 0xFF000000.toInt(),
-    val showSafeAreaGuides: Boolean = false
+    val showSafeAreaGuides: Boolean = false,
+    val camera: ProjectCamera = ProjectCamera()
 )
 
 @Serializable

@@ -427,6 +427,11 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun setProjectCamera(camera:com.vexo.studio.model.ProjectCamera){
+        val p=_uiState.value.project
+        commitProjectChange(p.copy(canvas=p.canvas.copy(camera=camera)))
+    }
+
     fun setCanvasColor(argb:Int){
         val p=_uiState.value.project
         commitProjectChange(p.copy(canvas=p.canvas.copy(backgroundColorArgb=argb)))
