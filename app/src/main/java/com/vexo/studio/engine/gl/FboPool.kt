@@ -46,6 +46,13 @@ class FboPool {
         return created
     }
 
+    fun release(key:String){allocated.remove(key)?.let(::deleteFbo)}
+
+    /** Exact membership prevents down_1 from accidentally matching down_10. */
+    fun retainGroup(prefix:String,keys:Set<String>){
+        allocated.keys.filter{it.startsWith(prefix+"_")&&it !in keys}.forEach(::release)
+    }
+
     fun releaseByPrefix(prefix: String) {
         val keys = allocated.keys.filter { it.startsWith(prefix) }
         keys.forEach { key -> allocated.remove(key)?.let { deleteFbo(it) } }

@@ -312,7 +312,12 @@ class VexoGlRenderer(
             barDelayHistory.keys.removeAll{it.removeSuffix("_waveform").removeSuffix("_segment2") !in cachedLayerIds}
             fboPool.retainSceneBuffers((0 until checkNotNull(cachedSlots).slotCount).toSet(),cachedTrails)
             if(activeLayers.none{it.config is LayerConfig.BlurEffect})fboPool.releaseByPrefix("blur_")
-            if(activeLayers.none{(it.config as? LayerConfig.Image)?.let{cfg->cfg.blurEnabled||cfg.blurredBorder}==true}){staticBlurResults.clear();fboPool.releaseByPrefix("image_blur_")}
+            if(activeLayers.none{(it.config as? LayerConfig.Image)?.blurEnabled==true}){
+                staticBlurResults.remove("image_blur_main");fboPool.releaseByPrefix("image_blur_main_")
+            }
+            if(activeLayers.none{(it.config as? LayerConfig.Image)?.blurredBorder==true}){
+                staticBlurResults.remove("image_blur_border");fboPool.releaseByPrefix("image_blur_border_")
+            }
         }
         val resolved=checkNotNull(cachedGraph)
         check(!resolved.hasCycle){resolved.cycleDetails?:"Cyclic composition dependency"}
@@ -1069,8 +1074,8 @@ class VexoGlRenderer(
         threshold:Float=0f,knee:Float=.1f,prefix:String):Int{
         val shader=checkNotNull(blurShader){"Blur shader unavailable"}
         val plan=com.vexo.studio.engine.scene.SmoothBlurPlan.create(sourceW,sourceH,targetW,targetH,sigma,cross,quality,mode!=0)
-        // Release obsolete levels when the radius shrinks, rather than retaining a full pyramid.
-        for(i in plan.reductions.size..12)fboPool.releaseByPrefix("${prefix}_down_$i")
+        // Release only unused targets, including obsolete second-axis buffers.
+        fboPool.retainGroup(prefix,plan.scratchKeys(prefix,mode!=0))
         val saved=IntArray(1);val viewport=IntArray(4)
         GLES20.glGetIntegerv(GLES20.GL_FRAMEBUFFER_BINDING,saved,0)
         GLES20.glGetIntegerv(GLES20.GL_VIEWPORT,viewport,0)
@@ -1269,6 +1274,22 @@ class VexoGlRenderer(
         compTextures: Map<Int, Int>
     ) {
         val srcTex = compTextures[cfg.targetCompositionIndex] ?: return
+        if(!cfg.blurAmountMultiplier.isFinite()||cfg.blurAmountMultiplier<=0f){
+            // Zero gain is a clean, tinted source pass, not a full-size history buffer.
+            fboPool.release("trail_$layerId")
+            previousMotion.remove(layerId);previousMotionTarget.remove(layerId)
+            if(cfg.showUnblurredContentUnder)drawEffectSource(srcTex,opacity,w,h,cfg.blendModeContent)
+            val clean=imageShader ?: return
+            resetImageState(clean)
+            applyBlendMode(cfg.effectBlendMode?:cfg.blendModeContent)
+            GLES20.glUniformMatrix4fv(clean.uniform("uMvp"),1,false,mvpMatrix,0)
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D,srcTex)
+            GLES20.glUniform4f(clean.uniform("uTint"),((cfg.colorArgb ushr 16) and 255)/255f,((cfg.colorArgb ushr 8) and 255)/255f,(cfg.colorArgb and 255)/255f,((cfg.colorArgb ushr 24) and 255)/255f)
+            GLES20.glUniform1f(clean.uniform("uOpacity"),opacity)
+            drawTexturedQuad(clean,0f,0f,w.toFloat(),h.toFloat(),flipV=true)
+            if(cfg.showUnblurredContent)drawEffectSource(srcTex,opacity,w,h,cfg.blendModeContent)
+            return
+        }
         val trailFbo = fboPool.obtain("trail_$layerId", w, h)
         val savedFbo = IntArray(1)
         GLES20.glGetIntegerv(GLES20.GL_FRAMEBUFFER_BINDING, savedFbo, 0)

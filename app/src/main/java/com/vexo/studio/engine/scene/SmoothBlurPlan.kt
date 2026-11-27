@@ -14,6 +14,12 @@ data class SmoothBlurPlan(val reductions:List<Pair<Int,Int>>,val width:Int,val h
             maxOf(w,h)<=limit
         }
     }
+    /** Exact scratch targets required by this pass sequence, including reconstruction. */
+    fun scratchKeys(prefix:String,radial:Boolean):Set<String> = buildSet{
+        reductions.indices.forEach{add("${prefix}_down_$it")}
+        add("${prefix}_a")
+        if(!radial&&(sigmaY>.001f||rounds>1))add("${prefix}_b")
+    }
     companion object{
         fun create(sw:Int,sh:Int,tw:Int,th:Int,sigma:Float,cross:Float,quality:BlurQuality,radial:Boolean=false):SmoothBlurPlan{
             var w=sw.coerceAtLeast(16);var h=sh.coerceAtLeast(16)
