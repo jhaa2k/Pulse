@@ -533,7 +533,17 @@ object AveeJsonCodec {
         val scalar=obj.propString(name,"").toFloatOrNull()?.takeIf{it.isFinite()}
         if(scalar!=null)return scalar.coerceIn(0f,10f)
         val (x,y)=obj.propFloat2(name,default,default)
-        return ((x+y)*.5f).coerceIn(0f,10f)
+        return com.vexo.studio.engine.scene.LegacyGlowMath.meanScale(x,y)
+    }
+    private fun legacyGlowAxisRatio(obj:JsonObject,key:String,alias:String,default:Float):Float{
+        val name=if(obj.rawProp(key)!=null)key else alias
+        if(obj.propString(name,"").toFloatOrNull()?.isFinite()==true)return 1f
+        val (x,y)=obj.propFloat2(name,default,default)
+        return com.vexo.studio.engine.scene.LegacyGlowMath.axisRatio(x,y)
+    }
+    private fun encodeGlowScale(scale:Float,ratio:Float):JsonObject{
+        val pair=com.vexo.studio.engine.scene.LegacyGlowMath.axes(scale,ratio)
+        return if(ratio==1f)propObj(scale) else propObj("${pair.first} ${pair.second}")
     }
     private fun parseBlurEffect(obj: JsonObject): LayerNode = LayerNode(
         type = LayerType.BLUR_EFFECT,
@@ -545,6 +555,9 @@ object AveeJsonCodec {
             layer1Scale = legacyGlowScale(obj,"1layerScale","layer1Scale",1f),
             layer2Scale = legacyGlowScale(obj,"2layerScale","layer2Scale",0f),
             layer3Scale = legacyGlowScale(obj,"3layerScale","layer3Scale",0f),
+            layer1AxisRatio=legacyGlowAxisRatio(obj,"1layerScale","layer1Scale",1f),
+            layer2AxisRatio=legacyGlowAxisRatio(obj,"2layerScale","layer2Scale",0f),
+            layer3AxisRatio=legacyGlowAxisRatio(obj,"3layerScale","layer3Scale",0f),
             layer1ColorArgb = obj.propInt("1layerColor", -1),
             layer2ColorArgb = obj.propInt("2layerColor", -1),
             layer3ColorArgb = obj.propInt("3layerColor", -1),
@@ -794,7 +807,7 @@ object AveeJsonCodec {
                 put("sourceCompositionIndex", propObj(cfg.sourceCompositionIndex))
                 put("blurRadius", propObj(cfg.blurRadius))
                 put("blurMultiplier", propObj(cfg.blurMultiplier))
-                put("1layerScale", propObj(cfg.layer1Scale)); put("2layerScale", propObj(cfg.layer2Scale)); put("3layerScale", propObj(cfg.layer3Scale))
+                put("1layerScale", encodeGlowScale(cfg.layer1Scale,cfg.layer1AxisRatio)); put("2layerScale", encodeGlowScale(cfg.layer2Scale,cfg.layer2AxisRatio)); put("3layerScale", encodeGlowScale(cfg.layer3Scale,cfg.layer3AxisRatio))
                 put("1layerColor", propObj(cfg.layer1ColorArgb)); put("2layerColor", propObj(cfg.layer2ColorArgb)); put("3layerColor", propObj(cfg.layer3ColorArgb))
                 put("color", propObj(cfg.colorArgb)); put("blendModeContent", propObj(cfg.blendModeContent.aveeName)); put("MaskImage", propObj(cfg.maskImage)); put("measureBlur", encodeMeasure(cfg.measureBlur))
                 put("showUnblurredContent", propObj(if (cfg.showUnblurredContent) 1 else 0))

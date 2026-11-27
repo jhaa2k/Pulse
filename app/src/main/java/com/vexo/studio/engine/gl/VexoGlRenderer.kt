@@ -1176,16 +1176,17 @@ class VexoGlRenderer(
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D,filteredTex)
         GLES20.glUniform1f(img.uniform("uOpacity"),opacity)
         GLES20.glUniform1f(img.uniform("uGlowGain"),cfg.bloomIntensity.coerceIn(0f,4f))
-        fun glow(scale:Float,argb:Int) {
+        fun glow(scale:Float,ratio:Float,argb:Int) {
             if(scale<=0f||(argb ushr 24)==0||cfg.bloomIntensity<=0f)return
-            val factor=scale.coerceIn(.01f,4f)
-            val dx=w*(1f-factor)*.5f;val dy=h*(1f-factor)*.5f
+            val (sx,sy)=com.vexo.studio.engine.scene.LegacyGlowMath.axes(scale,ratio)
+            if(sx<=0f||sy<=0f)return
+            val dx=w*(1f-sx.coerceAtMost(4f))*.5f;val dy=h*(1f-sy.coerceAtMost(4f))*.5f
             GLES20.glUniform4f(img.uniform("uTint"),((argb ushr 16) and 255)/255f,((argb ushr 8) and 255)/255f,(argb and 255)/255f,((argb ushr 24) and 255)/255f)
             drawTexturedQuad(img,dx,dy,w-dx,h-dy,flipV=true)
         }
-        glow(cfg.layer1Scale,cfg.layer1ColorArgb)
-        glow(cfg.layer2Scale,cfg.layer2ColorArgb)
-        glow(cfg.layer3Scale,cfg.layer3ColorArgb)
+        glow(cfg.layer1Scale,cfg.layer1AxisRatio,cfg.layer1ColorArgb)
+        glow(cfg.layer2Scale,cfg.layer2AxisRatio,cfg.layer2ColorArgb)
+        glow(cfg.layer3Scale,cfg.layer3AxisRatio,cfg.layer3ColorArgb)
         GLES20.glUniform1f(img.uniform("uGlowGain"),1f)
         GLES20.glUniform1i(img.uniform("uMaskEnabled"),0)
         GLES20.glUniform4f(img.uniform("uTint"),1f,1f,1f,1f)

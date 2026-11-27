@@ -616,7 +616,10 @@ sealed interface LayerConfig {
         val bloomThreshold: Float = 0f,
         val bloomKnee: Float = .1f,
         val bloomIntensity: Float = 1f,
-        val blurQuality: BlurQuality = BlurQuality.BALANCED
+        val blurQuality: BlurQuality = BlurQuality.BALANCED,
+        val layer1AxisRatio: Float = 1f,
+        val layer2AxisRatio: Float = 1f,
+        val layer3AxisRatio: Float = 1f
     ) : LayerConfig
 
     @Serializable

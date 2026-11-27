@@ -23,7 +23,7 @@ class Phase64LegacyImageTest {
         val c=(layer.config as LayerConfig.Image).copy(colorArgb=0xFFAA0077.toInt(),colorToArgb=0x60000000,blurDivider=10,blurredBorder=true,autoDetectColorKey=false)
         val edited=p.copy(compositions=listOf(comp.copy(layers=listOf(layer.copy(config=c)))))
         val out=AveeJsonCodec.exportAveeScene(edited)
-        val e=Json.parseToJsonElement(out).jsonObject.getValue("compositions").jsonArray[0].jsonObject.getValue("elements").jsonArray[0].jsonObject
+        val e=Json.parseToJsonElement(out).jsonObject.getValue("compositions").jsonArray[0].jsonObject.getValue("elements").jsonArray.first{it.jsonObject["objType"]?.jsonPrimitive?.content=="Image"}.jsonObject
         assertEquals(c.colorArgb,AveeJsonCodec.parseHsla4fToArgb(e.getValue("Color").jsonObject.getValue("v").jsonPrimitive.content))
         assertEquals(c.colorToArgb,e.getValue("ColorTo").jsonObject.getValue("v").jsonPrimitive.int)
         assertEquals(c,AveeJsonCodec.importFromText(out).compositions[0].layers[0].config)
