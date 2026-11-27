@@ -1420,6 +1420,7 @@ private fun PropertiesTab(
                 ExpandableSectionHeader("Blur parameters", expandedSections["BlurEffect_Blurparameters"] == true, { toggleAccordion(expandedSections, "BlurEffect_Blurparameters") }) {
                     MediaAssetButton("IMPORT BLUR MASK"){uri->vm.attachLayerAsset(layer.common.id,uri,"mask")}
                     TextButton(onClick={vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.BlurEffect).copy(maskImage=""))}}){Text("CLEAR MASK")}
+                    StudioChipSelector("Blur Quality",com.vexo.studio.model.BlurQuality.entries,cfg.blurQuality,{it.name}){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.BlurEffect).copy(blurQuality=v))}}
                     StudioChipSelector("Filter Mode",com.vexo.studio.model.BlurFilterMode.entries,cfg.filterMode,{it.name.replace('_',' ')}){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.BlurEffect).copy(filterMode=v))}}
                     if(cfg.filterMode!=com.vexo.studio.model.BlurFilterMode.GAUSSIAN){
                     StudioSlider("Radial Strength",cfg.radialStrength,0f,1f,0.12f,"",0.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.BlurEffect).copy(radialStrength=v))}},onCommit=::endDrag)

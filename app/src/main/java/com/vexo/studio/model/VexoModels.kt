@@ -602,7 +602,8 @@ sealed interface LayerConfig {
         val radialStrength: Float = .12f,
         val bloomThreshold: Float = 0f,
         val bloomKnee: Float = .1f,
-        val bloomIntensity: Float = 1f
+        val bloomIntensity: Float = 1f,
+        val blurQuality: BlurQuality = BlurQuality.BALANCED
     ) : LayerConfig
 
     @Serializable
@@ -810,7 +811,7 @@ object PropertyRegistry {
         PropertyDescriptor("lowerHz", "LOWER HZ", "Hz", 32f, 10f, 500f, 1f, "Lowest mapped spectrum frequency."),
         PropertyDescriptor("higherHz", "HIGHER HZ", "Hz", 16000f, 300f, 22050f, 50f, "Highest mapped spectrum frequency (clamped to Nyquist)."),
         PropertyDescriptor("beatSensitivity", "BEAT SENS", "x", 1.2f, 0.1f, 4f, 0.05f, "Multiplier for beat energy detection."),
-        PropertyDescriptor("blurRadius", "BLUR RADIUS", "px", 2f, 0f, 6f, 0.1f, "Separable blur kernel radius."),
+        PropertyDescriptor("blurRadius", "BLUR RADIUS", "", 2f, 0f, 24f, 0.1f, "Gaussian spread at a 720-pixel reference size."),
         PropertyDescriptor("blurMultiplier", "BLUR MULT", "x", 3.5f, 0.5f, 8f, 0.1f, "Bloom/blur intensity scale."),
         PropertyDescriptor("splitMultiplier", "SPLIT MULT", "x", 3f, 0f, 10f, 0.1f, "Chromatic aberration RGB offset multiplier."),
         PropertyDescriptor("countLimit", "PARTICLES", "count", 650f, 10f, 3000f, 10f, "Maximum active pooled particles."),
@@ -1121,6 +1122,7 @@ data class CreativeImageConfig(
 
 @Serializable data class SpectrumPathPoint(val x: Float, val y: Float)
 @Serializable enum class CreativeSpectrumPath { LEGACY, ARC, SPIRAL, HEART, SINE, CIRCLE, OVAL, TRIANGLE, SQUARE, HEXAGON, STAR, FLOWER, FIGURE_EIGHT, BUTTERFLY, LISSAJOUS, DIAGONAL, ZIGZAG }
+@Serializable enum class BlurQuality { FAST, BALANCED, HIGH }
 @Serializable enum class BlurFilterMode { GAUSSIAN, RADIAL_ZOOM, RADIAL_SPIN }
 @Serializable enum class AberrationMode { LEGACY, CHANNEL_SPLIT, RADIAL }
 @Serializable enum class SpectrumReactiveSource { BEAT, BASS, MID, TREBLE, RMS, PEAK }

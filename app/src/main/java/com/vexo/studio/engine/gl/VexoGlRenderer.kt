@@ -290,6 +290,7 @@ class VexoGlRenderer(
             barDelayHistory.keys.removeAll{it.removeSuffix("_segment2") !in cachedLayerIds}
             fboPool.retainSceneBuffers((0 until checkNotNull(cachedSlots).slotCount).toSet(),cachedTrails)
             if(activeLayers.none{it.config is LayerConfig.BlurEffect})fboPool.releaseByPrefix("blur_")
+            if(activeLayers.none{(it.config as? LayerConfig.Image)?.let{cfg->cfg.blurEnabled||cfg.blurredBorder}==true})fboPool.releaseByPrefix("image_blur_")
         }
         val resolved=checkNotNull(cachedGraph)
         val slots=checkNotNull(cachedSlots)
@@ -703,11 +704,19 @@ class VexoGlRenderer(
         ).coerceIn(0f, 1f)
         val tint = MeasureEvaluator.blendArgb(cfg.colorArgb, cfg.colorToArgb, colorBlend)
 
+        val sourceIsFbo=cfg.sourceType==ImageSourceType.COMPOSITION
+        val (sourceW,sourceH)=if(sourceIsFbo)w to h else (if(cfg.videoEnabled&&cfg.sourceType==ImageSourceType.IMPORTED)videoFrames.size(texId)else bitmapSizes[texId])?: (w to h)
+        val blur=if(cfg.blurEnabled)cfg.blurRadius.coerceIn(0,64).toFloat()/cfg.blurDivider.coerceAtLeast(1)else 0f
+        val imageRatio=sourceW.toFloat()/sourceH.coerceAtLeast(1)
+        val needsBorder=cfg.blurredBorder&&cfg.keepAspectRatio&&!cfg.keepAspectRatioAndCropToFit&&cfg.shape==ImageShape.NONE&&kotlin.math.abs(imageRatio-w.toFloat()/h.coerceAtLeast(1))>.001f
+        val mainTex=if(blur>.001f)filterTexture(texId,sourceW,sourceH,sourceIsFbo,w,h,blur*.8f,0f,1f,com.vexo.studio.model.BlurQuality.BALANCED,prefix="image_blur_main")else texId
+        val borderTex=if(needsBorder)filterTexture(texId,sourceW,sourceH,sourceIsFbo,w,h,maxOf(10f,cfg.blurRadius*2f)*.8f,0f,1f,com.vexo.studio.model.BlurQuality.BALANCED,prefix="image_blur_border")else texId
+        val mainIsFbo=sourceIsFbo||mainTex!=texId
         val shader = imageShader ?: return
         resetImageState(shader)
         GLES20.glUniformMatrix4fv(shader.uniform("uMvp"), 1, false, mvpMatrix, 0)
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texId)
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, mainTex)
         GLES20.glUniform1i(shader.uniform("uTex"), 0)
         GLES20.glUniform4f(
             shader.uniform("uTint"),
@@ -734,8 +743,6 @@ class VexoGlRenderer(
         )
         GLES20.glUniform1f(shader.uniform("uOpacity"), opacity * cfg.opacityStrength.coerceIn(0f, 1f))
 
-        val (sourceW, sourceH) = if (cfg.sourceType == ImageSourceType.COMPOSITION) w to h else (if(cfg.videoEnabled && cfg.sourceType==ImageSourceType.IMPORTED) videoFrames.size(texId) else bitmapSizes[texId]) ?: (w to h)
-        val imageRatio = sourceW.toFloat() / sourceH.coerceAtLeast(1)
         val shapeSquare = cfg.shape != ImageShape.NONE
         val frameW = if (shapeSquare) minOf(w,h).toFloat() else w.toFloat()
         val frameH = if (shapeSquare) minOf(w,h).toFloat() else h.toFloat()
@@ -750,9 +757,9 @@ class VexoGlRenderer(
             GLES20.glUniform1i(shader.uniform("uColorKeyEnabled"),0)
             GLES20.glUniform1i(shader.uniform("uMaskEnabled"),0)
             GLES20.glUniform2f(shader.uniform("uUvScale"),minOf(1f,frameRatio/imageRatio),minOf(1f,imageRatio/frameRatio))
-            val radius=maxOf(10f,cfg.blurRadius.toFloat()*2f)
-            GLES20.glUniform2f(shader.uniform("uImageBlurStep"),radius/sourceW.coerceAtLeast(1),radius/sourceH.coerceAtLeast(1))
-            drawTexturedQuad(shader,0f,0f,w.toFloat(),h.toFloat(),flipV=cfg.flipV xor (cfg.sourceType==ImageSourceType.COMPOSITION),flipU=cfg.flipU)
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D,borderTex)
+            GLES20.glUniform2f(shader.uniform("uImageBlurStep"),0f,0f)
+            drawTexturedQuad(shader,0f,0f,w.toFloat(),h.toFloat(),flipV=cfg.flipV xor (sourceIsFbo||borderTex!=texId),flipU=cfg.flipU)
             GLES20.glUniform1i(shader.uniform("uShape"),shapeCode)
             GLES20.glUniform1i(shader.uniform("uColorKeyEnabled"),if(cfg.colorKeyEnabled)1 else 0)
         }
@@ -760,8 +767,7 @@ class VexoGlRenderer(
         val uvY = if (crop || shapeSquare) minOf(1f, imageRatio / frameRatio) else 1f
         GLES20.glUniform1i(shader.uniform("uImageFxEnabled"), 1)
         GLES20.glUniform2f(shader.uniform("uUvScale"), uvX, uvY)
-        val blur = if(cfg.blurEnabled) cfg.blurRadius.coerceIn(0, 64).toFloat() / cfg.blurDivider.coerceAtLeast(1) else 0f
-        GLES20.glUniform2f(shader.uniform("uImageBlurStep"), blur / sourceW.coerceAtLeast(1), blur / sourceH.coerceAtLeast(1))
+        GLES20.glUniform2f(shader.uniform("uImageBlurStep"),0f,0f)
         GLES20.glUniform1f(shader.uniform("uKeyStrength"), cfg.transparencyStrength.coerceIn(0f,1f))
         val left = (w - drawW) * 0.5f
         val top = (h - drawH) * 0.5f
@@ -774,17 +780,17 @@ class VexoGlRenderer(
         }
         // Texture creation can change unit 0 binding; explicitly restore the source.
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texId)
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, mainTex)
         GLES20.glUniform1i(shader.uniform("uMaskEnabled"), if (maskTex != 0) 1 else 0)
         GLES20.glUniform1i(shader.uniform("uMaskMode"), cfg.maskMode.ordinal)
-        GLES20.glUniform1i(shader.uniform("uMaskFlipV"), if (maskIsComp != (cfg.sourceType == ImageSourceType.COMPOSITION)) 1 else 0)
+        GLES20.glUniform1i(shader.uniform("uMaskFlipV"), if (maskIsComp != mainIsFbo) 1 else 0)
         if (maskTex != 0) {
             GLES20.glActiveTexture(GLES20.GL_TEXTURE1)
             GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, maskTex)
             GLES20.glUniform1i(shader.uniform("uMaskTex"), 1)
             GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
         }
-        drawTexturedQuad(shader, left, top, left + drawW, top + drawH, flipV = cfg.flipV xor (cfg.sourceType == ImageSourceType.COMPOSITION), flipU = cfg.flipU)
+        drawTexturedQuad(shader, left, top, left + drawW, top + drawH, flipV = cfg.flipV xor mainIsFbo, flipU = cfg.flipU)
         GLES20.glUniform1i(shader.uniform("uMaskEnabled"), 0)
         GLES20.glUniform1i(shader.uniform("uImageFxEnabled"), 0)
     }
@@ -1005,6 +1011,66 @@ class VexoGlRenderer(
         GLES20.glDisableVertexAttribArray(pos);GLES20.glDisableVertexAttribArray(color);GLES20.glDisableVertexAttribArray(uv)
     }
 
+    /** Premultiplied RGBA, progressive 2x2 prefilter, dense separable Gaussian.
+     * Returned FBO texture has its top at v=1.
+     */
+    private fun filterTexture(source:Int,sourceW:Int,sourceH:Int,sourceIsFbo:Boolean,targetW:Int,targetH:Int,
+        sigma:Float,angleDeg:Float,cross:Float,quality:com.vexo.studio.model.BlurQuality,
+        mode:Int=0,radialStrength:Float=0f,centerX:Float=.5f,centerY:Float=.5f,
+        threshold:Float=0f,knee:Float=.1f,prefix:String):Int{
+        val shader=checkNotNull(blurShader){"Blur shader unavailable"}
+        val plan=com.vexo.studio.engine.scene.SmoothBlurPlan.create(sourceW,sourceH,targetW,targetH,sigma,cross,quality,mode!=0)
+        val saved=IntArray(1);val viewport=IntArray(4)
+        GLES20.glGetIntegerv(GLES20.GL_FRAMEBUFFER_BINDING,saved,0)
+        GLES20.glGetIntegerv(GLES20.GL_VIEWPORT,viewport,0)
+        val blend=GLES20.glIsEnabled(GLES20.GL_BLEND)
+        var tex=source;var iw=sourceW.coerceAtLeast(1);var ih=sourceH.coerceAtLeast(1)
+        var flip=sourceIsFbo;var first=true
+        val matrix=FloatArray(16)
+        val angle=angleDeg.coerceIn(-360f,360f)*PI.toFloat()/180f
+        val dx=cos(angle);val dy=sin(angle)
+        fun pass(key:String,width:Int,height:Int,kind:Int,stepX:Float,stepY:Float,radius:Float){
+            val fbo=fboPool.obtain(key,width,height)
+            check(fbo.textureId!=tex){"Blur cannot sample its own target"}
+            GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER,fbo.fboId)
+            GLES20.glViewport(0,0,fbo.width,fbo.height)
+            GLES20.glDisable(GLES20.GL_BLEND)
+            clearBackground(0x00000000)
+            shader.use()
+            Matrix.orthoM(matrix,0,0f,fbo.width.toFloat(),fbo.height.toFloat(),0f,-1f,1f)
+            GLES20.glUniformMatrix4fv(shader.uniform("uMvp"),1,false,matrix,0)
+            GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D,tex)
+            GLES20.glUniform1i(shader.uniform("uTex"),0)
+            GLES20.glUniform2f(shader.uniform("uDirection"),stepX/iw,stepY/ih)
+            GLES20.glUniform1f(shader.uniform("uRadius"),radius)
+            GLES20.glUniform1i(shader.uniform("uFilterMode"),kind)
+            GLES20.glUniform2f(shader.uniform("uBoxStep"),.5f/iw,.5f/ih)
+            GLES20.glUniform2f(shader.uniform("uCenter"),centerX.coerceIn(0f,1f),if(flip)1f-centerY.coerceIn(0f,1f)else centerY.coerceIn(0f,1f))
+            GLES20.glUniform1f(shader.uniform("uRadialStrength"),radialStrength.coerceIn(0f,1f))
+            GLES20.glUniform1f(shader.uniform("uAspect"),fbo.width.toFloat()/fbo.height)
+            GLES20.glUniform2f(shader.uniform("uBloom"),if(first)threshold.coerceIn(0f,1f)else 0f,knee.coerceIn(0f,.5f))
+            drawTexturedQuad(shader,0f,0f,fbo.width.toFloat(),fbo.height.toFloat(),flipV=flip)
+            tex=fbo.textureId;iw=fbo.width;ih=fbo.height;flip=true;first=false
+        }
+        try{
+            for((index,size) in plan.reductions.withIndex())pass("${prefix}_down_$index",size.first,size.second,3,0f,0f,0f)
+            if(mode!=0)pass("${prefix}_a",plan.width,plan.height,mode,0f,0f,0f)
+            else{
+                repeat(plan.rounds){
+                    pass("${prefix}_a",plan.width,plan.height,0,dx,dy,plan.sigmaX*1.2f)
+                    if(plan.sigmaY>.001f)pass("${prefix}_b",plan.width,plan.height,0,-dy,dx,plan.sigmaY*1.2f)
+                    else if(it<plan.rounds-1)pass("${prefix}_b",plan.width,plan.height,0,0f,0f,0f)
+                }
+            }
+            return tex
+        }finally{
+            GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER,saved[0])
+            GLES20.glViewport(viewport[0],viewport[1],viewport[2],viewport[3])
+            if(blend)GLES20.glEnable(GLES20.GL_BLEND)else GLES20.glDisable(GLES20.GL_BLEND)
+        }
+    }
+
     private fun drawBlurEffect(
         cfg: LayerConfig.BlurEffect,
         reactive: Float,
@@ -1015,59 +1081,14 @@ class VexoGlRenderer(
     ) {
         val srcTex = compTextures[cfg.sourceCompositionIndex] ?: return
         val radius=(cfg.blurRadius+reactive).coerceIn(0f,24f)*cfg.blurMultiplier.coerceIn(0f,8f)*.75f
-        val hasGlow=listOf(cfg.layer1Scale to cfg.layer1ColorArgb,cfg.layer2Scale to cfg.layer2ColorArgb,cfg.layer3Scale to cfg.layer3ColorArgb).any{(scale,col)->scale>0f && (col ushr 24)>0}
-        var filteredTex=srcTex
+        val hasGlow=listOf(cfg.layer1Scale to cfg.layer1ColorArgb,cfg.layer2Scale to cfg.layer2ColorArgb,cfg.layer3Scale to cfg.layer3ColorArgb).any{(scale,col)->scale>0f&&(col ushr 24)>0}
         val radial=cfg.filterMode!=com.vexo.studio.model.BlurFilterMode.GAUSSIAN
         val radialStrength=(cfg.radialStrength*(1f+reactive/12f)).coerceIn(0f,1f)
-        if(hasGlow&&cfg.bloomIntensity>0f&&((if(radial)radialStrength else radius)>.001f||cfg.bloomThreshold>0f)){
-        val shader = blurShader ?: return
-        val ping = fboPool.obtain("blur_ping", w / 2, h / 2)
-
-        val savedFbo = IntArray(1)
-        GLES20.glGetIntegerv(GLES20.GL_FRAMEBUFFER_BINDING, savedFbo, 0)
-
-        // Filter passes overwrite transparent targets; blending would attenuate alpha again.
-        GLES20.glDisable(GLES20.GL_BLEND)
-        // Pass 1: Horizontal into ping
-        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, ping.fboId)
-        GLES20.glViewport(0, 0, ping.width, ping.height)
-        clearBackground(0x00000000)
-        shader.use()
-        val idM = FloatArray(16).apply { Matrix.orthoM(this, 0, 0f, ping.width.toFloat(), ping.height.toFloat(), 0f, -1f, 1f) }
-        GLES20.glUniformMatrix4fv(shader.uniform("uMvp"), 1, false, idM, 0)
-        GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, srcTex)
-        GLES20.glUniform1i(shader.uniform("uTex"), 0)
-        val angle=cfg.blurAngleDeg.coerceIn(-360f,360f)*PI.toFloat()/180f
-        val dx=kotlin.math.cos(angle);val dy=kotlin.math.sin(angle)
-        GLES20.glUniform2f(shader.uniform("uDirection"), dx / ping.width, dy / ping.height)
-        GLES20.glUniform1f(shader.uniform("uRadius"), radius)
-        GLES20.glUniform1i(shader.uniform("uFilterMode"),cfg.filterMode.ordinal)
-        GLES20.glUniform2f(shader.uniform("uCenter"),cfg.radialCenterX.coerceIn(0f,1f),1f-cfg.radialCenterY.coerceIn(0f,1f))
-        GLES20.glUniform1f(shader.uniform("uRadialStrength"),radialStrength)
-        GLES20.glUniform1f(shader.uniform("uAspect"),ping.width.toFloat()/ping.height)
-        GLES20.glUniform2f(shader.uniform("uBloom"),cfg.bloomThreshold.coerceIn(0f,1f),cfg.bloomKnee.coerceIn(0f,.5f))
-        drawTexturedQuad(shader, 0f, 0f, ping.width.toFloat(), ping.height.toFloat(), flipV = true)
-
-        filteredTex=ping.textureId
-        val cross=cfg.blurCrossAxis.coerceIn(0f,2f)
-        if(!radial&&radius>.001f&&cross>.001f){
-        val pong=fboPool.obtain("blur_pong",w/2,h/2)
-        // Pass 2: perpendicular into pong
-        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, pong.fboId)
-        GLES20.glViewport(0, 0, pong.width, pong.height)
-        clearBackground(0x00000000)
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, ping.textureId)
-        GLES20.glUniform2f(shader.uniform("uDirection"), -dy*cross / pong.width, dx*cross / pong.height)
-        GLES20.glUniform2f(shader.uniform("uBloom"),0f,0f)
-        drawTexturedQuad(shader, 0f, 0f, pong.width.toFloat(), pong.height.toFloat(), flipV = true)
-        filteredTex=pong.textureId
-        }
-
-        // Restore target FBO
-        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, savedFbo[0])
-        GLES20.glViewport(0, 0, w, h)
-        }
+        val sigma=radius*1.65f*minOf(w,h)/720f
+        val filteredTex=if(hasGlow&&cfg.bloomIntensity>0f&&((if(radial)radialStrength else sigma)>.001f||cfg.bloomThreshold>0f)){
+            filterTexture(srcTex,w,h,true,w,h,sigma,cfg.blurAngleDeg,cfg.blurCrossAxis,cfg.blurQuality,
+                cfg.filterMode.ordinal,radialStrength,cfg.radialCenterX,cfg.radialCenterY,cfg.bloomThreshold,cfg.bloomKnee,"blur_scene")
+        }else srcTex
 
         val img = imageShader ?: return
         resetImageState(img)

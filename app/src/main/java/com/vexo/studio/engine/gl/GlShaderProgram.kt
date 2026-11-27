@@ -271,7 +271,11 @@ object VexoShaders {
         }
     """
     const val BLUR_FRAGMENT = """
+        #ifdef GL_FRAGMENT_PRECISION_HIGH
+        precision highp float;
+        #else
         precision mediump float;
+        #endif
         varying vec2 vUv;
         uniform sampler2D uTex;
         uniform vec2 uDirection;
@@ -281,7 +285,21 @@ object VexoShaders {
         uniform float uRadialStrength;
         uniform float uAspect;
         uniform vec2 uBloom;
+        uniform vec2 uBoxStep;
+        vec4 brightSample(vec2 uv){
+            vec4 v=texture2D(uTex,clamp(uv,0.0,1.0));
+            if(uBloom.x>0.0){
+                float lum=dot(v.rgb,vec3(0.2126,0.7152,0.0722));
+                float knee=max(0.001,uBloom.y);
+                v*=smoothstep(max(0.0,uBloom.x-knee),uBloom.x+knee,lum);
+            }
+            return v;
+        }
         void main() {
+            if(uFilterMode==3){
+                gl_FragColor=(brightSample(vUv+uBoxStep)+brightSample(vUv-uBoxStep)+brightSample(vUv+vec2(uBoxStep.x,-uBoxStep.y))+brightSample(vUv+vec2(-uBoxStep.x,uBoxStep.y)))*0.25;
+                return;
+            }
             vec4 sum = vec4(0.0);
             float weightSum = 0.0;
             // Dense, symmetric separable Gaussian sampling avoids sparse ghost copies.
@@ -299,13 +317,7 @@ object VexoShaders {
                     p.x/=max(0.001,uAspect);
                     uv=uCenter+p;
                 }
-                vec4 v=texture2D(uTex,clamp(uv,0.0,1.0));
-                if(uBloom.x>0.0){
-                    float lum=dot(v.rgb,vec3(0.2126,0.7152,0.0722));
-                    float knee=max(0.001,uBloom.y);
-                    v*=smoothstep(max(0.0,uBloom.x-knee),uBloom.x+knee,lum);
-                }
-                sum+=v*weight;
+                sum+=brightSample(uv)*weight;
                 weightSum+=weight;
             }
             gl_FragColor=sum/weightSum;
