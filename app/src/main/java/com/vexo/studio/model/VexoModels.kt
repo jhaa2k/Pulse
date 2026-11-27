@@ -672,7 +672,8 @@ sealed interface LayerConfig {
         val blendModeContent: BlendMode = BlendMode.ADD,
         val showUnblurredContent: Boolean = false,
         val showUnblurredContentUnder: Boolean = false,
-        val splitMultiplierMeasure: MeasureConfig = MeasureConfig()
+        val splitMultiplierMeasure: MeasureConfig = MeasureConfig(),
+        val effectBlendMode: BlendMode? = null
     ) : LayerConfig
 }
 

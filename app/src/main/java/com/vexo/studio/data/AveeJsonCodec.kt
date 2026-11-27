@@ -593,6 +593,7 @@ object AveeJsonCodec {
                 splitColor0Argb = obj.propInt("splitColor0", -65536),
                 splitColor1Argb = obj.propInt("splitColor1", -16711936),
                 splitColor2Argb = obj.propInt("splitColor2", -16776961),
+                effectBlendMode=BlendMode.fromAvee(obj.propString("blendMode","Add")),
                 blendModeContent = BlendMode.fromAvee(obj.propString("blendModeContent", "Add")),
                 showUnblurredContent = obj.propBool("showUnblurredContent", false),
                 showUnblurredContentUnder = obj.propBool("showUnblurredContentUnder", false)
@@ -614,6 +615,9 @@ object AveeJsonCodec {
                 manualMotionX = obj.propFloat("manualMotionX", .025f),
                 manualMotionY = obj.propFloat("manualMotionY", 0f),
                 trailPersistence = obj.propFloat("trailPersistence", .65f),
+                manualRotationDeg=obj.propFloat("manualRotationDeg",0f),
+                manualZoom=obj.propFloat("manualZoom",0f),
+                includeRotationAndZoom=obj.propBool("includeRotationAndZoom",false),
                 motionSource = MotionSource.fromAvee(obj.propString("motionSource", "EffectTransform")),
                 relativeMotionMode = obj.propBool("relativeMotionMode", true),
                 blendModeContent = BlendMode.fromAvee(obj.propString("blendModeContent", "Add")),
@@ -634,6 +638,7 @@ object AveeJsonCodec {
                 targetCompositionIndex = target,
                 mirrorMode = MirrorMode.fromAvee(obj.propString("mirrorMode", "Horizontal")),
                 flipMirror = obj.propBool("flipMirror", false),
+                repeatCount=obj.propInt("vexoRepeatCount",1).coerceIn(1,12),
                 colorArgb = obj.propInt("color", -1)
             )
         )
@@ -682,6 +687,7 @@ object AveeJsonCodec {
         val effectBlend=when(val cfg=layer.config){
             is LayerConfig.BlurEffect->cfg.glowBlendMode
             is LayerConfig.MotionBlurEffect->cfg.effectBlendMode
+            is LayerConfig.RgbSplitEffect->cfg.effectBlendMode?:cfg.blendModeContent
             else->null
         }
         put("blendMode", propObj((effectBlend?:c.blendMode).aveeName))
@@ -821,18 +827,25 @@ object AveeJsonCodec {
                 put("splitColor0", propObj(cfg.splitColor0Argb))
                 put("splitColor1", propObj(cfg.splitColor1Argb))
                 put("splitColor2", propObj(cfg.splitColor2Argb))
+                put("blendModeContent",propObj(cfg.blendModeContent.aveeName))
+                put("showUnblurredContent",propObj(if(cfg.showUnblurredContent)1 else 0))
+                put("showUnblurredContentUnder",propObj(if(cfg.showUnblurredContentUnder)1 else 0))
             }
             is LayerConfig.MotionBlurEffect -> {
                 put("TargetImage", propObj("composition:${cfg.targetCompositionIndex}"))
                 put("blurAmountMultiplier", propObj(encodeScalarMeasure(cfg.blurAmountMultiplier,cfg.blurAmountMeasure)))
                 put("motionSource", propObj(cfg.motionSource.aveeName))
                 put("relativeMotionMode",propObj(if(cfg.relativeMotionMode)1 else 0)); put("manualMotionX",propObj(cfg.manualMotionX)); put("manualMotionY",propObj(cfg.manualMotionY)); put("trailPersistence",propObj(cfg.trailPersistence))
+                put("manualRotationDeg",propObj(cfg.manualRotationDeg))
+                put("manualZoom",propObj(cfg.manualZoom))
+                put("includeRotationAndZoom",propObj(if(cfg.includeRotationAndZoom)1 else 0))
                 put("color",propObj(cfg.colorArgb)); put("blendModeContent",propObj(cfg.blendModeContent.aveeName)); put("showUnblurredContent",propObj(if(cfg.showUnblurredContent)1 else 0)); put("showUnblurredContentUnder",propObj(if(cfg.showUnblurredContentUnder)1 else 0))
             }
             is LayerConfig.MirrorEffect -> {
                 put("TargetImage", propObj("composition:${cfg.targetCompositionIndex}"))
                 put("mirrorMode", propObj(cfg.mirrorMode.aveeName))
                 put("flipMirror", propObj(if (cfg.flipMirror) 1 else 0)); put("color", propObj(cfg.colorArgb))
+                put("vexoRepeatCount",propObj(cfg.repeatCount))
             }
         }
     })

@@ -397,9 +397,9 @@ object VexoShaders {
         varying vec2 vUv;
         uniform sampler2D uTex;
         uniform vec2 uOffset;
-        uniform vec3 uColor0;
-        uniform vec3 uColor1;
-        uniform vec3 uColor2;
+        uniform vec4 uColor0;
+        uniform vec4 uColor1;
+        uniform vec4 uColor2;
         uniform float uOpacity;
         uniform int uAberrationMode;
         uniform float uMix;
@@ -414,10 +414,15 @@ object VexoShaders {
             vec4 r=sampleOutside(vUv+offset);
             vec4 g=texture2D(uTex,vUv);
             vec4 b=sampleOutside(vUv-offset);
-            vec3 rgb = r.rgb * uColor0 * 0.5 + g.rgb * uColor1 * 0.5 + b.rgb * uColor2 * 0.5 +
-                       vec3(r.r, g.g, b.b) * 0.5;
-            if(uAberrationMode!=0)rgb=r.r*uColor0+g.g*uColor1+b.b*uColor2;
-            float a=max(r.a,max(g.a,b.a));
+            // Samples are already premultiplied. Apply channel tint alpha to
+            // both color contribution and coverage, including the legacy mix.
+            r*=uColor0.a;
+            vec4 gc=g*uColor1.a;
+            b*=uColor2.a;
+            vec3 rgb = r.rgb * uColor0.rgb * 0.5 + gc.rgb * uColor1.rgb * 0.5 + b.rgb * uColor2.rgb * 0.5 +
+                       vec3(r.r, gc.g, b.b) * 0.5;
+            if(uAberrationMode!=0)rgb=r.r*uColor0.rgb+gc.g*uColor1.rgb+b.b*uColor2.rgb;
+            float a=max(r.a,max(gc.a,b.a));
             gl_FragColor=mix(g,vec4(rgb,a),clamp(uMix,0.0,1.0))*uOpacity;
         }
     """

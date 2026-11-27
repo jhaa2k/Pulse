@@ -1213,9 +1213,10 @@ class VexoGlRenderer(
         val offX=((cfg.splitAmountX+delta.x*.015f)*multiplier*.4f).coerceIn(-.25f,.25f)
         val offY=((cfg.splitAmountY+delta.y*.015f)*multiplier*.4f).coerceIn(-.25f,.25f)
 
-        if(cfg.showUnblurredContentUnder) drawEffectSource(srcTex,opacity,w,h,BlendMode.ALPHA)
+        val cleanBlend=if(cfg.effectBlendMode==null)BlendMode.ALPHA else cfg.blendModeContent
+        if(cfg.showUnblurredContentUnder) drawEffectSource(srcTex,opacity,w,h,cleanBlend)
         val shader = rgbSplitShader ?: return
-        applyBlendMode(cfg.blendModeContent)
+        applyBlendMode(cfg.effectBlendMode?:cfg.blendModeContent)
         shader.use()
         GLES20.glUniformMatrix4fv(shader.uniform("uMvp"), 1, false, mvpMatrix, 0)
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
@@ -1226,11 +1227,12 @@ class VexoGlRenderer(
         GLES20.glUniform1f(shader.uniform("uMix"),cfg.aberrationMix.coerceIn(0f,1f))
         GLES20.glUniform2f(shader.uniform("uCenter"),cfg.aberrationCenterX.coerceIn(0f,1f),1f-cfg.aberrationCenterY.coerceIn(0f,1f))
         fun setRgb(name: String, argb: Int) {
-            GLES20.glUniform3f(
+            GLES20.glUniform4f(
                 shader.uniform(name),
                 ((argb ushr 16) and 0xFF) / 255f,
                 ((argb ushr 8) and 0xFF) / 255f,
-                (argb and 0xFF) / 255f
+                (argb and 0xFF) / 255f,
+                ((argb ushr 24) and 0xFF) / 255f
             )
         }
         setRgb("uColor0", cfg.splitColor0Argb)
@@ -1238,7 +1240,7 @@ class VexoGlRenderer(
         setRgb("uColor2", cfg.splitColor2Argb)
         GLES20.glUniform1f(shader.uniform("uOpacity"), opacity)
         drawTexturedQuad(shader, 0f, 0f, w.toFloat(), h.toFloat(), flipV = true)
-        if(cfg.showUnblurredContent) drawEffectSource(srcTex,opacity,w,h,BlendMode.ALPHA)
+        if(cfg.showUnblurredContent) drawEffectSource(srcTex,opacity,w,h,cleanBlend)
     }
 
     private fun drawEffectSource(tex:Int,opacity:Float,w:Int,h:Int,mode:BlendMode) {
@@ -1283,7 +1285,7 @@ class VexoGlRenderer(
         val previousTarget = previousMotionTarget.put(layerId,cfg.targetCompositionIndex)
         val firstFrame = previousTarget != cfg.targetCompositionIndex || !previousMotion.containsKey(layerId)
         if(firstFrame) clearBackground(0x00000000)
-        val persist = if(firstFrame) 0f else MotionMath.persistence(cfg.trailPersistence,deltaSec)
+        val persist = if(firstFrame||!cfg.blurAmountMultiplier.isFinite()||cfg.blurAmountMultiplier<=0f) 0f else MotionMath.persistence(cfg.trailPersistence,deltaSec)
         // Decay the entire previous frame, including pixels outside the current source.
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, ensureInternalTex("internalres:white"))
@@ -1307,6 +1309,14 @@ class VexoGlRenderer(
             GLES20.glUniform1f(motion.uniform("uAspect"),w.toFloat()/h.coerceAtLeast(1))
             GLES20.glUniform1f(motion.uniform("uOpacity"),1f-persist)
             drawTexturedQuad(motion,0f,0f,w.toFloat(),h.toFloat(),flipV=true)
+        }else{
+            // Preserve the weighted source when the optional motion shader is unavailable.
+            resetImageState(img)
+            GLES20.glBlendFunc(GLES20.GL_ONE,GLES20.GL_ONE)
+            GLES20.glUniformMatrix4fv(img.uniform("uMvp"),1,false,idM,0)
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D,srcTex)
+            GLES20.glUniform1f(img.uniform("uOpacity"),1f-persist)
+            drawTexturedQuad(img,0f,0f,w.toFloat(),h.toFloat(),flipV=true)
         }
         resetImageState(img)
 
