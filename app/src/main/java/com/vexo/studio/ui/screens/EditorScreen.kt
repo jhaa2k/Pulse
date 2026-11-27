@@ -1628,15 +1628,18 @@ private fun AudioProviderEditorSection(
             onBeginDrag(); vm.updateAudioProvider(provider.index, false) { it.copy(releaseMs = v) }
         }, onEndDrag)
         StudioChipSelector("FFT hop (samples)",listOf(64,128,256,512,1024,2048,4096).filter{it<=provider.fftSize},provider.hopSize,{"$it"}){v->vm.updateAudioProvider(provider.index){it.copy(hopSize=v)}}
+        StudioToggleRow("Adaptive Beat Detection",provider.adaptiveBeat){v->vm.updateAudioProvider(provider.index){it.copy(adaptiveBeat=v)}}
         StudioSlider("Beat Smooth", provider.beatSmooth, 0.1f, 1f, 0.4f, "", 0.01f, onValueChange = { v ->
             onBeginDrag(); vm.updateAudioProvider(provider.index, false) { it.copy(beatSmooth = v) }
         }, onCommit = onEndDrag)
+        if(!provider.adaptiveBeat){
         StudioSlider("Beat Range Lower", provider.beatRangeValueLower, 0f, 50f, 0.7f, "", 0.1f, onValueChange = { v ->
             onBeginDrag(); vm.updateAudioProvider(provider.index, false) { it.copy(beatRangeValueLower = v) }
         }, onCommit = onEndDrag)
         StudioSlider("Beat Range Higher", provider.beatRangeValueHigher, 0f, 100f, 35f, "", 0.1f, onValueChange = { v ->
             onBeginDrag(); vm.updateAudioProvider(provider.index, false) { it.copy(beatRangeValueHigher = v) }
         }, onCommit = onEndDrag)
+        }
         StudioSlider("Peak Hold", provider.peakHoldMs, 0f, 1000f, 180f, "", 5f, onValueChange = { v ->
             onBeginDrag(); vm.updateAudioProvider(provider.index, false) { it.copy(peakHoldMs = v) }
         }, onCommit = onEndDrag)

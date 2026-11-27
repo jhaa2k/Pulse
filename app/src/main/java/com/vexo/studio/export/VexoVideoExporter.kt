@@ -127,9 +127,14 @@ class VexoVideoExporter(private val context: Context) {
             }
             val codecList=MediaCodecList(MediaCodecList.REGULAR_CODECS)
             val candidates=if(settings.useHevcIfSupported)listOf(MediaFormat.MIMETYPE_VIDEO_HEVC,MediaFormat.MIMETYPE_VIDEO_AVC) else listOf(MediaFormat.MIMETYPE_VIDEO_AVC)
-            val supported = candidates.mapNotNull { mime ->
+            val supported = candidates.flatMap { mime ->
                 val f = format(mime)
-                runCatching { codecList.findEncoderForFormat(f) }.getOrNull()?.let { Triple(mime, f, it) }
+                val preferred=runCatching { codecList.findEncoderForFormat(f) }.getOrNull()
+                val alternatives=codecList.codecInfos.filter{info->
+                    info.isEncoder && info.supportedTypes.any{it.equals(mime,true)} &&
+                        runCatching{info.getCapabilitiesForType(mime).isFormatSupported(f)}.getOrDefault(false)
+                }.map{it.name}
+                (listOfNotNull(preferred)+alternatives).distinct().map{Triple(mime,format(mime),it)}
             }
             check(supported.isNotEmpty()) { "No compatible encoder for selected resolution, FPS and bitrate. Try a lower resolution, FPS or bitrate." }
             onProgress(ExportProgress(isRunning=true,progress=.01f,statusText="Decoding audio"))

@@ -383,7 +383,7 @@ class AudioProviderEngine(initialConfig: AudioProviderConfig) {
             (onset*config.beatSensitivity).coerceIn(0f,1.5f)
         }else (((rawBeatAvg - loVal) / (hiVal - loVal)) * config.beatSensitivity).coerceIn(0f, 1.5f)
 
-        val bSmooth = 1f-(1f-config.beatSmooth.coerceIn(.05f,1f)).pow(dtMs/16.6667f)
+        val bSmooth = if(config.adaptiveBeat && normalizedBeat>beatEnvelope) 1f-exp(-dtMs/12f) else 1f-(1f-config.beatSmooth.coerceIn(.05f,1f)).pow(dtMs/16.6667f)
         beatEnvelope = beatEnvelope * (1f - bSmooth) + normalizedBeat * bSmooth
 
         val triggered = beatEnvelope > (if(prevBeatTriggered).4f else .55f)

@@ -115,7 +115,17 @@ object VexArchive {
                                 val file=File(dir,"legacy_${count}.${if(numeric)"bin" else name.substringAfterLast('.').lowercase()}")
                                 file.outputStream().use{total+=copyLimited(zip,it,minOf(MAX_BYTES-total,64L*1024*1024))}
                                 if(numeric){
-                                    val ext=LegacyAssetReferences.imageExtension(file.inputStream().use{it.readNBytes(12)})
+                                    val header=file.inputStream().use{input->
+                                        val bytes=ByteArray(12)
+                                        var n=0
+                                        while(n<bytes.size){
+                                            val read=input.read(bytes,n,bytes.size-n)
+                                            if(read<=0)break
+                                            n+=read
+                                        }
+                                        bytes.copyOf(n)
+                                    }
+                                    val ext=LegacyAssetReferences.imageExtension(header)
                                     if(ext==null)file.delete() else {
                                         val typed=File(dir,"legacy_${count}.$ext")
                                         check(file.renameTo(typed)){"Cannot store bundled image"}
