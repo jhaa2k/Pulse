@@ -311,6 +311,11 @@ data class AudioProviderConfig(
     val beatRangeValueHigher: Float = 35f,
     val beatSensitivity: Float = 1.2f,
     val adaptiveBeat: Boolean = false,
+    val transientBeat: Boolean = false,
+    val enhancedBands: Boolean = false,
+    val beatCooldownMs: Int = 100,
+    val beatPulseDurationMs: Int = 180,
+    val bandResponseGain: Float = 1f,
     val extraFields: Map<String, String> = emptyMap()
 )
 

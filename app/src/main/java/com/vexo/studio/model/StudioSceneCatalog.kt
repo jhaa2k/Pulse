@@ -28,8 +28,8 @@ object StudioSceneCatalog {
             else->0xFF1A0D15.toInt()
         }
         val providers=listOf(
-            AudioProviderConfig(index=1,tag="Punch / bass",sampleOutCount=144,lowerHz=30f,higherHz=1000f,outputMultiplier=5f,attackMs=5f,releaseMs=65f,preSmooth=.12f,filterStrength=.22f,adaptiveBeat=true),
-            AudioProviderConfig(index=2,tag="Detail / mids",sampleOutCount=144,lowerHz=180f,higherHz=14000f,outputMultiplier=6f,attackMs=8f,releaseMs=90f,preSmooth=.2f,filterStrength=.3f,adaptiveBeat=true)
+            AudioProviderConfig(index=1,tag="Punch / bass",sampleOutCount=144,lowerHz=30f,higherHz=1000f,outputMultiplier=5f,attackMs=5f,releaseMs=65f,preSmooth=.12f,filterStrength=.22f,adaptiveBeat=true,transientBeat=true,enhancedBands=true,beatPulseDurationMs=140),
+            AudioProviderConfig(index=2,tag="Detail / mids",sampleOutCount=144,lowerHz=180f,higherHz=14000f,outputMultiplier=6f,attackMs=8f,releaseMs=90f,preSmooth=.2f,filterStrength=.3f,adaptiveBeat=true,transientBeat=true,enhancedBands=true,beatPulseDurationMs=140)
         )
         fun bars(name:String,cfg:LayerConfig.Bars,x:Float=.5f,y:Float=.5f,sx:Float=1f,sy:Float=sx,angle:Float=0f)=LayerNode(
             LayerType.BARS,LayerCommon(name=name,posX=x,posY=y,scaleX=sx,scaleY=sy,rotationDeg=angle,measureScale=MeasureConfig(MeasureWhat.BEAT,.035f,.035f)),cfg)
@@ -50,7 +50,7 @@ object StudioSceneCatalog {
             final+=LayerNode(LayerType.IMAGE,LayerCommon(name="Soft album artwork",opacity=.22f),LayerConfig.Image(sourceType=ImageSourceType.ALBUM_ART,keepAspectRatioAndCropToFit=true,saturation=.45f,blurEnabled=true,blurRadius=24))
         }
         if(layout in listOf(1,4,5,7)){
-            final+=LayerNode(LayerType.PARTICLES,LayerCommon(name="Rhythmic particles",blendMode=BlendMode.ADD,opacity=.65f),LayerConfig.Particles(emitter=if(layout==4)ParticleEmitter.LINE else if(layout==5)ParticleEmitter.BOX else ParticleEmitter.RING,countLimit=180,spawnTimeSec=.04f,burstCount=18,burstThreshold=.45f,burstProvider=1,colorFromArgb=from,colorToArgb=to,trailLength=if(layout==5).3f else 0f))
+            final+=LayerNode(LayerType.PARTICLES,LayerCommon(name="Rhythmic particles",blendMode=BlendMode.ADD,opacity=.65f),LayerConfig.Particles(emitter=if(layout==4)ParticleEmitter.LINE else if(layout==5)ParticleEmitter.BOX else ParticleEmitter.RING,countLimit=180,spawnTimeSec=.04f,burstCount=18,burstThreshold=.45f,burstProvider=1,burstSource=ParticleBurstSource.BEAT_PULSE,colorFromArgb=from,colorToArgb=to,trailLength=if(layout==5).3f else 0f))
         }
         if(layout in listOf(0,1,3,5,6)){
             final+=LayerNode(LayerType.BLUR_EFFECT,LayerCommon(name="Spectrum bloom",blendMode=BlendMode.ADD),LayerConfig.BlurEffect(sourceCompositionIndex=1,blurRadius=3.5f,blurMultiplier=3f,layer1ColorArgb=0xAAFFFFFF.toInt(),layer2Scale=1.02f,layer2ColorArgb=0x44FFFFFF,blendModeContent=BlendMode.ADD,showUnblurredContent=true,showUnblurredContentUnder=false,unblurredBlendMode=BlendMode.PRE_MUL_ALPHA))

@@ -1681,6 +1681,13 @@ private fun AudioProviderEditorSection(
         }, onEndDrag)
         StudioChipSelector("FFT hop (samples)",listOf(64,128,256,512,1024,2048,4096).filter{it<=provider.fftSize},provider.hopSize,{"$it"}){v->vm.updateAudioProvider(provider.index){it.copy(hopSize=v)}}
         StudioToggleRow("Adaptive Beat Detection",provider.adaptiveBeat){v->vm.updateAudioProvider(provider.index){it.copy(adaptiveBeat=v)}}
+        if(provider.adaptiveBeat){
+            StudioToggleRow("Transient Beat Detection",provider.transientBeat){v->vm.updateAudioProvider(provider.index){it.copy(transientBeat=v)}}
+            if(provider.transientBeat)StudioSlider("Beat Cooldown",provider.beatCooldownMs.toFloat(),40f,300f,100f,"ms",5f,onValueChange={v->onBeginDrag();vm.updateAudioProvider(provider.index,false){it.copy(beatCooldownMs=v.toInt())}},onCommit=onEndDrag)
+        }
+        StudioSlider("Beat Pulse Duration",provider.beatPulseDurationMs.toFloat(),40f,600f,180f,"ms",5f,onValueChange={v->onBeginDrag();vm.updateAudioProvider(provider.index,false){it.copy(beatPulseDurationMs=v.toInt())}},onCommit=onEndDrag)
+        StudioToggleRow("Enhanced Frequency Response",provider.enhancedBands){v->vm.updateAudioProvider(provider.index){it.copy(enhancedBands=v)}}
+        if(provider.enhancedBands)StudioSlider("Band Response Gain",provider.bandResponseGain,.25f,3f,1f,"x",.05f,onValueChange={v->onBeginDrag();vm.updateAudioProvider(provider.index,false){it.copy(bandResponseGain=v)}},onCommit=onEndDrag)
         StudioSlider("Beat Smooth", provider.beatSmooth, 0.1f, 1f, 0.4f, "", 0.01f, onValueChange = { v ->
             onBeginDrag(); vm.updateAudioProvider(provider.index, false) { it.copy(beatSmooth = v) }
         }, onCommit = onEndDrag)

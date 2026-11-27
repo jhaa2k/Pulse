@@ -48,6 +48,8 @@ class AudioProviderEngine(initialConfig: AudioProviderConfig) {
 
     private var beatEnvelope = 0f
     private var beatBaseline = 0f
+    private val transientDetector=TransientBeatDetector()
+    private var analysisElapsedMs=0f
     private var beatPulseState = 0f
     private var prevBeatTriggered = false
     private var bassEnergy = 0f
@@ -83,6 +85,7 @@ class AudioProviderEngine(initialConfig: AudioProviderConfig) {
             outputBars = FloatArray(outCount)
             outputWaveform = FloatArray(outCount)
         }
+        if(newConfig.transientBeat!=config.transientBeat||newConfig.adaptiveBeat!=config.adaptiveBeat||newConfig.fftSize!=config.fftSize||newConfig.window!=config.window){transientDetector.reset();analysisElapsedMs=0f}
         config = newConfig
     }
 
@@ -98,6 +101,7 @@ class AudioProviderEngine(initialConfig: AudioProviderConfig) {
         outputWaveform.fill(0f)
         beatEnvelope = 0f
         beatBaseline = 0f
+        transientDetector.reset();analysisElapsedMs=0f
         beatPulseState = 0f
         prevBeatTriggered = false
         bassEnergy = 0f
@@ -143,6 +147,7 @@ class AudioProviderEngine(initialConfig: AudioProviderConfig) {
             if(staleMs>250f){decayEnvelopes(dtMs);configChanged=true;return snapshot()}
         }
         val fresh=configChanged||lastAnalysisRate!=sampleRate||sampleEndFrame<0||lastAnalysisFrame<0||sampleEndFrame<lastAnalysisFrame||sampleEndFrame-lastAnalysisFrame>=config.hopSize.coerceIn(1,fft.size)
+        analysisElapsedMs=(analysisElapsedMs+dtMs).coerceAtMost(250f)
         if(fresh){
         val copyCount = minOf(validLength, rawSampleWindow.size)
         if (copyCount < rawSampleWindow.size) {
@@ -188,7 +193,8 @@ class AudioProviderEngine(initialConfig: AudioProviderConfig) {
         for(i in 0 until gap){mappedBars[i]=0f;mappedBars[mappedBars.lastIndex-i]=0f}
         }
         applyGeometryAndEnvelopes(dtMs)
-        computeBandsAndBeat(sampleRate.coerceAtLeast(8000), dtMs)
+        computeBandsAndBeat(sampleRate.coerceAtLeast(8000), dtMs,fresh,analysisElapsedMs)
+        if(fresh)analysisElapsedMs=0f
 
         return snapshot()
     }
@@ -345,7 +351,9 @@ class AudioProviderEngine(initialConfig: AudioProviderConfig) {
             if(peakHoldTimersMs[i]<=0f)peakHoldBars[i]*=config.peakDecay.coerceIn(.5f,.995f).pow(dtMs/16.6667f)
         }
         beatEnvelope *= (1f - releaseCoeff)
-        beatPulseState=(beatPulseState-dtMs/180f).coerceAtLeast(0f)
+        beatPulseState=(beatPulseState-dtMs/config.beatPulseDurationMs.coerceIn(40,600)).coerceAtLeast(0f)
+        beatBaseline*=exp(-dtMs/650f)
+        transientDetector.reset();analysisElapsedMs=0f
         if(beatEnvelope<.4f)prevBeatTriggered=false
         val decay=.9f.pow(dtMs/16.6667f)
         bassEnergy *= decay
@@ -355,7 +363,7 @@ class AudioProviderEngine(initialConfig: AudioProviderConfig) {
         peakEnergy *= decay
     }
 
-    private fun computeBandsAndBeat(sampleRate: Int, dtMs: Float) {
+    private fun computeBandsAndBeat(sampleRate: Int, dtMs: Float,fresh:Boolean,analysisDt:Float) {
         val n = outputBars.size
         val rawFirst = config.beatRangeBarFirst.coerceIn(0f, 1f)
         val rawLast = config.beatRangeBarLast.coerceIn(0f, 1f)
@@ -387,12 +395,19 @@ class AudioProviderEngine(initialConfig: AudioProviderConfig) {
         beatEnvelope = beatEnvelope * (1f - bSmooth) + normalizedBeat * bSmooth
 
         val triggered = beatEnvelope > (if(prevBeatTriggered).4f else .55f)
-        if (triggered && !prevBeatTriggered) {
-            beatPulseState = 1f
-        } else {
-            beatPulseState = (beatPulseState - dtMs / 180f).coerceAtLeast(0f)
+        val useTransient=config.adaptiveBeat&&config.transientBeat
+        var onset=false
+        if(useTransient&&fresh){
+            var energy=0f
+            for(i in idx0..idx1)energy+=mappedBars[i]
+            onset=transientDetector.update(energy/(idx1-idx0+1),analysisDt,config.beatSensitivity,config.beatCooldownMs)
         }
-        prevBeatTriggered = triggered
+        val duration=config.beatPulseDurationMs.coerceIn(40,600).toFloat()
+        if(if(useTransient)onset else triggered&&!prevBeatTriggered){
+            beatPulseState=1f
+        }else beatPulseState=(beatPulseState-dtMs/duration).coerceAtLeast(0f)
+        if(useTransient)beatEnvelope=maxOf(beatEnvelope,beatPulseState)
+        prevBeatTriggered=triggered
 
         // True Hz Bass/Mid/Treble energy from linearSpectrum
         val nyquist = sampleRate * 0.5f
@@ -401,6 +416,7 @@ class AudioProviderEngine(initialConfig: AudioProviderConfig) {
             if(lowHz>=nyquist)return 0f
             val f = (lowHz / hzPerBin).toInt().coerceIn(1, linearSpectrum.lastIndex)
             val l = (highHz / hzPerBin).toInt().coerceIn(f, linearSpectrum.lastIndex)
+            if(config.enhancedBands)return AudioDynamics.bandEnergy(linearSpectrum,hzPerBin,lowHz,highHz,config.bandResponseGain)
             var s = 0f
             for (b in f..l) s += linearSpectrum[b]
             return ln(1.0 + (s / (l - f + 1)) * 18.0).toFloat().coerceIn(0f, 1f)
