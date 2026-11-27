@@ -1416,6 +1416,15 @@ private fun PropertiesTab(
                 ExpandableSectionHeader("Blur parameters", expandedSections["BlurEffect_Blurparameters"] == true, { toggleAccordion(expandedSections, "BlurEffect_Blurparameters") }) {
                     MediaAssetButton("IMPORT BLUR MASK"){uri->vm.attachLayerAsset(layer.common.id,uri,"mask")}
                     TextButton(onClick={vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.BlurEffect).copy(maskImage=""))}}){Text("CLEAR MASK")}
+                    StudioChipSelector("Filter Mode",com.vexo.studio.model.BlurFilterMode.entries,cfg.filterMode,{it.name.replace('_',' ')}){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.BlurEffect).copy(filterMode=v))}}
+                    if(cfg.filterMode!=com.vexo.studio.model.BlurFilterMode.GAUSSIAN){
+                    StudioSlider("Radial Strength",cfg.radialStrength,0f,1f,0.12f,"",0.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.BlurEffect).copy(radialStrength=v))}},onCommit=::endDrag)
+                    StudioSlider("Radial Center X",cfg.radialCenterX,0f,1f,0.5f,"",0.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.BlurEffect).copy(radialCenterX=v))}},onCommit=::endDrag)
+                    StudioSlider("Radial Center Y",cfg.radialCenterY,0f,1f,0.5f,"",0.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.BlurEffect).copy(radialCenterY=v))}},onCommit=::endDrag)
+                    }
+                    StudioSlider("Bloom Threshold",cfg.bloomThreshold,0f,1f,0f,"",0.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.BlurEffect).copy(bloomThreshold=v))}},onCommit=::endDrag)
+                    StudioSlider("Bloom Soft Knee",cfg.bloomKnee,0f,0.5f,0.1f,"",0.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.BlurEffect).copy(bloomKnee=v))}},onCommit=::endDrag)
+                    StudioSlider("Bloom Intensity",cfg.bloomIntensity,0f,4f,1f,"",0.05f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.BlurEffect).copy(bloomIntensity=v))}},onCommit=::endDrag)
                     StudioSlider("Blur Direction",cfg.blurAngleDeg,-180f,180f,0f,"°",1f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.BlurEffect).copy(blurAngleDeg=v))}},onCommit=::endDrag)
                     StudioSlider("Cross Axis Spread",cfg.blurCrossAxis,0f,2f,1f,"x",.02f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.BlurEffect).copy(blurCrossAxis=v))}},onCommit=::endDrag)
                     MeasureBindingControls("Blur Audio Binding",cfg.measureBlur,uiState.project.audioProviders.map{it.index},::beginDrag,::endDrag){v,undo->vm.updateLayer(layer.common.id,undo){it.copy(config=(it.config as LayerConfig.BlurEffect).copy(measureBlur=v))}}
@@ -1443,6 +1452,12 @@ private fun PropertiesTab(
                     StudioToggleRow("Source Above",cfg.showUnblurredContent){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.RgbSplitEffect).copy(showUnblurredContent=v))}}
                 }
                 ExpandableSectionHeader("Channel offsets", expandedSections["RgbSplitEffect_Channeloffsets"] == true, { toggleAccordion(expandedSections, "RgbSplitEffect_Channeloffsets") }) {
+                    StudioChipSelector("Aberration Mode",com.vexo.studio.model.AberrationMode.entries,cfg.aberrationMode,{it.name.replace('_',' ')}){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.RgbSplitEffect).copy(aberrationMode=v))}}
+                    StudioSlider("Effect Mix",cfg.aberrationMix,0f,1f,1f,"",0.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.RgbSplitEffect).copy(aberrationMix=v))}},onCommit=::endDrag)
+                    if(cfg.aberrationMode==com.vexo.studio.model.AberrationMode.RADIAL){
+                    StudioSlider("Center X",cfg.aberrationCenterX,0f,1f,0.5f,"",0.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.RgbSplitEffect).copy(aberrationCenterX=v))}},onCommit=::endDrag)
+                    StudioSlider("Center Y",cfg.aberrationCenterY,0f,1f,0.5f,"",0.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.RgbSplitEffect).copy(aberrationCenterY=v))}},onCommit=::endDrag)
+                    }
                     MeasureBindingControls("RGB Split Audio Binding",cfg.splitMeasure,uiState.project.audioProviders.map{it.index},::beginDrag,::endDrag){v,undo->vm.updateLayer(layer.common.id,undo){it.copy(config=(it.config as LayerConfig.RgbSplitEffect).copy(splitMeasure=v))}}
                     StudioSlider("Split Y", cfg.splitAmountY, -0.1f, 0.1f, 0.008f, "", 0.002f, onValueChange = { v ->
                         beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(splitAmountY = v)) }

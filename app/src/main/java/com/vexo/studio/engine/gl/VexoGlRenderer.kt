@@ -406,7 +406,7 @@ class VexoGlRenderer(
             }
             is LayerConfig.Particles -> drawParticlesLayer(c.id, cfg, audioSnap, scene, deltaSec, opacity, w, h)
             is LayerConfig.BlurEffect -> drawBlurEffect(cfg, scalar("blur",cfg.measureBlur), opacity, w, h, compTextures)
-            is LayerConfig.RgbSplitEffect -> drawRgbSplitEffect(cfg, audioSnap, scene, trackNorm, opacity, w, h, compTextures)
+            is LayerConfig.RgbSplitEffect -> drawRgbSplitEffect(cfg,measured("rgbSplit",cfg.splitMeasure),opacity,w,h,compTextures)
             is LayerConfig.MotionBlurEffect -> {
                 val gain=scalar("motionAmount",cfg.blurAmountMeasure)
                 drawMotionBlurEffect(c.id,cfg.copy(blurAmountMultiplier=(cfg.blurAmountMultiplier+gain).coerceIn(0f,3f)), com.vexo.studio.engine.scene.MotionPose(tx/w,ty/h,rot,sx,sy), deltaSec, opacity, w, h, compTextures)
@@ -989,7 +989,9 @@ class VexoGlRenderer(
         val radius=(cfg.blurRadius+reactive).coerceIn(0f,24f)*cfg.blurMultiplier.coerceIn(0f,8f)*.75f
         val hasGlow=listOf(cfg.layer1Scale to cfg.layer1ColorArgb,cfg.layer2Scale to cfg.layer2ColorArgb,cfg.layer3Scale to cfg.layer3ColorArgb).any{(scale,col)->scale>0f && (col ushr 24)>0}
         var filteredTex=srcTex
-        if(hasGlow&&radius>.001f){
+        val radial=cfg.filterMode!=com.vexo.studio.model.BlurFilterMode.GAUSSIAN
+        val radialStrength=(cfg.radialStrength*(1f+reactive/12f)).coerceIn(0f,1f)
+        if(hasGlow&&cfg.bloomIntensity>0f&&((if(radial)radialStrength else radius)>.001f||cfg.bloomThreshold>0f)){
         val shader = blurShader ?: return
         val ping = fboPool.obtain("blur_ping", w / 2, h / 2)
 
@@ -1012,11 +1014,16 @@ class VexoGlRenderer(
         val dx=kotlin.math.cos(angle);val dy=kotlin.math.sin(angle)
         GLES20.glUniform2f(shader.uniform("uDirection"), dx / ping.width, dy / ping.height)
         GLES20.glUniform1f(shader.uniform("uRadius"), radius)
+        GLES20.glUniform1i(shader.uniform("uFilterMode"),cfg.filterMode.ordinal)
+        GLES20.glUniform2f(shader.uniform("uCenter"),cfg.radialCenterX.coerceIn(0f,1f),1f-cfg.radialCenterY.coerceIn(0f,1f))
+        GLES20.glUniform1f(shader.uniform("uRadialStrength"),radialStrength)
+        GLES20.glUniform1f(shader.uniform("uAspect"),ping.width.toFloat()/ping.height)
+        GLES20.glUniform2f(shader.uniform("uBloom"),cfg.bloomThreshold.coerceIn(0f,1f),cfg.bloomKnee.coerceIn(0f,.5f))
         drawTexturedQuad(shader, 0f, 0f, ping.width.toFloat(), ping.height.toFloat(), flipV = true)
 
         filteredTex=ping.textureId
         val cross=cfg.blurCrossAxis.coerceIn(0f,2f)
-        if(cross>.001f){
+        if(!radial&&radius>.001f&&cross>.001f){
         val pong=fboPool.obtain("blur_pong",w/2,h/2)
         // Pass 2: perpendicular into pong
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, pong.fboId)
@@ -1024,6 +1031,7 @@ class VexoGlRenderer(
         clearBackground(0x00000000)
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, ping.textureId)
         GLES20.glUniform2f(shader.uniform("uDirection"), -dy*cross / pong.width, dx*cross / pong.height)
+        GLES20.glUniform2f(shader.uniform("uBloom"),0f,0f)
         drawTexturedQuad(shader, 0f, 0f, pong.width.toFloat(), pong.height.toFloat(), flipV = true)
         filteredTex=pong.textureId
         }
@@ -1067,8 +1075,9 @@ class VexoGlRenderer(
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D,filteredTex)
         GLES20.glUniform1f(img.uniform("uOpacity"),opacity)
+        GLES20.glUniform1f(img.uniform("uGlowGain"),cfg.bloomIntensity.coerceIn(0f,4f))
         fun glow(scale:Float,argb:Int) {
-            if(scale<=0f||(argb ushr 24)==0)return
+            if(scale<=0f||(argb ushr 24)==0||cfg.bloomIntensity<=0f)return
             val factor=scale.coerceIn(.01f,4f)
             val dx=w*(1f-factor)*.5f;val dy=h*(1f-factor)*.5f
             GLES20.glUniform4f(img.uniform("uTint"),((argb ushr 16) and 255)/255f,((argb ushr 8) and 255)/255f,(argb and 255)/255f,((argb ushr 24) and 255)/255f)
@@ -1077,6 +1086,7 @@ class VexoGlRenderer(
         glow(cfg.layer1Scale,cfg.layer1ColorArgb)
         glow(cfg.layer2Scale,cfg.layer2ColorArgb)
         glow(cfg.layer3Scale,cfg.layer3ColorArgb)
+        GLES20.glUniform1f(img.uniform("uGlowGain"),1f)
         GLES20.glUniform1i(img.uniform("uMaskEnabled"),0)
         GLES20.glUniform4f(img.uniform("uTint"),1f,1f,1f,1f)
 
@@ -1090,20 +1100,15 @@ class VexoGlRenderer(
 
     private fun drawRgbSplitEffect(
         cfg: LayerConfig.RgbSplitEffect,
-        audioSnap: AudioProviderSnapshot?,
-        scene: RenderSceneSnapshot,
-        trackNorm: Float,
+        delta: com.vexo.studio.engine.scene.EvaluatedPair,
         opacity: Float,
         w: Int,
         h: Int,
         compTextures: Map<Int, Int>
     ) {
         val srcTex = compTextures[cfg.targetCompositionIndex] ?: return
-        val delta = MeasureEvaluator.evaluatePair(
-            cfg.splitMeasure, scene.audioSnapshots[cfg.splitMeasure.providerIndex] ?: audioSnap, scene.totalTimeSec, scene.playingTimeSec, trackNorm, scene.isPlaying
-        )
-        val offX = (cfg.splitAmountX + delta.x * 0.015f) * cfg.splitMultiplier * 0.4f
-        val offY = (cfg.splitAmountY + delta.y * 0.015f) * cfg.splitMultiplier * 0.4f
+        val offX=((cfg.splitAmountX+delta.x*.015f)*cfg.splitMultiplier*.4f).coerceIn(-.25f,.25f)
+        val offY=((cfg.splitAmountY+delta.y*.015f)*cfg.splitMultiplier*.4f).coerceIn(-.25f,.25f)
 
         if(cfg.showUnblurredContentUnder) drawEffectSource(srcTex,opacity,w,h,BlendMode.ALPHA)
         val shader = rgbSplitShader ?: return
@@ -1113,7 +1118,10 @@ class VexoGlRenderer(
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, srcTex)
         GLES20.glUniform1i(shader.uniform("uTex"), 0)
-        GLES20.glUniform2f(shader.uniform("uOffset"), offX, offY)
+        GLES20.glUniform2f(shader.uniform("uOffset"),offX,offY)
+        GLES20.glUniform1i(shader.uniform("uAberrationMode"),cfg.aberrationMode.ordinal)
+        GLES20.glUniform1f(shader.uniform("uMix"),cfg.aberrationMix.coerceIn(0f,1f))
+        GLES20.glUniform2f(shader.uniform("uCenter"),cfg.aberrationCenterX.coerceIn(0f,1f),1f-cfg.aberrationCenterY.coerceIn(0f,1f))
         fun setRgb(name: String, argb: Int) {
             GLES20.glUniform3f(
                 shader.uniform(name),
@@ -1529,6 +1537,7 @@ class VexoGlRenderer(
 
     private fun resetImageState(shader: GlShaderProgram) {
         shader.use()
+        GLES20.glUniform1f(shader.uniform("uGlowGain"),1f)
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
         GLES20.glUniform1i(shader.uniform("uTex"),0)
         GLES20.glUniform1i(shader.uniform("uMaskEnabled"),0)

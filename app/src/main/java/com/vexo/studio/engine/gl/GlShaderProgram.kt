@@ -97,6 +97,7 @@ object VexoShaders {
         varying vec2 vUv;
         uniform sampler2D uTex;
         uniform vec4 uTint;
+        uniform float uGlowGain;
         uniform float uSaturation;
         uniform int uShape;
         uniform int uColorKeyEnabled;
@@ -240,7 +241,7 @@ object VexoShaders {
                 float coverage=1.0-smoothstep(max(0.0,uAperture.y-uAperture.z),uAperture.y,d);
                 alpha*=mix(coverage,1.0-coverage,uAperture.w);
             }
-            gl_FragColor = vec4(satColor * uTint.rgb * alpha, alpha);
+            gl_FragColor = vec4(satColor * uTint.rgb * alpha * uGlowGain, alpha * min(1.0,uGlowGain));
         }
     """
 
@@ -275,6 +276,11 @@ object VexoShaders {
         uniform sampler2D uTex;
         uniform vec2 uDirection;
         uniform float uRadius;
+        uniform int uFilterMode;
+        uniform vec2 uCenter;
+        uniform float uRadialStrength;
+        uniform float uAspect;
+        uniform vec2 uBloom;
         void main() {
             vec4 sum = vec4(0.0);
             float weightSum = 0.0;
@@ -282,8 +288,24 @@ object VexoShaders {
             for(int i=-6;i<=6;i++){
                 float x=float(i);
                 float weight=exp(-0.5*x*x/6.25);
-                vec2 uv=clamp(vUv+uDirection*uRadius*x/3.0,0.0,1.0);
-                sum+=texture2D(uTex,uv)*weight;
+                float t=x/6.0;
+                vec2 uv=vUv+uDirection*uRadius*x/3.0;
+                if(uFilterMode==1)uv=uCenter+(vUv-uCenter)*(1.0+t*uRadialStrength);
+                else if(uFilterMode==2){
+                    vec2 p=vUv-uCenter;
+                    p.x*=uAspect;
+                    float a=t*uRadialStrength*3.14159265;
+                    p=vec2(cos(a)*p.x-sin(a)*p.y,sin(a)*p.x+cos(a)*p.y);
+                    p.x/=max(0.001,uAspect);
+                    uv=uCenter+p;
+                }
+                vec4 v=texture2D(uTex,clamp(uv,0.0,1.0));
+                if(uBloom.x>0.0){
+                    float lum=dot(v.rgb,vec3(0.2126,0.7152,0.0722));
+                    float knee=max(0.001,uBloom.y);
+                    v*=smoothstep(max(0.0,uBloom.x-knee),uBloom.x+knee,lum);
+                }
+                sum+=v*weight;
                 weightSum+=weight;
             }
             gl_FragColor=sum/weightSum;
@@ -299,14 +321,24 @@ object VexoShaders {
         uniform vec3 uColor1;
         uniform vec3 uColor2;
         uniform float uOpacity;
+        uniform int uAberrationMode;
+        uniform float uMix;
+        uniform vec2 uCenter;
+        vec4 sampleOutside(vec2 uv){
+            if(uAberrationMode!=0 && (uv.x<0.0||uv.x>1.0||uv.y<0.0||uv.y>1.0))return vec4(0.0);
+            return texture2D(uTex,clamp(uv,0.0,1.0));
+        }
         void main() {
-            vec4 r = texture2D(uTex, clamp(vUv + uOffset, 0.0, 1.0));
-            vec4 g = texture2D(uTex, vUv);
-            vec4 b = texture2D(uTex, clamp(vUv - uOffset, 0.0, 1.0));
+            vec2 offset=uOffset;
+            if(uAberrationMode==2)offset=(vUv-uCenter)*uOffset*4.0;
+            vec4 r=sampleOutside(vUv+offset);
+            vec4 g=texture2D(uTex,vUv);
+            vec4 b=sampleOutside(vUv-offset);
             vec3 rgb = r.rgb * uColor0 * 0.5 + g.rgb * uColor1 * 0.5 + b.rgb * uColor2 * 0.5 +
                        vec3(r.r, g.g, b.b) * 0.5;
-            float a = max(r.a, max(g.a, b.a)) * uOpacity;
-            gl_FragColor = vec4(rgb * uOpacity, a);
+            if(uAberrationMode!=0)rgb=r.r*uColor0+g.g*uColor1+b.b*uColor2;
+            float a=max(r.a,max(g.a,b.a));
+            gl_FragColor=mix(g,vec4(rgb,a),clamp(uMix,0.0,1.0))*uOpacity;
         }
     """
 

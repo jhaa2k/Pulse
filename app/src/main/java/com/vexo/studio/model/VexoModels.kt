@@ -595,7 +595,14 @@ sealed interface LayerConfig {
         val unblurredBlendMode: BlendMode? = null,
         val glowBlendMode: BlendMode? = null,
         val blurAngleDeg: Float = 0f,
-        val blurCrossAxis: Float = 1f
+        val blurCrossAxis: Float = 1f,
+        val filterMode: BlurFilterMode = BlurFilterMode.GAUSSIAN,
+        val radialCenterX: Float = .5f,
+        val radialCenterY: Float = .5f,
+        val radialStrength: Float = .12f,
+        val bloomThreshold: Float = 0f,
+        val bloomKnee: Float = .1f,
+        val bloomIntensity: Float = 1f
     ) : LayerConfig
 
     @Serializable
@@ -641,6 +648,10 @@ sealed interface LayerConfig {
         val splitColor0Argb: Int = 0xFFFF0000.toInt(),
         val splitColor1Argb: Int = 0xFF00FF00.toInt(),
         val splitColor2Argb: Int = 0xFF0000FF.toInt(),
+        val aberrationMode: AberrationMode = AberrationMode.LEGACY,
+        val aberrationMix: Float = 1f,
+        val aberrationCenterX: Float = .5f,
+        val aberrationCenterY: Float = .5f,
         val blendModeContent: BlendMode = BlendMode.ADD,
         val showUnblurredContent: Boolean = false,
         val showUnblurredContentUnder: Boolean = false
@@ -1107,6 +1118,8 @@ data class CreativeImageConfig(
 
 @Serializable data class SpectrumPathPoint(val x: Float, val y: Float)
 @Serializable enum class CreativeSpectrumPath { LEGACY, ARC, SPIRAL, HEART, SINE, CIRCLE, OVAL, TRIANGLE, SQUARE, HEXAGON, STAR, FLOWER, FIGURE_EIGHT, BUTTERFLY, LISSAJOUS, DIAGONAL, ZIGZAG }
+@Serializable enum class BlurFilterMode { GAUSSIAN, RADIAL_ZOOM, RADIAL_SPIN }
+@Serializable enum class AberrationMode { LEGACY, CHANNEL_SPLIT, RADIAL }
 @Serializable enum class SpectrumReactiveSource { BEAT, BASS, MID, TREBLE, RMS, PEAK }
 @Serializable enum class SpectrumPeakStyle { LINE, DOT, DIAMOND }
 @Serializable enum class SpectrumGradientMode { PATH, HEIGHT, AMPLITUDE, ALTERNATING }
