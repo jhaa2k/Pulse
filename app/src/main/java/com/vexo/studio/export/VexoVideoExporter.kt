@@ -89,7 +89,9 @@ class VexoVideoExporter(private val context: Context) {
 
             val missing=com.vexo.studio.engine.scene.SceneGraph.missingReferences(project)
             check(missing.isEmpty()){val first=missing.first();"Missing composition ${first.targetIndex} referenced by ${first.layerName}. Repair the source before export."}
-            check(!com.vexo.studio.engine.scene.SceneGraph.resolve(project.copy(compositions=project.compositions.filter{it.index in com.vexo.studio.engine.scene.SceneGraph.reachable(project,0)})).hasCycle){"Final composition has a cyclic dependency"}
+            val graph=com.vexo.studio.engine.scene.SceneGraph.resolveOutput(project,0)
+            check(graph.order.isNotEmpty()){"Final composition (0) is missing"}
+            check(!graph.hasCycle){graph.cycleDetails?:"Final composition has a cyclic dependency"}
             val extractor = MediaExtractor()
             inputExtractor = extractor
             extractor.setDataSource(context, audioUri, null)

@@ -164,9 +164,15 @@ class VexoGlRenderer(
         initGlResources()
     }
 
+    private fun resetSizeDependentBuffers(){
+        staticBlurResults.clear()
+        fboPool.releaseAll()
+        previousMotion.clear();previousMotionTarget.clear();measureFilter.clear()
+    }
+
     override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
         if(viewportW!=width.coerceAtLeast(16)||viewportH!=height.coerceAtLeast(16)){
-            fboPool.releaseByPrefix("trail_");previousMotion.clear();previousMotionTarget.clear();measureFilter.clear()
+            resetSizeDependentBuffers()
         }
         viewportW = width.coerceAtLeast(16)
         viewportH = height.coerceAtLeast(16)
@@ -260,7 +266,7 @@ class VexoGlRenderer(
     ) {
         if (colorShader == null) initGlResources()
         if (viewportW != targetWidth.coerceAtLeast(16) || viewportH != targetHeight.coerceAtLeast(16)) {
-            fboPool.releaseByPrefix("trail_"); previousMotion.clear(); previousMotionTarget.clear(); measureFilter.clear()
+            resetSizeDependentBuffers()
         }
         viewportW = targetWidth.coerceAtLeast(16)
         viewportH = targetHeight.coerceAtLeast(16)
@@ -282,12 +288,13 @@ class VexoGlRenderer(
         }
 
         val compTextures = mutableMapOf<Int, Int>()
-        val displayIndex=if(isExportRenderer)0 else scene.previewCompositionIndex.takeIf{idx->scene.project.compositions.any{it.index==idx}}?:0
+        val displayIndex=if(isExportRenderer)0 else scene.previewCompositionIndex.takeIf{idx->scene.project.compositions.any{it.index==idx}}
+            ?:scene.project.compositions.firstOrNull{it.index==0}?.index?:scene.project.compositions.firstOrNull()?.index?:0
         if(graphProject!==scene.project || cachedDisplay!=displayIndex){
             if(graphProject!==scene.project)animationTracks=com.vexo.studio.engine.scene.PreparedAnimationIndex.create(scene.project.keyframes)
             graphProject=scene.project;cachedDisplay=displayIndex
-            cachedGraph=SceneGraph.resolve(scene.project)
-            cachedReachable=SceneGraph.reachable(scene.project,displayIndex)
+            cachedGraph=SceneGraph.resolveOutput(scene.project,displayIndex)
+            cachedReachable=checkNotNull(cachedGraph).order.mapTo(linkedSetOf()){it.index}
             cachedSlots=com.vexo.studio.engine.scene.CompositionSlotPlan.create(checkNotNull(cachedGraph).order,cachedReachable,displayIndex)
             val activeLayers=scene.project.compositions.filter{it.index in cachedReachable}.flatMap{it.layers}.filter{it.common.visible}
             cachedLayerIds=activeLayers.map{it.common.id}.toSet()
@@ -302,6 +309,7 @@ class VexoGlRenderer(
             if(activeLayers.none{(it.config as? LayerConfig.Image)?.let{cfg->cfg.blurEnabled||cfg.blurredBorder}==true}){staticBlurResults.clear();fboPool.releaseByPrefix("image_blur_")}
         }
         val resolved=checkNotNull(cachedGraph)
+        check(!resolved.hasCycle){resolved.cycleDetails?:"Cyclic composition dependency"}
         val slots=checkNotNull(cachedSlots)
         val smoothOffscreen=scene.project.exportSettings.offscreenSmoothEdges&&edgeShader!=null&&
             (if(isExportRenderer)scene.project.exportSettings.smoothEdges else !lowRamDevice)
@@ -328,7 +336,6 @@ class VexoGlRenderer(
         clearBackground(scene.project.canvas.backgroundColorArgb)
 
         val finalComp = resolved.order.firstOrNull { it.index == displayIndex }
-            ?: scene.project.compositions.firstOrNull()
         if (finalComp != null) {
             renderComposition(finalComp, scene, deltaSec, viewportW, viewportH, compTextures,applyCamera=true)
         }

@@ -38,17 +38,12 @@ object SceneGraph {
         comp.layers.any{it.common.visible && comp.index in referencesOf(it.config)}
 
     /** Only the dependency closure of the displayed composition needs rendering. */
-    fun reachable(project:VexoProject,root:Int):Set<Int>{
-        val nodes=project.compositions.associateBy{it.index}
-        val visited=linkedSetOf<Int>()
-        fun visit(index:Int){
-            val node=nodes[index]?:return
-            if(!visited.add(index))return
-            dependenciesOf(node).forEach(::visit)
-        }
-        visit(root)
-        return visited
-    }
+    fun reachable(project:VexoProject,root:Int):Set<Int> =
+        resolveOutput(project,root).order.mapTo(linkedSetOf()){it.index}
+
+    /** Resolve only the selected output. Unrelated draft cycles cannot affect it. */
+    fun resolveOutput(project:VexoProject,root:Int):ResolvedSceneGraph =
+        resolveRoots(project,listOf(root))
 
     data class MissingReference(val compositionIndex:Int,val layerName:String,val targetIndex:Int)
     /** Inspect only active dependencies for the requested output, not unused draft compositions. */
@@ -62,45 +57,50 @@ object SceneGraph {
         }
     }
 
-    fun resolve(project: VexoProject): ResolvedSceneGraph {
-        val byIndex = project.compositions.associateBy { it.index }
-        val state = mutableMapOf<Int, Int>() // 0=unvisited, 1=visiting, 2=visited
-        val result = mutableListOf<CompositionNode>()
-        var cycleDetected = false
-        var cycleMsg: String? = null
+    fun resolve(project: VexoProject): ResolvedSceneGraph =
+        resolveRoots(project,listOf(0)+project.compositions.map{it.index})
 
-        fun dfs(idx: Int) {
-            val st = state[idx] ?: 0
-            if (st == 2) return
-            if (st == 1) {
-                cycleDetected = true
-                cycleMsg = "Cycle detected involving composition:$idx"
-                return
-            }
-            val node = byIndex[idx] ?: return
-            if (hasSelfReference(node)) {
-                cycleDetected = true
-                cycleMsg = "Composition $idx references itself"
-            }
-            state[idx] = 1
-            for (dep in dependenciesOf(node)) {
-                if (byIndex.containsKey(dep)) {
-                    dfs(dep)
+    private data class Visit(val node:CompositionNode,val edges:Iterator<Int>)
+
+    private fun resolveRoots(project:VexoProject,roots:List<Int>):ResolvedSceneGraph {
+        val byIndex=project.compositions.associateBy{it.index}
+        val state=mutableMapOf<Int,Int>()
+        val order=mutableListOf<CompositionNode>()
+        val stack=ArrayDeque<Visit>()
+        var cycleMsg:String?=null
+
+        fun enter(node:CompositionNode){
+            state[node.index]=1
+            // Retain self edges so the same cycle detection handles every reference.
+            val edges=node.layers.asSequence().filter{it.common.visible}
+                .flatMap{referencesOf(it.config).asSequence()}.distinct().iterator()
+            stack.addLast(Visit(node,edges))
+        }
+
+        for(root in roots){
+            val node=byIndex[root]?:continue
+            if(state[root]!=null)continue
+            enter(node)
+            while(stack.isNotEmpty()){
+                val top=stack.last()
+                if(!top.edges.hasNext()){
+                    state[top.node.index]=2
+                    order.add(top.node)
+                    stack.removeLast()
+                    continue
+                }
+                val dep=top.edges.next()
+                val target=byIndex[dep]?:continue
+                when(state[dep]){
+                    1->if(cycleMsg==null){
+                        cycleMsg=if(dep==top.node.index)"Composition $dep references itself"
+                            else "Cycle detected involving composition:$dep"
+                    }
+                    2->Unit
+                    else->enter(target)
                 }
             }
-            state[idx] = 2
-            result.add(node)
         }
-
-        // Start from Final Composition (0) if present, then any remaining compositions
-        if (byIndex.containsKey(0)) {
-            dfs(0)
-        }
-        for (comp in project.compositions) {
-            if ((state[comp.index] ?: 0) == 0) {
-                dfs(comp.index)
-            }
-        }
-        return ResolvedSceneGraph(result, cycleDetected, cycleMsg)
+        return ResolvedSceneGraph(order,cycleMsg!=null,cycleMsg)
     }
 }
