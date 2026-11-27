@@ -387,7 +387,7 @@ fun ExportScreen(
         StudioChipSelector("Resolution", VideoResolution.entries, exp.resolution, { it.label }) { res ->
             vm.updateExportSettings { it.copy(resolution = res) }
         }
-        StudioChipSelector("Frame Rate", listOf(24, 25, 30, 60), exp.fps, { "$it FPS" }) { fps ->
+        StudioChipSelector("Frame Rate", listOf(24, 25, 30, 50, 60), exp.fps, { "$it FPS" }) { fps ->
             vm.updateExportSettings { it.copy(fps = fps) }
         }
         StudioSlider(

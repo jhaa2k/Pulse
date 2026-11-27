@@ -38,6 +38,7 @@ enum class VideoResolution(
     val label: String,
     val shortSide: Int
 ) {
+    SD_480("480p", 480),
     HD_720("720p", 720),
     FHD_1080("1080p", 1080),
     QHD_1440("1440p", 1440),

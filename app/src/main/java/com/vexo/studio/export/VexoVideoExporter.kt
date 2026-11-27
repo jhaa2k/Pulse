@@ -116,6 +116,7 @@ class VexoVideoExporter(private val context: Context) {
             }
             require(startUs < endUs && endUs <= durationUsRaw) { "Invalid audio trim range" }
             require(channels in 1..2) { "Export currently supports mono or stereo audio" }
+            require(sampleRate in 8000..192000) {"Unsupported audio sample rate: $sampleRate"}
             val requestedDurationUs = endUs - startUs
 
             val required=ExportBudget.workingBytes(requestedDurationUs,bitrate,settings.audioBitrateKbps.coerceIn(96,320)*1000,sampleRate,channels)
@@ -241,7 +242,7 @@ class VexoVideoExporter(private val context: Context) {
             val renderer = VexoGlRenderer(context, isExportRenderer = true,highResolutionTextures=settings.highResolutionTextures)
             glRenderer = renderer
             renderer.initGlResources()
-            val engines = project.audioProviders.associate { it.index to AudioProviderEngine(it) }
+            val engines = project.audioProviders.filter{it.enabled}.associate { it.index to AudioProviderEngine(it) }
 
             val activeMuxer = MediaMuxer(tempFile.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
             muxer = activeMuxer
@@ -416,7 +417,8 @@ class VexoVideoExporter(private val context: Context) {
                 val scene = RenderSceneSnapshot(
                     project = project,
                     audioSnapshots = audioSnapshots,
-                    trackMeta = trackMeta.copy(positionMs = (startUs / 1000L) + frameTimeNs / 1_000_000L),
+                    trackMeta = trackMeta.copy(positionMs = (startUs / 1000L) + frameTimeNs / 1_000_000L,
+                        durationMs=durationUsRaw/1000L),
                     isPlaying = true,
                     totalTimeSec = timeSec,
                     playingTimeSec = timeSec
@@ -521,9 +523,21 @@ class VexoVideoExporter(private val context: Context) {
         var inputDone=false
         var outputDone=false
         var bytesWritten=0L
+        var decodedContentFrames=0L
+        val expectedFrames=ExportPcmTimeline.durationFrames(endUs-startUs,sampleRate)
+        val silence=ByteArray(32768)
+        val scratch=ByteArray(32768)
         var lastProgress=android.os.SystemClock.elapsedRealtime()
         var lastReport=0L
         BufferedOutputStream(target.outputStream()).use { output ->
+            suspend fun pad(frames:Long){
+                var remaining=frames*frameBytes
+                while(remaining>0){
+                    currentCoroutineContext().ensureActive()
+                    val n=minOf(remaining,silence.size.toLong()).toInt()
+                    output.write(silence,0,n);bytesWritten+=n;remaining-=n
+                }
+            }
             while(!outputDone) {
                 currentCoroutineContext().ensureActive()
                 check(android.os.SystemClock.elapsedRealtime()-lastProgress<30_000L) { "Audio decoder stalled" }
@@ -547,13 +561,19 @@ class VexoVideoExporter(private val context: Context) {
                         val buf=decoder.getOutputBuffer(i)
                         if(buf!=null&&info.size>=frameBytes) {
                             val frames=info.size/frameBytes
-                            val startFrame=kotlin.math.ceil((startUs-info.presentationTimeUs)*sampleRate/1_000_000.0).toInt().coerceIn(0,frames)
-                            val endFrame=kotlin.math.ceil((endUs-info.presentationTimeUs)*sampleRate/1_000_000.0).toInt().coerceIn(startFrame,frames)
-                            val size=(endFrame-startFrame)*frameBytes
-                            if(size>0) {
-                                val chunk=ByteArray(size)
-                                buf.limit(info.offset+endFrame*frameBytes);buf.position(info.offset+startFrame*frameBytes)
-                                buf.get(chunk);output.write(chunk);bytesWritten+=size
+                            val placement=ExportPcmTimeline.place(info.presentationTimeUs,startUs,sampleRate,
+                                frames,bytesWritten/frameBytes,expectedFrames)
+                            if(placement.copyFrames>0){
+                                pad(placement.gapFrames)
+                                var remaining=placement.copyFrames*frameBytes
+                                buf.limit(info.offset+(placement.skipFrames+placement.copyFrames)*frameBytes)
+                                buf.position(info.offset+placement.skipFrames*frameBytes)
+                                while(remaining>0){
+                                    currentCoroutineContext().ensureActive()
+                                    val n=minOf(remaining,scratch.size)
+                                    buf.get(scratch,0,n);output.write(scratch,0,n);bytesWritten+=n;remaining-=n
+                                }
+                                decodedContentFrames+=placement.copyFrames
                             }
                         }
                         val now = android.os.SystemClock.elapsedRealtime()
@@ -566,6 +586,11 @@ class VexoVideoExporter(private val context: Context) {
                     lastProgress=android.os.SystemClock.elapsedRealtime()
                 }
             }
+            require(decodedContentFrames>0) {"No decoded audio in selected trim range"}
+            val tail=expectedFrames-bytesWritten/frameBytes
+            // Small codec padding/rounding discrepancies are safe; do not conceal truncated sources.
+            require(tail<=sampleRate/4L) {"Audio ended before the selected trim range"}
+            if(tail>0)pad(tail)
         }
         require(bytesWritten>0) {"No decoded audio in selected trim range"}
         onDecoded(1f)
