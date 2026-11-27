@@ -1877,44 +1877,61 @@ private fun TransformKeyframePanel(vm:StudioViewModel,ui:StudioUiState,layer:Lay
     var draggedTime by remember(layer.common.id,key,track){mutableStateOf<Long?>(null)}
     var dragTarget by remember(layer.common.id,key,track){mutableStateOf<Long?>(null)}
     var dragStartX by remember{mutableStateOf(0f)}
+    var zoom by rememberSaveable(layer.common.id){mutableStateOf(1f)}
+    var scroll by rememberSaveable(layer.common.id){mutableStateOf(0f)}
+    var page by remember(layer.common.id,key){mutableStateOf(0)}
+    val window=com.vexo.studio.engine.scene.TimelineWindow.create(duration,zoom,scroll)
+    val visibleFrames=frames.filter{it.timeMs in window.start..window.end}
+    val pages=((frames.size+19)/20).coerceAtLeast(1)
+    val currentPage=page.coerceIn(0,pages-1)
+    LaunchedEffect(frames,selectedFrame){if(selectedFrame!=null&&frames.none{it.timeMs==selectedFrame})selectedFrame=null}
     StudioChipSelector("Property",keys,key,{com.vexo.studio.engine.scene.LayerPropertyAnimation.label(it)}){selectedKey=it}
     StudioToggleRow("Snap to export frames",snap){snap=it}
     StudioChipSelector("Interpolation",com.vexo.studio.model.InterpolationType.entries,mode,{it.name}){mode=it}
     CurvePreview(mode)
     Text("Playhead: "+formatDuration(playback.positionMs),style=MaterialTheme.typography.labelMedium)
-    Text("Drag a diamond to move its time. Tap ruler to seek.",style=MaterialTheme.typography.labelSmall)
-    Canvas(Modifier.fillMaxWidth().height(44.dp).background(palette.panelElevated).pointerInput(duration,playback.durationMs){
-        if(playback.durationMs>0)detectTapGestures{p->vm.playbackController.seekTo((p.x/size.width.coerceAtLeast(1)*duration).toLong().coerceIn(0L,playback.durationMs))}
-    }.pointerInput(duration,track,snap,ui.project.exportSettings.fps){
+    StudioSlider("Timeline zoom",zoom,1f,16f,1f,"x",1f,onValueChange={zoom=it;scroll=com.vexo.studio.engine.scene.TimelineWindow.centerFraction(duration,it,playback.positionMs)})
+    if(zoom>1f)StudioSlider("Timeline scroll",scroll,0f,1f,0f,"",.01f,onValueChange={scroll=it})
+    TextButton(onClick={scroll=com.vexo.studio.engine.scene.TimelineWindow.centerFraction(duration,zoom,playback.positionMs)}){Text("CENTER PLAYHEAD")}
+    Text("Drag a diamond to move it. Tap a diamond to edit or ruler to seek.",style=MaterialTheme.typography.labelSmall)
+    Canvas(Modifier.fillMaxWidth().height(44.dp).background(palette.panelElevated).pointerInput(window,track,playback.durationMs){
+        detectTapGestures{p->
+            val hit=visibleFrames.minByOrNull{kotlin.math.abs(window.fraction(it.timeMs)*size.width-p.x)}
+                ?.takeIf{kotlin.math.abs(window.fraction(it.timeMs)*size.width-p.x)<=12.dp.toPx()}
+            if(hit!=null){selectedFrame=hit.timeMs;draft=hit.value.toString();mode=hit.interpolation}
+            else selectedFrame=null
+            if(playback.durationMs>0)vm.playbackController.seekTo((hit?.timeMs?:window.timeAt(p.x/size.width.coerceAtLeast(1))).coerceIn(0L,playback.durationMs))
+        }
+    }.pointerInput(window,track,snap,ui.project.exportSettings.fps){
         detectHorizontalDragGestures(onDragStart={p->
-            val closest=frames.minByOrNull{kotlin.math.abs(it.timeMs.toFloat()/duration*size.width-p.x)}
-            if(closest!=null&&kotlin.math.abs(closest.timeMs.toFloat()/duration*size.width-p.x)<=18.dp.toPx()){
-                draggedTime=closest.timeMs;dragTarget=closest.timeMs;dragStartX=p.x-closest.timeMs.toFloat()/duration*size.width
+            val closest=visibleFrames.minByOrNull{kotlin.math.abs(window.fraction(it.timeMs)*size.width-p.x)}
+            if(closest!=null&&kotlin.math.abs(window.fraction(closest.timeMs)*size.width-p.x)<=18.dp.toPx()){
+                draggedTime=closest.timeMs;dragTarget=closest.timeMs;dragStartX=p.x-window.fraction(closest.timeMs)*size.width
             }
         },onDragEnd={
             val old=draggedTime;val next=dragTarget
-            if(old!=null&&next!=null&&old!=next)vm.moveTransformKeyframe(layer.common.id,key,old,snapTime(next))
+            if(old!=null&&next!=null&&old!=next&&vm.moveTransformKeyframe(layer.common.id,key,old,snapTime(next))){selectedFrame=snapTime(next)}
             draggedTime=null;dragTarget=null
         },onDragCancel={draggedTime=null;dragTarget=null}){change,_->
-            if(draggedTime!=null){change.consume();dragTarget=(((change.position.x-dragStartX)/size.width.coerceAtLeast(1))*duration).toLong().coerceIn(0L,duration)}
+            if(draggedTime!=null){change.consume();dragTarget=window.timeAt((change.position.x-dragStartX)/size.width.coerceAtLeast(1))}
         }
     }){
         val y=size.height*.5f
         drawLine(palette.border,Offset(0f,y),Offset(size.width,y),2.dp.toPx())
-        frames.forEach{frame->
+        visibleFrames.forEach{frame->
             val t=if(frame.timeMs==draggedTime)dragTarget?:frame.timeMs else frame.timeMs
-            val x=t.toFloat()/duration*size.width
+            val x=window.fraction(t)*size.width
             val r=if(frame.timeMs==draggedTime)6.dp.toPx() else 4.dp.toPx()
             val diamond=androidx.compose.ui.graphics.Path().apply{moveTo(x,y-r);lineTo(x+r,y);lineTo(x,y+r);lineTo(x-r,y);close()}
             drawPath(diamond,if(frame.timeMs==selectedFrame)palette.textPrimary else palette.accent)
         }
-        val x=(playback.positionMs.toFloat()/duration).coerceIn(0f,1f)*size.width
-        drawLine(palette.textPrimary,Offset(x,0f),Offset(x,size.height),1.dp.toPx())
+        val x=window.fraction(playback.positionMs)*size.width
+        if(playback.positionMs in window.start..window.end)drawLine(palette.textPrimary,Offset(x,0f),Offset(x,size.height),1.dp.toPx())
     }
     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())){
         TextButton(enabled=frames.any{it.timeMs<playback.positionMs},onClick={frames.lastOrNull{it.timeMs<playback.positionMs}?.let{vm.playbackController.seekTo(it.timeMs)}}){Text("PREV KEY")}
         TextButton(enabled=frames.any{it.timeMs>playback.positionMs},onClick={frames.firstOrNull{it.timeMs>playback.positionMs}?.let{vm.playbackController.seekTo(it.timeMs)}}){Text("NEXT KEY")}
-        TextButton(onClick={draft=com.vexo.studio.engine.scene.KeyframeEvaluator.evaluate(track,playback.positionMs,com.vexo.studio.engine.scene.LayerPropertyAnimation.value(layer,key)).toString()}){Text("READ VALUE")}
+        TextButton(onClick={draft=com.vexo.studio.engine.scene.KeyframeEvaluator.evaluate(track,selectedFrame?:playback.positionMs,com.vexo.studio.engine.scene.LayerPropertyAnimation.value(layer,key)).toString()}){Text("READ VALUE")}
     }
     val editingTime=selectedFrame?.takeIf{t->frames.any{it.timeMs==t}}
     if(editingTime!=null){
@@ -1929,7 +1946,12 @@ private fun TransformKeyframePanel(vm:StudioViewModel,ui:StudioUiState,layer:Lay
         TextButton(enabled=value!=null&&!layer.common.locked,onClick={value?.let{vm.putTransformKeyframe(layer.common.id,key,editingTime?:snapTime(playback.positionMs),it,mode)}}){Text("ADD / UPDATE KEY")}
         TextButton(enabled=track!=null&&!layer.common.locked,onClick={vm.removeTransformKeyframe(layer.common.id,key,null);selectedFrame=null}){Text("CLEAR")}
     }
-    frames.take(500).forEach{frame->
+    if(pages>1)Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically){
+        TextButton(enabled=currentPage>0,onClick={page=currentPage-1}){Text("PREVIOUS")}
+        Text("${currentPage+1} / $pages",style=MaterialTheme.typography.labelSmall)
+        TextButton(enabled=currentPage<pages-1,onClick={page=currentPage+1}){Text("NEXT")}
+    }
+    frames.drop(currentPage*20).take(20).forEach{frame->
         Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
             Text(formatDuration(frame.timeMs)+" · "+("%.3f".format(frame.value))+" · "+frame.interpolation.name,modifier=Modifier.weight(1f),style=MaterialTheme.typography.labelSmall)
             TextButton(onClick={selectedFrame=frame.timeMs;vm.playbackController.seekTo(frame.timeMs);draft=frame.value.toString();mode=frame.interpolation}){Text("EDIT")}
@@ -1941,7 +1963,7 @@ private fun TransformKeyframePanel(vm:StudioViewModel,ui:StudioUiState,layer:Lay
         val value=timeDraft.toDoubleOrNull()?.takeIf{it.isFinite()&&it>=0&&it<=86400}
         AlertDialog(onDismissRequest={editTime=null},title={Text("MOVE KEYFRAME")},text={
             OutlinedTextField(timeDraft,{timeDraft=it.take(16)},label={Text("Time in seconds")},singleLine=true)
-        },confirmButton={TextButton(enabled=value!=null,onClick={value?.let{vm.moveTransformKeyframe(layer.common.id,key,old,snapTime((it*1000).toLong()))};editTime=null}){Text("MOVE")}},dismissButton={TextButton(onClick={editTime=null}){Text("CANCEL")}})
+        },confirmButton={TextButton(enabled=value!=null,onClick={value?.let{val next=snapTime((it*1000).toLong());if(vm.moveTransformKeyframe(layer.common.id,key,old,next)){selectedFrame=next;editTime=null}}}){Text("MOVE")}},dismissButton={TextButton(onClick={editTime=null}){Text("CANCEL")}})
     }
 
 }

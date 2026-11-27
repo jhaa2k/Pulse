@@ -4,7 +4,7 @@ import kotlinx.serialization.Serializable
 import kotlin.math.roundToLong
 
 enum class MotionRecipe(val label:String){
-    FADE_IN("Fade in"),FADE_OUT("Fade out"),SLIDE_UP("Slide up"),POP("Pop"),SPIN("Spin"),PULSE("Pulse"),SHAKE("Shake"),BOUNCE("Bounce")
+    FADE_IN("Fade in"),FADE_OUT("Fade out"),SLIDE_UP("Slide up"),POP("Pop"),SPIN("Spin"),PULSE("Pulse"),SHAKE("Shake"),BOUNCE("Bounce"),ZOOM_OUT("Zoom out"),DRIFT("Drift"),IMPACT("Impact"),SWAY("Sway")
 }
 @Serializable data class RelativeMotionTrack(val propertyKey:String,val keys:List<Keyframe>)
 @Serializable data class SavedMotionPreset(val name:String,val durationMs:Long,val tracks:List<RelativeMotionTrack>)
@@ -27,6 +27,10 @@ object MotionPresets {
             MotionRecipe.PULSE->listOf("scaleX","scaleY").map{key->val b=TransformAnimation.value(layer,key);track(key,listOf(pt(0f,b,InterpolationType.EASE_IN_OUT),pt(.5f,b*(1f+.25f*s),InterpolationType.EASE_IN_OUT),pt(1f,b)))}
             MotionRecipe.SHAKE->listOf(track("posX",listOf(pt(0f,layer.posX,InterpolationType.LINEAR),pt(.2f,layer.posX-.03f*s,InterpolationType.LINEAR),pt(.4f,layer.posX+.03f*s,InterpolationType.LINEAR),pt(.6f,layer.posX-.02f*s,InterpolationType.LINEAR),pt(.8f,layer.posX+.01f*s,InterpolationType.LINEAR),pt(1f,layer.posX))))
             MotionRecipe.BOUNCE->listOf(track("posY",listOf(pt(0f,layer.posY-.25f*s,InterpolationType.BOUNCE_OUT),pt(1f,layer.posY))))
+            MotionRecipe.ZOOM_OUT->listOf("scaleX","scaleY").map{key->val b=TransformAnimation.value(layer,key);track(key,listOf(pt(0f,b*(1f+.6f*s),InterpolationType.EASE_OUT),pt(1f,b)))}
+            MotionRecipe.DRIFT->listOf(track("posX",listOf(pt(0f,layer.posX-.05f*s,InterpolationType.EASE_IN_OUT),pt(1f,layer.posX+.05f*s))))
+            MotionRecipe.IMPACT->listOf("scaleX","scaleY").map{key->val b=TransformAnimation.value(layer,key);track(key,listOf(pt(0f,b),pt(.12f,b*(1f+.35f*s),InterpolationType.EASE_OUT),pt(.45f,b*(1f-.08f*s),InterpolationType.EASE_IN_OUT),pt(1f,b)))}
+            MotionRecipe.SWAY->listOf(track("rotationDeg",listOf(pt(0f,layer.rotationDeg,InterpolationType.EASE_IN_OUT),pt(.25f,layer.rotationDeg-12f*s,InterpolationType.EASE_IN_OUT),pt(.75f,layer.rotationDeg+12f*s,InterpolationType.EASE_IN_OUT),pt(1f,layer.rotationDeg))))
         }
     }
     fun capture(name:String,tracks:List<KeyframeTrack>):SavedMotionPreset?{

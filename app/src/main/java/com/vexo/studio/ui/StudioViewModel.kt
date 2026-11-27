@@ -323,17 +323,18 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         if(frames.size>500)return
         commitProjectChange(p.copy(keyframes=p.keyframes.filterNot{it.targetLayerId==layerId&&it.propertyKey==property}+com.vexo.studio.model.KeyframeTrack(layerId,property,frames)))
     }
-    fun moveTransformKeyframe(layerId:String,key:String,oldTime:Long,newTime:Long){
+    fun moveTransformKeyframe(layerId:String,key:String,oldTime:Long,newTime:Long):Boolean{
         val p=_uiState.value.project
-        if(p.compositions.none{c->c.layers.any{it.common.id==layerId&&!it.common.locked}})return
+        if(p.compositions.none{c->c.layers.any{it.common.id==layerId&&!it.common.locked}})return false
         val property=com.vexo.studio.engine.scene.LayerPropertyAnimation.trackKey(key)
-        val track=p.keyframes.firstOrNull{it.targetLayerId==layerId&&it.propertyKey==property}?:return
-        val frame=track.keyframes.firstOrNull{it.timeMs==oldTime}?:return
+        val track=p.keyframes.firstOrNull{it.targetLayerId==layerId&&it.propertyKey==property}?:return false
+        val frame=track.keyframes.firstOrNull{it.timeMs==oldTime}?:return false
         val t=newTime.coerceIn(0L,86400000L)
-        if(t==oldTime)return
-        if(track.keyframes.any{it.timeMs==t}){_uiState.value=_uiState.value.copy(statusBanner="A keyframe already exists at that time");return}
+        if(t==oldTime)return true
+        if(track.keyframes.any{it.timeMs==t}){_uiState.value=_uiState.value.copy(statusBanner="A keyframe already exists at that time");return false}
         val edited=track.copy(keyframes=(track.keyframes.filterNot{it.timeMs==oldTime}+frame.copy(timeMs=t)).sortedBy{it.timeMs})
         commitProjectChange(p.copy(keyframes=p.keyframes.map{if(it==track)edited else it}))
+        return true
     }
 
     fun removeTransformKeyframe(layerId:String,key:String,time:Long?){
