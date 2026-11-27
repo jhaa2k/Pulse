@@ -845,13 +845,8 @@ class VexoGlRenderer(
         h: Int
     ) {
         val meta=scene.trackMeta
-        val resolved = cfg.text
-            .replace("{Title}", meta.title, ignoreCase = true)
-            .replace("{Artist}", meta.artist, ignoreCase = true)
-            .replace("{Album}", meta.album, ignoreCase = true)
-            .replace("{Time}", formatTimeMs(meta.positionMs), ignoreCase = true)
-            .replace("{Duration}",formatTimeMs(meta.durationMs),ignoreCase=true)
-            .replace("{Progress}",if(meta.durationMs>0) ((meta.positionMs*100L/meta.durationMs).coerceIn(0L,100L)).toString()+"%" else "0%",ignoreCase=true)
+        val resolved = com.vexo.studio.engine.scene.LegacyImageMath.resolveTrackText(
+            cfg.text,meta.title,meta.artist,meta.album,meta.positionMs,meta.durationMs)
 
         val key = "txt_${resolved}_${cfg.fontSize}_${cfg.bold}_${cfg.italic}_${cfg.colorArgb}_${cfg.alignment}_${cfg.letterSpacing}_${cfg.lineSpacing}_${cfg.strokeWidth}_${cfg.strokeColorArgb}_${cfg.shadowRadius}_${cfg.shadowColorArgb}_${cfg.fontAssetUri}_${cfg.fontFamily}_${cfg.fontWeight}"
         val texId = textureCache[key] ?: run {
@@ -1491,6 +1486,8 @@ class VexoGlRenderer(
 
     private fun uploadArtworkTexture(bitmap: Bitmap?) {
         if (artworkTexId != 0) {
+            // GLES may reuse a deleted texture ID for the replacement artwork.
+            staticBlurResults.entries.removeAll{it.value.first.source==artworkTexId}
             bitmapSizes.remove(artworkTexId);bitmapKeyColors.remove(artworkTexId)
             GLES20.glDeleteTextures(1, intArrayOf(artworkTexId), 0)
             artworkTexId = 0

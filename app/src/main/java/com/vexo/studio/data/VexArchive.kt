@@ -167,7 +167,12 @@ object VexArchive {
                             else if(c.sourceType==com.vexo.studio.model.ImageSourceType.IMPORTED)c.copy(sourceType=com.vexo.studio.model.ImageSourceType.ALBUM_ART,customUri=null,maskImage=safe(c.maskImage))
                             else c.copy(maskImage=safe(c.maskImage))
                         }
-                        is LayerConfig.Text -> c.copy(fontAssetUri=linked(c.fontAssetUri))
+                        is LayerConfig.Text -> {
+                            val ref=c.fontAssetUri
+                            val font=linked(ref)
+                            require(font!=null||ref==null||(!ref.startsWith("local:")&&!ref.startsWith("asset:"))){"Missing bundled font: $ref"}
+                            c.copy(fontAssetUri=font)
+                        }
                         is LayerConfig.Particles -> c.copy(customImage=safe(c.customImage).ifBlank{"internalres:particle_circle_blur4"})
                         is LayerConfig.BlurEffect -> c.copy(maskImage=safe(c.maskImage))
                         else -> c

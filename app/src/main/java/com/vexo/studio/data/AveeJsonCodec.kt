@@ -395,7 +395,7 @@ object AveeJsonCodec {
                 sourceCompositionIndex = compIdx,
                 colorArgb = obj.propInt("vexoTint", parseHsla4fToArgb(obj.propString("Color", "1 1 1 1"))),
                 colorToArgb = obj.propInt("vexoTintTo", parseHsla4fToArgb(obj.propString("ColorTo", "1 1 1 1"))),
-                measureColorBlend = parseMeasure(obj["MeasureColorBlend"]),
+                measureColorBlend = parseMeasure(obj.rawProp("MeasureColorBlend")),
                 shape = ImageShape.fromAvee(obj.propString("Shape", "None")),
                 keepAspectRatio = obj.propBool("keepAspectRatio", false),
                 keepAspectRatioAndCropToFit = obj.propBool("keepAspectRatioAndCropToFit", false),
@@ -469,7 +469,10 @@ object AveeJsonCodec {
             text = obj.propString("text", "{Artist}"),
             colorArgb = obj.propInt("color", -1),
             fontSize = obj.propInt("fontSize", 56).coerceIn(8, 120),
-            fontAssetUri = obj.propString("typeFace", "").ifBlank { null },
+            fontAssetUri = obj.propString("typeFace", "").takeIf{it.isNotBlank()&&!it.startsWith("internal_")},
+            legacyTypeface = obj.propString("typeFace","").takeIf{it.startsWith("internal_")},
+            fontFamily=obj.propString("vexoFontFamily",if(obj.propString("typeFace","").startsWith("internal_"))"Roboto" else "Poppins"),
+            fontWeight=obj.propInt("vexoFontWeight",0),
             bold = obj.propBool("bold", true), italic = obj.propBool("italic", false),
             alignment = obj.propInt("alignment", 0), letterSpacing = obj.propFloat("letterSpacing", 0.04f),
             lineSpacing = obj.propFloat("lineSpacing", 1.2f), strokeWidth = obj.propFloat("strokeWidth", 0f),
@@ -726,6 +729,8 @@ object AveeJsonCodec {
                 put("flipU", propObj(if (cfg.flipU) 1 else 0)); put("flipV", propObj(if (cfg.flipV) 1 else 0))
                 put("MaskImage", propObj(cfg.maskImage)); put("maskMode", propObj(cfg.maskMode.aveeName))
                 put("vexoTint", propObj(cfg.colorArgb)); put("vexoTintTo", propObj(cfg.colorToArgb))
+                put("Color",encodeLegacyColor(c.extraFields,"Color",cfg.colorArgb))
+                put("ColorTo",encodeLegacyColor(c.extraFields,"ColorTo",cfg.colorToArgb))
                 put("MeasureColorBlend", encodeMeasure(cfg.measureColorBlend))
                 put("Shape", propObj(cfg.shape.aveeName))
                 put("keepAspectRatio", propObj(if (cfg.keepAspectRatio) 1 else 0))
@@ -734,6 +739,9 @@ object AveeJsonCodec {
                 put("colorKey", propObj(cfg.colorKeyArgb))
                 put("blurEnabled", propObj(if (cfg.blurEnabled) 1 else 0))
                 put("blurRadius", propObj(cfg.blurRadius))
+                put("blurDivider",propObj(cfg.blurDivider))
+                put("blurredBorder",propObj(if(cfg.blurredBorder)1 else 0))
+                put("autoDetectColorKey",propObj(if(cfg.autoDetectColorKey)1 else 0))
                 put("opacityStrength", propObj(cfg.opacityStrength))
                 put("transparencyStrength", propObj(cfg.transparencyStrength))
                 put("saturation", propObj("Constant ${cfg.saturation} ${cfg.saturation}"))
@@ -742,6 +750,9 @@ object AveeJsonCodec {
                 put("text", propObj(cfg.text))
                 put("color", propObj(cfg.colorArgb))
                 put("fontSize", propObj(cfg.fontSize))
+                put("typeFace",propObj(cfg.fontAssetUri?:cfg.legacyTypeface.orEmpty()))
+                put("vexoFontFamily",propObj(cfg.fontFamily))
+                put("vexoFontWeight",propObj(cfg.fontWeight))
                 put("bold", propObj(if (cfg.bold) 1 else 0)); put("italic", propObj(if (cfg.italic) 1 else 0))
                 put("alignment", propObj(cfg.alignment)); put("letterSpacing", propObj(cfg.letterSpacing)); put("lineSpacing", propObj(cfg.lineSpacing))
                 put("strokeWidth", propObj(cfg.strokeWidth)); put("strokeColor", propObj(cfg.strokeColorArgb)); put("shadowRadius", propObj(cfg.shadowRadius))
@@ -880,6 +891,7 @@ object AveeJsonCodec {
      * Converts Avee "H S L A" normalized floats (0..1) to Android ARGB Int.
      */
     fun parseHsla4fToArgb(raw: String): Int {
+        raw.trim().toIntOrNull()?.let{return it}
         val tokens = raw.trim().split(Regex("\\s+"))
         if(tokens.size<4) return 0xFFFFFFFF.toInt()
         val parts=tokens.take(4).map { it.toFloatOrNull()?.takeIf { v -> v.isFinite() } ?: return 0xFFFFFFFF.toInt() }
@@ -903,6 +915,13 @@ object AveeJsonCodec {
         val g = ((g1 + m) * 255f).roundToInt().coerceIn(0, 255)
         val b = ((b1 + m) * 255f).roundToInt().coerceIn(0, 255)
         return (a shl 24) or (r shl 16) or (g shl 8) or b
+    }
+
+    private fun encodeLegacyColor(original:Map<String,String>,key:String,argb:Int):JsonObject {
+        val raw=original.entries.firstOrNull{it.key.equals(key,true)}?.value
+        val value=LegacyAssetReferences.rawValue(raw)
+        return if(value?.toIntOrNull()!=null)propObj(argb)
+            else propObj(com.vexo.studio.engine.scene.LegacyImageMath.argbToHsla(argb))
     }
 
     private fun extractExtraFields(obj: JsonObject, known: Set<String>): Map<String, String> {

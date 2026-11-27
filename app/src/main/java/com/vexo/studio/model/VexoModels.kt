@@ -507,7 +507,8 @@ sealed interface LayerConfig {
         val animationAudio: MeasureConfig = MeasureConfig(measureWhat=MeasureWhat.BEAT,amountA=.3f,amountB=.3f),
         val shadowColorArgb: Int = 0xCC000000.toInt(),
         val fontFamily:String="Poppins",
-        val fontWeight:Int=0
+        val fontWeight:Int=0,
+        val legacyTypeface:String?=null
     ) : LayerConfig
 
     @Serializable
