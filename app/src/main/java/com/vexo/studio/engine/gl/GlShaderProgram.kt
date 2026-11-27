@@ -314,15 +314,30 @@ object VexoShaders {
         precision mediump float;
         uniform sampler2D uTex;
         uniform vec2 uMotion;
+        uniform vec2 uMotionExtra;
+        uniform float uAspect;
         uniform float uOpacity;
         varying vec2 vUv;
         void main(){
             vec4 sum=vec4(0.0);
-            for(int i=0;i<9;i++){
-                float t=float(i)/8.0;
-                sum+=texture2D(uTex,clamp(vUv-uMotion*t,0.0,1.0))*(1.0-t*0.5);
+            float weights=0.0;
+            for(int i=0;i<13;i++){
+                float t=float(i)/12.0;
+                vec2 p=vUv-0.5;
+                p.x*=uAspect;
+                float angle=uMotionExtra.x*t;
+                float cs=cos(angle),sn=sin(angle);
+                p=vec2(cs*p.x-sn*p.y,sn*p.x+cs*p.y);
+                p*=exp(-uMotionExtra.y*t);
+                p.x/=max(0.001,uAspect);
+                vec2 uv=p+0.5-uMotion*t;
+                float weight=1.0-t*0.5;
+                // Outside the composition is transparent, not a smeared edge pixel.
+                if(uv.x>=0.0 && uv.x<=1.0 && uv.y>=0.0 && uv.y<=1.0)
+                    sum+=texture2D(uTex,uv)*weight;
+                weights+=weight;
             }
-            gl_FragColor=sum*(uOpacity/6.75);
+            gl_FragColor=sum*(uOpacity/weights);
         }
     """
     const val MIRROR_FRAGMENT = """

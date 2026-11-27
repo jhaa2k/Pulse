@@ -587,7 +587,9 @@ sealed interface LayerConfig {
         val maskImage: String = "internalres:transparent",
         val measureBlur: MeasureConfig = MeasureConfig(),
         val unblurredBlendMode: BlendMode? = null,
-        val glowBlendMode: BlendMode? = null
+        val glowBlendMode: BlendMode? = null,
+        val blurAngleDeg: Float = 0f,
+        val blurCrossAxis: Float = 1f
     ) : LayerConfig
 
     @Serializable
@@ -601,6 +603,9 @@ sealed interface LayerConfig {
         val trailPersistence: Float = 0.65f,
         val blurAmountMeasure: MeasureConfig = MeasureConfig(),
         val effectBlendMode: BlendMode? = null,
+        val manualRotationDeg: Float = 0f,
+        val manualZoom: Float = 0f,
+        val includeRotationAndZoom: Boolean = false,
         val blendModeContent: BlendMode = BlendMode.ADD,
         val colorArgb: Int = 0xFFFFFFFF.toInt(),
         val showUnblurredContent: Boolean = false,

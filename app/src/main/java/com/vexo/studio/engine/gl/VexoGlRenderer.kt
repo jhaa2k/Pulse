@@ -86,7 +86,8 @@ class VexoGlRenderer(
     private var mirrorShader: GlShaderProgram? = null
     private var particleShader: GlShaderProgram? = null
     private var motionShader: GlShaderProgram? = null
-    private val previousMotion=mutableMapOf<String,Pair<Float,Float>>()
+    private val previousMotion=mutableMapOf<String,com.vexo.studio.engine.scene.MotionPose>()
+    private val measureFilter=com.vexo.studio.engine.scene.ReactiveMeasureFilter()
     private val previousMotionTarget=mutableMapOf<String,Int>()
     private var particleUv = allocFloatBuffer(12)
     private val fonts = mutableMapOf<String,Typeface>()
@@ -197,7 +198,7 @@ class VexoGlRenderer(
         lastProjectId=null;lastPositionMs=-1L;lastArtworkVersion=-1
         particleShader?.release(); particleShader=null
         motionShader?.release(); motionShader=null
-        previousMotion.clear(); previousMotionTarget.clear()
+        previousMotion.clear(); previousMotionTarget.clear(); measureFilter.clear()
         fonts.clear()
         colorShader?.release(); colorShader = null
         imageShader?.release(); imageShader = null
@@ -227,7 +228,7 @@ class VexoGlRenderer(
     ) {
         if (colorShader == null) initGlResources()
         if (viewportW != targetWidth.coerceAtLeast(16) || viewportH != targetHeight.coerceAtLeast(16)) {
-            fboPool.releaseByPrefix("trail_"); previousMotion.clear(); previousMotionTarget.clear()
+            fboPool.releaseByPrefix("trail_"); previousMotion.clear(); previousMotionTarget.clear(); measureFilter.clear()
         }
         viewportW = targetWidth.coerceAtLeast(16)
         viewportH = targetHeight.coerceAtLeast(16)
@@ -237,7 +238,7 @@ class VexoGlRenderer(
             fboPool.releaseByPrefix("trail_")
             particleSims.clear()
             barDelayHistory.clear()
-            previousMotion.clear(); previousMotionTarget.clear()
+            previousMotion.clear(); previousMotionTarget.clear(); measureFilter.clear()
         }
         if (lastProjectId != scene.project.id) { fboPool.releaseByPrefix("comp_"); videoFrames.close() }
         lastProjectId = scene.project.id
@@ -256,7 +257,8 @@ class VexoGlRenderer(
             val activeLayers=scene.project.compositions.filter{it.index in cachedReachable}.flatMap{it.layers}.filter{it.common.visible}
             cachedLayerIds=activeLayers.map{it.common.id}.toSet()
             cachedTrails=activeLayers.filter{it.config is LayerConfig.MotionBlurEffect}.map{it.common.id}.toSet()
-            previousMotion.keys.retainAll(cachedLayerIds)
+            previousMotion.keys.retainAll(cachedTrails)
+            measureFilter.retain(cachedLayerIds)
             previousMotionTarget.keys.retainAll(cachedTrails)
             particleSims.keys.retainAll(cachedLayerIds)
             barDelayHistory.keys.removeAll{it.removeSuffix("_segment2") !in cachedLayerIds}
@@ -341,18 +343,18 @@ class VexoGlRenderer(
             0f
         )
 
-        val dPos = MeasureEvaluator.evaluatePair(
-            c.measurePos, scene.audioSnapshots[c.measurePos.providerIndex], scene.totalTimeSec, scene.playingTimeSec, trackNorm, scene.isPlaying, keyframePos
-        )
-        val dScale = MeasureEvaluator.evaluatePair(
-            c.measureScale, scene.audioSnapshots[c.measureScale.providerIndex], scene.totalTimeSec, scene.playingTimeSec, trackNorm, scene.isPlaying
-        )
-        val dRot = MeasureEvaluator.evaluateScalar(
-            c.measureRot, scene.audioSnapshots[c.measureRot.providerIndex], scene.totalTimeSec, scene.playingTimeSec, trackNorm, scene.isPlaying
-        )
-        val dOpacity = MeasureEvaluator.evaluateScalar(
-            c.measureOpacity, scene.audioSnapshots[c.measureOpacity.providerIndex], scene.totalTimeSec, scene.playingTimeSec, trackNorm, scene.isPlaying
-        )
+        fun measured(key:String,m:com.vexo.studio.model.MeasureConfig,k:Float?=null):com.vexo.studio.engine.scene.EvaluatedPair {
+            val raw=MeasureEvaluator.evaluatePair(m,scene.audioSnapshots[m.providerIndex],scene.totalTimeSec,scene.playingTimeSec,trackNorm,scene.isPlaying,k)
+            return measureFilter.apply(c.id,key,m,raw,deltaSec)
+        }
+        fun scalar(key:String,m:com.vexo.studio.model.MeasureConfig):Float {
+            val pair=measured(key,m)
+            return (pair.x+pair.y)*.5f
+        }
+        val dPos=measured("position",c.measurePos,keyframePos)
+        val dScale=measured("scale",c.measureScale)
+        val dRot=scalar("rotation",c.measureRot)
+        val dOpacity=scalar("opacity",c.measureOpacity)
 
         fun anchored(value: Float, anchor: com.vexo.studio.model.AnchorMode): Float = when(anchor) {
             com.vexo.studio.model.AnchorMode.UNSET -> value
@@ -380,7 +382,7 @@ class VexoGlRenderer(
 
         when (val cfg = com.vexo.studio.engine.scene.LayerPropertyAnimation.evaluate(layer,scene.project.keyframes,scene.trackMeta.positionMs)) {
             is LayerConfig.Bars -> {
-                val offset=MeasureEvaluator.evaluateScalar(cfg.colorBlendMeasure,scene.audioSnapshots[cfg.colorBlendMeasure.providerIndex],scene.totalTimeSec,scene.playingTimeSec,trackNorm,scene.isPlaying)
+                val offset=scalar("gradient",cfg.colorBlendMeasure)
                 val measured=cfg.copy(colorBlendOffset=(cfg.colorBlendOffset+offset).coerceIn(0f,1f))
                 drawBarsLayer(c.id, com.vexo.studio.engine.scene.DynamicSpectrum.evaluate(measured,audioSnap,scene.trackMeta.positionMs), audioSnap, opacity, w, h)
             }
@@ -391,11 +393,11 @@ class VexoGlRenderer(
                 drawShapeLayer(cfg.copy(radius=(cfg.radius+measure(cfg.pulse)*.15f).coerceIn(.005f,.8f),strokeWidth=(cfg.strokeWidth+measure(cfg.strokePulse)*12f).coerceIn(0f,32f)),opacity,w,h)
             }
             is LayerConfig.Particles -> drawParticlesLayer(c.id, cfg, audioSnap, scene, deltaSec, opacity, w, h)
-            is LayerConfig.BlurEffect -> drawBlurEffect(cfg, scene, trackNorm, opacity, w, h, compTextures)
+            is LayerConfig.BlurEffect -> drawBlurEffect(cfg, scalar("blur",cfg.measureBlur), opacity, w, h, compTextures)
             is LayerConfig.RgbSplitEffect -> drawRgbSplitEffect(cfg, audioSnap, scene, trackNorm, opacity, w, h, compTextures)
             is LayerConfig.MotionBlurEffect -> {
-                val gain=MeasureEvaluator.evaluateScalar(cfg.blurAmountMeasure,scene.audioSnapshots[cfg.blurAmountMeasure.providerIndex],scene.totalTimeSec,scene.playingTimeSec,trackNorm,scene.isPlaying)
-                drawMotionBlurEffect(c.id,cfg.copy(blurAmountMultiplier=(cfg.blurAmountMultiplier+gain).coerceIn(0f,3f)), tx/w, ty/h, deltaSec, opacity, w, h, compTextures)
+                val gain=scalar("motionAmount",cfg.blurAmountMeasure)
+                drawMotionBlurEffect(c.id,cfg.copy(blurAmountMultiplier=(cfg.blurAmountMultiplier+gain).coerceIn(0f,3f)), com.vexo.studio.engine.scene.MotionPose(tx/w,ty/h,rot,sx,sy), deltaSec, opacity, w, h, compTextures)
             }
             is LayerConfig.MirrorEffect -> drawMirrorEffect(cfg, opacity, w, h, compTextures)
         }
@@ -967,8 +969,7 @@ class VexoGlRenderer(
 
     private fun drawBlurEffect(
         cfg: LayerConfig.BlurEffect,
-        scene: RenderSceneSnapshot,
-        trackNorm: Float,
+        reactive: Float,
         opacity: Float,
         w: Int,
         h: Int,
@@ -994,8 +995,9 @@ class VexoGlRenderer(
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, srcTex)
         GLES20.glUniform1i(shader.uniform("uTex"), 0)
-        GLES20.glUniform2f(shader.uniform("uDirection"), 1f / ping.width, 0f)
-        val reactive=MeasureEvaluator.evaluateScalar(cfg.measureBlur,scene.audioSnapshots[cfg.measureBlur.providerIndex],scene.totalTimeSec,scene.playingTimeSec,trackNorm,scene.isPlaying)
+        val angle=cfg.blurAngleDeg.coerceIn(-360f,360f)*PI.toFloat()/180f
+        val dx=kotlin.math.cos(angle);val dy=kotlin.math.sin(angle)
+        GLES20.glUniform2f(shader.uniform("uDirection"), dx / ping.width, dy / ping.height)
         GLES20.glUniform1f(shader.uniform("uRadius"), (cfg.blurRadius + reactive).coerceIn(0f,24f) * cfg.blurMultiplier.coerceIn(0f,8f) * 0.75f)
         drawTexturedQuad(shader, 0f, 0f, ping.width.toFloat(), ping.height.toFloat(), flipV = true)
 
@@ -1004,7 +1006,8 @@ class VexoGlRenderer(
         GLES20.glViewport(0, 0, pong.width, pong.height)
         clearBackground(0x00000000)
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, ping.textureId)
-        GLES20.glUniform2f(shader.uniform("uDirection"), 0f, 1f / pong.height)
+        val cross=cfg.blurCrossAxis.coerceIn(0f,2f)
+        GLES20.glUniform2f(shader.uniform("uDirection"), -dy*cross / pong.width, dx*cross / pong.height)
         drawTexturedQuad(shader, 0f, 0f, pong.width.toFloat(), pong.height.toFloat(), flipV = true)
 
         // Restore target FBO
@@ -1121,7 +1124,7 @@ class VexoGlRenderer(
     private fun drawMotionBlurEffect(
         layerId: String,
         cfg: LayerConfig.MotionBlurEffect,
-        x: Float, y: Float, deltaSec: Float,
+        pose: com.vexo.studio.engine.scene.MotionPose, deltaSec: Float,
         opacity: Float,
         w: Int,
         h: Int,
@@ -1157,10 +1160,8 @@ class VexoGlRenderer(
         GLES20.glBlendFuncSeparate(GLES20.GL_ZERO, GLES20.GL_ONE_MINUS_SRC_ALPHA, GLES20.GL_ZERO, GLES20.GL_ONE_MINUS_SRC_ALPHA)
         GLES20.glUniform1f(img.uniform("uOpacity"), 1f - persist)
         drawTexturedQuad(img, 0f, 0f, w.toFloat(), h.toFloat(), flipV = true)
-        val previous=previousMotion.put(layerId,x to y)
-        val old=if(firstFrame) (x to y) else previous ?: (x to y)
-        val direction=if(cfg.motionSource==com.vexo.studio.model.MotionSource.MANUAL) cfg.manualMotionX to cfg.manualMotionY
-            else if(cfg.relativeMotionMode) (x-old.first) to (y-old.second) else (x-.5f) to (y-.5f)
+        val previous=previousMotion.put(layerId,pose)
+        val direction=com.vexo.studio.engine.scene.MotionSampling.evaluate(cfg,pose,if(firstFrame)null else previous)
         val motion=motionShader
         if(motion!=null){
             // Add the new weighted sample to the decayed history; opaque backgrounds no longer erase the trail.
@@ -1171,8 +1172,9 @@ class VexoGlRenderer(
             GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
             GLES20.glBindTexture(GLES20.GL_TEXTURE_2D,srcTex)
             GLES20.glUniform1i(motion.uniform("uTex"),0)
-            val gain=cfg.blurAmountMultiplier.coerceIn(0f,3f)
-            GLES20.glUniform2f(motion.uniform("uMotion"),(direction.first*gain).coerceIn(-.25f,.25f),(-direction.second*gain).coerceIn(-.25f,.25f))
+            GLES20.glUniform2f(motion.uniform("uMotion"),direction.x,-direction.y)
+            GLES20.glUniform2f(motion.uniform("uMotionExtra"),direction.radians,direction.zoom)
+            GLES20.glUniform1f(motion.uniform("uAspect"),w.toFloat()/h.coerceAtLeast(1))
             GLES20.glUniform1f(motion.uniform("uOpacity"),1f-persist)
             drawTexturedQuad(motion,0f,0f,w.toFloat(),h.toFloat(),flipV=true)
         }

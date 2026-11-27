@@ -68,7 +68,7 @@ object MeasureEvaluator {
             MeasureWhat.BEAT -> beat to beat
             MeasureWhat.TOTAL_TIME -> totalTimeSec to totalTimeSec
             MeasureWhat.TOTAL_TIME_BACKWARD -> -totalTimeSec to -totalTimeSec
-            MeasureWhat.TOTAL_TIME_WHEN_PLAYING -> if (isPlaying) playingTimeSec to playingTimeSec else 0f to 0f
+            MeasureWhat.TOTAL_TIME_WHEN_PLAYING -> playingTimeSec to playingTimeSec
             MeasureWhat.TOTAL_TIME_AND_BEAT -> (totalTimeSec + beat * 0.5f) to (totalTimeSec + beat * 0.5f)
             MeasureWhat.TRACK_POSITION -> trackPositionNorm to trackPositionNorm
             MeasureWhat.BEAT_RANDOM_SHAKE -> (shakeX * beat) to (shakeY * beat)

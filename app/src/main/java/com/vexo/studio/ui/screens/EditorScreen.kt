@@ -1401,6 +1401,8 @@ private fun PropertiesTab(
                 ExpandableSectionHeader("Blur parameters", expandedSections["BlurEffect_Blurparameters"] == true, { toggleAccordion(expandedSections, "BlurEffect_Blurparameters") }) {
                     MediaAssetButton("IMPORT BLUR MASK"){uri->vm.attachLayerAsset(layer.common.id,uri,"mask")}
                     TextButton(onClick={vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.BlurEffect).copy(maskImage=""))}}){Text("CLEAR MASK")}
+                    StudioSlider("Blur Direction",cfg.blurAngleDeg,-180f,180f,0f,"°",1f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.BlurEffect).copy(blurAngleDeg=v))}},onCommit=::endDrag)
+                    StudioSlider("Cross Axis Spread",cfg.blurCrossAxis,0f,2f,1f,"x",.02f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.BlurEffect).copy(blurCrossAxis=v))}},onCommit=::endDrag)
                     MeasureBindingControls("Blur Audio Binding",cfg.measureBlur,uiState.project.audioProviders.map{it.index},::beginDrag,::endDrag){v,undo->vm.updateLayer(layer.common.id,undo){it.copy(config=(it.config as LayerConfig.BlurEffect).copy(measureBlur=v))}}
                     StudioChipSelector("Glow Blend",BlendMode.entries,cfg.glowBlendMode?:cfg.blendModeContent,{it.label}){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.BlurEffect).copy(glowBlendMode=v))}}
                     StudioChipSelector("Original Content Blend",BlendMode.entries,cfg.unblurredBlendMode?:cfg.blendModeContent,{it.label}){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.BlurEffect).copy(unblurredBlendMode=v))}}
@@ -1459,6 +1461,10 @@ private fun PropertiesTab(
                         StudioSlider("Motion X",cfg.manualMotionX,-.25f,.25f,.025f,"",.001f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.MotionBlurEffect).copy(manualMotionX=v))}},onCommit=::endDrag)
                         StudioSlider("Motion Y",cfg.manualMotionY,-.25f,.25f,0f,"",.001f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.MotionBlurEffect).copy(manualMotionY=v))}},onCommit=::endDrag)
                     }
+                    if(cfg.motionSource==com.vexo.studio.model.MotionSource.MANUAL){
+                        StudioSlider("Manual Spin",cfg.manualRotationDeg,-90f,90f,0f,"°",.5f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.MotionBlurEffect).copy(manualRotationDeg=v))}},onCommit=::endDrag)
+                        StudioSlider("Manual Zoom Trail",cfg.manualZoom,-.5f,.5f,0f,"x",.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.MotionBlurEffect).copy(manualZoom=v))}},onCommit=::endDrag)
+                    }else StudioToggleRow("Include Rotation & Zoom",cfg.includeRotationAndZoom){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.MotionBlurEffect).copy(includeRotationAndZoom=v))}}
                     StudioSlider("Trail Persistence",cfg.trailPersistence,0f,.95f,.65f,"",.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.MotionBlurEffect).copy(trailPersistence=v))}},onCommit=::endDrag)
                     StudioColorPickerRow("Trail Tint", cfg.colorArgb) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(colorArgb = v)) } }
                     MeasureBindingControls("Motion Blur Audio Binding",cfg.blurAmountMeasure,uiState.project.audioProviders.map{it.index},::beginDrag,::endDrag){v,undo->vm.updateLayer(layer.common.id,undo){it.copy(config=(it.config as LayerConfig.MotionBlurEffect).copy(blurAmountMeasure=v))}}
@@ -1863,6 +1869,7 @@ private fun MeasureBindingControls(label:String,cfg:com.vexo.studio.model.Measur
     StudioChipSelector("Audio Provider",(ids+cfg.providerIndex).distinct(),cfg.providerIndex,{"#$it"}){v->onChange(cfg.copy(providerIndex=v),true)}
     StudioSlider("Amount X",cfg.amountA,-8f,8f,0f,"",.01f,onValueChange={v->begin();onChange(cfg.copy(amountA=v),false)},onCommit=end)
     StudioSlider("Amount Y",cfg.amountB,-8f,8f,0f,"",.01f,onValueChange={v->begin();onChange(cfg.copy(amountB=v),false)},onCommit=end)
+    StudioSlider("Response Smoothing",cfg.smoothing,0f,1f,.25f,"",.01f,onValueChange={v->begin();onChange(cfg.copy(smoothing=v),false)},onCommit=end)
     StudioSlider("Trigger Threshold",cfg.triggerThreshold,0f,.99f,0f,"",.01f,onValueChange={v->begin();onChange(cfg.copy(triggerThreshold=v),false)},onCommit=end)
 }
 
