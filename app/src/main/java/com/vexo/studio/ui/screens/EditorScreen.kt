@@ -1295,6 +1295,14 @@ private fun PropertiesTab(
                     StudioSlider("Beat burst count",cfg.burstCount.toFloat(),0.0f,256.0f,0.0f,"",1.0f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){l->l.copy(config=(l.config as LayerConfig.Particles).copy(burstCount=v.toInt()))}},onCommit=::endDrag)
                     StudioSlider("Burst threshold",cfg.burstThreshold,0.05f,1.0f,0.65f,"",0.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){l->l.copy(config=(l.config as LayerConfig.Particles).copy(burstThreshold=v))}},onCommit=::endDrag)
                     StudioChipSelector("Burst provider",uiState.project.audioProviders.map{it.index},cfg.burstProvider,{"#$it"}){v->vm.updateLayer(layer.common.id){l->l.copy(config=(l.config as LayerConfig.Particles).copy(burstProvider=v))}}
+                    StudioChipSelector("Burst source",com.vexo.studio.model.ParticleBurstSource.entries,cfg.burstSource,{it.name.replace('_',' ')}){v->vm.updateLayer(layer.common.id){l->l.copy(config=(l.config as LayerConfig.Particles).copy(burstSource=v))}}
+                    StudioSlider("Burst cooldown",cfg.burstCooldownMs.toFloat(),0f,1000f,80f,"ms",10f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){l->l.copy(config=(l.config as LayerConfig.Particles).copy(burstCooldownMs=v.toInt()))}},onCommit=::endDrag)
+                    StudioSlider("Burst speed",cfg.burstSpeedMultiplier,0f,5f,1f,"x",.05f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){l->l.copy(config=(l.config as LayerConfig.Particles).copy(burstSpeedMultiplier=v))}},onCommit=::endDrag)
+                    StudioSlider("Reactive emission",cfg.reactiveEmission,0f,5f,0f,"x",.05f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){l->l.copy(config=(l.config as LayerConfig.Particles).copy(reactiveEmission=v))}},onCommit=::endDrag)
+                }
+                ExpandableSectionHeader("Particle forces",expandedSections["particle_forces"]==true,{toggleAccordion(expandedSections,"particle_forces")}){
+                    StudioSlider("Turbulence",cfg.turbulence,0f,3f,0f,"",.05f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){l->l.copy(config=(l.config as LayerConfig.Particles).copy(turbulence=v))}},onCommit=::endDrag)
+                    StudioSlider("Attract / repel",cfg.centerForce,-3f,3f,0f,"",.05f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){l->l.copy(config=(l.config as LayerConfig.Particles).copy(centerForce=v))}},onCommit=::endDrag)
                 }
                 ExpandableSectionHeader("Emission", expandedSections["Particles_Emission"] == true, { toggleAccordion(expandedSections, "Particles_Emission") }) {
                     StudioSlider("Spawn Interval", cfg.spawnTimeSec, 0.005f, 0.25f, 0.015f, "s", 0.005f, onValueChange = { v ->

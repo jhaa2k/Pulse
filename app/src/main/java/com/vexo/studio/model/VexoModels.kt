@@ -566,7 +566,13 @@ sealed interface LayerConfig {
         val drag: Float = 0f,
         val burstCount: Int = 0,
         val burstThreshold: Float = .65f,
-        val burstProvider: Int = 1
+        val burstProvider: Int = 1,
+        val burstSource: ParticleBurstSource = ParticleBurstSource.BEAT_ENERGY,
+        val burstCooldownMs: Int = 80,
+        val burstSpeedMultiplier: Float = 1f,
+        val reactiveEmission: Float = 0f,
+        val turbulence: Float = 0f,
+        val centerForce: Float = 0f
     ) : LayerConfig
 
     @Serializable
@@ -1089,6 +1095,7 @@ data class CreativeImageConfig(
 @Serializable enum class SpectrumPeakStyle { LINE, DOT, DIAMOND }
 @Serializable enum class SpectrumGradientMode { PATH, HEIGHT, AMPLITUDE, ALTERNATING }
 @Serializable enum class CreativeSpectrumStyle { BARS, DOTS, STEPS, LINE, FILL, OUTLINE, TRIANGLE, DIAMOND, CAPSULE, DASH, DOUBLE_LINE, RIBBON, ZIGZAG, LOLLIPOP, CROSS, CHEVRON, TAPERED, CAPPED, STACK_DOTS, HOLLOW_DOTS, WAVE_POINTS, SAWTOOTH, STRIPES, FAN, TICKS, PEAKS }
+@Serializable enum class ParticleBurstSource { BEAT_ENERGY, BEAT_PULSE, BASS, MID, TREBLE, RMS, PEAK }
 @Serializable enum class ParticleEmitter { LEGACY, POINT, LINE, BOX, RING, DISC }
 @Serializable enum class TextMotion { NONE, FADE, SLIDE, PULSE, REVEAL, BEAT_SCALE }
 

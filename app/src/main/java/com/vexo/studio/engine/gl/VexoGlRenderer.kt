@@ -907,19 +907,15 @@ class VexoGlRenderer(
             totalTimeSec = scene.totalTimeSec,
             playingTimeSec = scene.playingTimeSec,
             isPlaying = scene.isPlaying,
-            burstSnapshot=scene.audioSnapshots[cfg.burstProvider]
+            burstSnapshot=scene.audioSnapshots[cfg.burstProvider],
+            trackPositionNorm=if(scene.trackMeta.durationMs>0)(scene.trackMeta.positionMs.toFloat()/scene.trackMeta.durationMs).coerceIn(0f,1f)else 0f
         )
         val count = sim.activeCount
         if (count <= 0) return
         val copies=(if(cfg.mirrorX)2 else 1)*(if(cfg.mirrorY)2 else 1)
         val needed = count * copies * 12
-        if (vertexScratch.size < needed) {
-            vertexScratch = FloatArray(needed)
-            colorScratch = FloatArray(count * copies * 24)
-            vertexBuf = allocFloatBuffer(vertexScratch.size)
-            colorBuf = allocFloatBuffer(colorScratch.size)
-        }
-        if(particleUv.capacity()<needed)particleUv=allocFloatBuffer(needed)
+        ensureColorCapacity(count*copies*6)
+        if(particleUv.capacity()<needed)particleUv=allocFloatBuffer(maxOf(needed,particleUv.capacity()*2))
         particleUv.clear()
         val minDim = minOf(w, h).toFloat()
         var vIdx = 0
@@ -932,6 +928,7 @@ class VexoGlRenderer(
             val green=((col ushr 8) and 255)/255f*((cfg.colorArgb ushr 8) and 255)/255f
             val b=(col and 255)/255f*(cfg.colorArgb and 255)/255f
             val a=((col ushr 24) and 255)/255f*sim.outAlpha[i]*((cfg.colorArgb ushr 24) and 255)/255f
+            if(a<=.001f||sim.outSize[i]<=0f)continue
             val half=sim.outSize[i]*minDim*.5f
             val length=half*(1f+cfg.trailLength.coerceIn(0f,1f)*4f)
             for(mx in 0 until if(cfg.mirrorX)2 else 1) for(my in 0 until if(cfg.mirrorY)2 else 1){
@@ -948,6 +945,7 @@ class VexoGlRenderer(
                 particleUv.put(spriteUv)
             }
         }
+        if(vIdx==0)return
         val tex=if(cfg.customImage.startsWith("internalres:"))ensureInternalTex(cfg.customImage) else ensureUriTex(cfg.customImage)
         val shader=particleShader ?: return
         shader.use()
