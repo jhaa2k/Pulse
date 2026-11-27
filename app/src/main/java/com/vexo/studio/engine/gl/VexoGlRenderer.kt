@@ -270,7 +270,13 @@ class VexoGlRenderer(
         }
         viewportW = targetWidth.coerceAtLeast(16)
         viewportH = targetHeight.coerceAtLeast(16)
-        imageDecodeLimit=TextureDecodePolicy.limit(isExportRenderer,lowRamDevice,highResolutionTextures,maxOf(viewportW,viewportH),gpuTextureLimit)
+        val nextDecodeLimit=TextureDecodePolicy.limit(isExportRenderer,lowRamDevice,highResolutionTextures,maxOf(viewportW,viewportH),gpuTextureLimit)
+        if(nextDecodeLimit!=imageDecodeLimit){
+            // A larger render target must not reuse a previously downsampled image.
+            removeCachedTextures{key->!key.startsWith("internalres:")&&!key.startsWith("txt_")}
+            failedImageUntil.clear()
+            imageDecodeLimit=nextDecodeLimit
+        }
 
         val position = scene.trackMeta.positionMs
         if (lastProjectId != scene.project.id || (lastPositionMs >= 0L && (position < lastPositionMs - 100L || position - lastPositionMs > 750L))) {
@@ -851,9 +857,9 @@ class VexoGlRenderer(
         val key = "txt_${resolved}_${cfg.fontSize}_${cfg.bold}_${cfg.italic}_${cfg.colorArgb}_${cfg.alignment}_${cfg.letterSpacing}_${cfg.lineSpacing}_${cfg.strokeWidth}_${cfg.strokeColorArgb}_${cfg.shadowRadius}_${cfg.shadowColorArgb}_${cfg.fontAssetUri}_${cfg.fontFamily}_${cfg.fontWeight}"
         val texId = textureCache[key] ?: run {
             val bmp = renderTextBitmap(resolved, cfg)
-            val id = uploadBitmapToGl(bmp)
-            bmp.recycle()
+            val id = try{uploadBitmapToGl(bmp)}finally{bmp.recycle()}
             textureCache[key] = id
+            trimTextTextures()
             id
         }
         if (texId == 0) return
@@ -1555,24 +1561,38 @@ class VexoGlRenderer(
             resKey.contains("transparent") -> canvas.drawColor(Color.TRANSPARENT)
             else -> canvas.drawColor(Color.WHITE)
         }
-        val id = uploadBitmapToGl(bmp)
-        bmp.recycle()
+        val id = try{uploadBitmapToGl(bmp)}finally{bmp.recycle()}
         textureCache[resKey] = id
         return id
     }
 
-    private fun trimTextureCache(){
-        var bytes=textureCache.values.sumOf{ id->val size=bitmapSizes[id];if(size==null)0L else size.first.toLong()*size.second*4L }
+    private fun deleteCachedTexture(id:Int){
+        bitmapSizes.remove(id);bitmapKeyColors.remove(id)
+        staticBlurResults.entries.removeAll{it.value.first.source==id}
+        GLES20.glDeleteTextures(1,intArrayOf(id),0)
+    }
+
+    private fun removeCachedTextures(predicate:(String)->Boolean){
         val iterator=textureCache.entries.iterator()
-        val budget=if(isExportRenderer&&highResolutionTextures&&!lowRamDevice)128L*1024*1024 else 48L*1024*1024
-        while(iterator.hasNext() && (bytes>budget || textureCache.size>48)){
+        while(iterator.hasNext()){
             val entry=iterator.next()
-            if(entry.key=="internalres:white"||entry.key=="internalres:vignette80"||entry.key=="internalres:particle_circle_blur4")continue
-            val id=entry.value;val size=bitmapSizes.remove(id);bitmapKeyColors.remove(id)
-            staticBlurResults.entries.removeAll{it.value.first.source==id}
-            if(size!=null)bytes-=size.first.toLong()*size.second*4L
-            GLES20.glDeleteTextures(1,intArrayOf(id),0);iterator.remove()
+            if(predicate(entry.key)){deleteCachedTexture(entry.value);iterator.remove()}
         }
+    }
+
+    private fun cacheEntries()=textureCache.map{(key,id)->
+        val size=bitmapSizes[id]
+        TextureCacheBudget.Entry(key,if(size==null)0L else size.first.toLong()*size.second*4L)
+    }
+    private fun trimTextTextures(){
+        // Time labels change continuously. Evict old text immediately, not image sources.
+        val remove=TextureCacheBudget.textEvictions(cacheEntries(),if(lowRamDevice)4 else 8)
+        if(remove.isNotEmpty())removeCachedTextures{it in remove}
+    }
+    private fun trimTextureCache(){
+        val budget=if(isExportRenderer&&highResolutionTextures&&!lowRamDevice)128L*1024*1024 else if(lowRamDevice)32L*1024*1024 else 48L*1024*1024
+        val remove=TextureCacheBudget.evictions(cacheEntries(),budget,48)
+        if(remove.isNotEmpty())removeCachedTextures{it in remove}
     }
 
     private fun ensureUriTex(uriStr: String?): Int {
@@ -1745,8 +1765,8 @@ class VexoGlRenderer(
     }
 
     private fun uploadBitmapToGl(bitmap: Bitmap): Int {
-        // A deleted/reuploaded source may reuse a GL texture name.
-        staticBlurResults.clear()
+        // Source-specific cache entries are invalidated when the source is deleted.
+        // Uploading unrelated text or image textures does not invalidate a valid blur.
         val ids = IntArray(1)
         GLES20.glGenTextures(1, ids, 0)
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, ids[0])
@@ -1754,7 +1774,15 @@ class VexoGlRenderer(
         GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR)
         GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE)
         GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE)
-        GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, bitmap, 0)
+        try{
+            check(ids[0]!=0){"GPU could not create an image texture"}
+            GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, bitmap, 0)
+            val error=GLES20.glGetError()
+            check(error==GLES20.GL_NO_ERROR){"GPU image texture upload failed (${bitmap.width}×${bitmap.height}, 0x${error.toString(16)}). Reduce image quality or resolution."}
+        }catch(t:Throwable){
+            if(ids[0]!=0)GLES20.glDeleteTextures(1,ids,0)
+            throw t
+        }
         bitmapSizes[ids[0]] = bitmap.width to bitmap.height
         bitmapKeyColors[ids[0]]=runCatching{ bitmap.getPixel(0,0) }.getOrDefault(0xFF00FF00.toInt())
         return ids[0]
