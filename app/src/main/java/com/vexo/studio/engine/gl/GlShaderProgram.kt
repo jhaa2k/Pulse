@@ -212,8 +212,9 @@ object VexoShaders {
                 if(uCreativeGradient==1)t=dot(p,vec2(cos(a),sin(a)))+0.5;
                 else if(uCreativeGradient==2)t=length(p)*2.0;
                 else t=fract((atan(p.y,p.x)+a)/6.2831853+0.5);
-                vec4 grad=mix(uGradientFrom,uGradientTo,clamp(t,0.0,1.0));
-                grad.rgb*=grad.a;
+                // Interpolate premultiplied endpoints, not hidden RGB from transparent stops.
+                vec4 grad=mix(vec4(uGradientFrom.rgb*uGradientFrom.a,uGradientFrom.a),
+                              vec4(uGradientTo.rgb*uGradientTo.a,uGradientTo.a),clamp(t,0.0,1.0));
                 tex=mix(tex,grad,clamp(uGradientMix,0.0,1.0));
             }
             if(uPattern.x>0.5){
@@ -234,8 +235,8 @@ object VexoShaders {
                     float d=length(fract(p)-jitter);
                     f=(1.0-smoothstep(0.02,0.13,d))*noise(cell+3.0)*(0.65+0.35*sin(uPattern.w+noise(cell)*6.2831853));
                 }
-                vec4 pattern=mix(uGradientFrom,uGradientTo,clamp(f,0.0,1.0));
-                pattern.rgb*=pattern.a;
+                vec4 pattern=mix(vec4(uGradientFrom.rgb*uGradientFrom.a,uGradientFrom.a),
+                                 vec4(uGradientTo.rgb*uGradientTo.a,uGradientTo.a),clamp(f,0.0,1.0));
                 tex=mix(tex,pattern,uPattern.z);
             }
             vec3 straightColor = tex.a > 0.0001 ? tex.rgb / tex.a : vec3(0.0);
@@ -249,10 +250,10 @@ object VexoShaders {
             satColor=satColor*vignette*scan;
             if(uFinishing.z>0.0)satColor+=(noise(floor(uv*uCreativeResolution)+floor(uDistort.z*24.0))-0.5)*uFinishing.z*0.25;
             satColor=clamp(satColor,0.0,1.0);
-            float alpha = tex.a * uTint.a * uOpacity;
+            float coverageTotal = clamp(uTint.a*uOpacity,0.0,1.0);
             if (uColorKeyEnabled == 1) {
                 float dist = distance(straightColor, uKeyColor);
-                alpha *= mix(1.0, smoothstep(0.12, 0.32, dist), uImageFxEnabled == 1 ? clamp(uKeyStrength, 0.0, 1.0) : 1.0);
+                coverageTotal *= mix(1.0, smoothstep(0.12, 0.32, dist), uImageFxEnabled == 1 ? clamp(uKeyStrength, 0.0, 1.0) : 1.0);
             }
             if (uMaskEnabled == 1) {
                 vec2 maskUv = vec2(uv.x, uMaskFlipV == 1 ? 1.0 - uv.y : uv.y);
@@ -262,7 +263,7 @@ object VexoShaders {
                 if (uMaskMode == 1) coverage = min(mask.a, light);
                 else if (uMaskMode == 2) coverage = max(0.0, mask.a - light);
                 else if (uMaskMode == 3) coverage = 1.0 - mask.a;
-                alpha *= coverage;
+                coverageTotal *= clamp(coverage,0.0,1.0);
             }
             if(uAperture.x>0.5){
                 vec2 p=abs(uv-uApertureCenter)*2.0;
@@ -271,9 +272,16 @@ object VexoShaders {
                 else if(uAperture.x>2.5 && uAperture.x<3.5)d=p.x+p.y;
                 else if(uAperture.x>3.5)d=p.x;
                 float coverage=1.0-smoothstep(max(0.0,uAperture.y-uAperture.z),uAperture.y,d);
-                alpha*=mix(coverage,1.0-coverage,uAperture.w);
+                coverageTotal*=mix(coverage,1.0-coverage,uAperture.w);
             }
-            gl_FragColor = vec4(satColor * uTint.rgb * alpha * uGlowGain, alpha * min(1.0,uGlowGain));
+            // A neutral image/effect pass must preserve additive RGB that exceeds
+            // coverage alpha in a composition texture; unpremultiply+clamp would lose it.
+            bool neutral=abs(uSaturation-1.0)<0.0001
+                && all(equal(uGrade,vec4(0.0,1.0,0.0,0.0)))
+                && all(equal(uFinishing,vec3(0.0)));
+            vec3 premul=neutral?tex.rgb:satColor*tex.a;
+            gl_FragColor = vec4(premul*uTint.rgb*coverageTotal*uGlowGain,
+                                tex.a*coverageTotal*min(1.0,uGlowGain));
         }
     """
 

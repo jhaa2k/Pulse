@@ -791,11 +791,29 @@ class VexoGlRenderer(
         val (drawW, drawH) = if (cfg.keepAspectRatio && !crop && !shapeSquare && cfg.sourceType!=ImageSourceType.SOLID_COLOR && cfg.creative.gradient==com.vexo.studio.model.CreativeGradient.NONE && cfg.creative.pattern==com.vexo.studio.model.ProceduralPattern.NONE) {
             if(imageRatio > frameRatio) frameW to frameW / imageRatio else frameH * imageRatio to frameH
         } else frameW to frameH
+        val maskIsComp = cfg.maskImage.startsWith("composition:")
+        val maskTex = when {
+            maskIsComp -> cfg.maskImage.substringAfter(':').toIntOrNull()?.let { compTextures[it] } ?: 0
+            cfg.maskImage.startsWith("internalres:") -> ensureInternalTex(cfg.maskImage)
+            cfg.maskImage.startsWith("content://") || cfg.maskImage.startsWith("file://") -> ensureUriTex(cfg.maskImage)
+            else -> 0
+        }
+        fun bindImageMask(sourceFbo:Boolean){
+            GLES20.glUniform1i(shader.uniform("uMaskEnabled"),if(maskTex!=0)1 else 0)
+            GLES20.glUniform1i(shader.uniform("uMaskMode"),cfg.maskMode.ordinal)
+            GLES20.glUniform1i(shader.uniform("uMaskFlipV"),if(maskIsComp!=sourceFbo)1 else 0)
+            if(maskTex!=0){
+                GLES20.glActiveTexture(GLES20.GL_TEXTURE1)
+                GLES20.glBindTexture(GLES20.GL_TEXTURE_2D,maskTex)
+                GLES20.glUniform1i(shader.uniform("uMaskTex"),1)
+            }
+            GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
+        }
         if(cfg.blurredBorder && cfg.keepAspectRatio && !crop && !shapeSquare && (drawW<frameW-.5f || drawH<frameH-.5f)){
             GLES20.glUniform1i(shader.uniform("uImageFxEnabled"),1)
             GLES20.glUniform1i(shader.uniform("uShape"),0)
             GLES20.glUniform1i(shader.uniform("uColorKeyEnabled"),0)
-            GLES20.glUniform1i(shader.uniform("uMaskEnabled"),0)
+            bindImageMask(sourceIsFbo||borderTex!=texId)
             GLES20.glUniform2f(shader.uniform("uUvScale"),minOf(1f,frameRatio/imageRatio),minOf(1f,imageRatio/frameRatio))
             GLES20.glBindTexture(GLES20.GL_TEXTURE_2D,borderTex)
             GLES20.glUniform2f(shader.uniform("uImageBlurStep"),0f,0f)
@@ -811,25 +829,8 @@ class VexoGlRenderer(
         GLES20.glUniform1f(shader.uniform("uKeyStrength"), cfg.transparencyStrength.coerceIn(0f,1f))
         val left = (w - drawW) * 0.5f
         val top = (h - drawH) * 0.5f
-        val maskIsComp = cfg.maskImage.startsWith("composition:")
-        val maskTex = when {
-            maskIsComp -> cfg.maskImage.substringAfter(':').toIntOrNull()?.let { compTextures[it] } ?: 0
-            cfg.maskImage.startsWith("internalres:") -> ensureInternalTex(cfg.maskImage)
-            cfg.maskImage.startsWith("content://") || cfg.maskImage.startsWith("file://") -> ensureUriTex(cfg.maskImage)
-            else -> 0
-        }
-        // Texture creation can change unit 0 binding; explicitly restore the source.
-        GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, mainTex)
-        GLES20.glUniform1i(shader.uniform("uMaskEnabled"), if (maskTex != 0) 1 else 0)
-        GLES20.glUniform1i(shader.uniform("uMaskMode"), cfg.maskMode.ordinal)
-        GLES20.glUniform1i(shader.uniform("uMaskFlipV"), if (maskIsComp != mainIsFbo) 1 else 0)
-        if (maskTex != 0) {
-            GLES20.glActiveTexture(GLES20.GL_TEXTURE1)
-            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, maskTex)
-            GLES20.glUniform1i(shader.uniform("uMaskTex"), 1)
-            GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
-        }
+        bindImageMask(mainIsFbo)
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D,mainTex)
         drawTexturedQuad(shader, left, top, left + drawW, top + drawH, flipV = cfg.flipV xor mainIsFbo, flipU = cfg.flipU)
         GLES20.glUniform1i(shader.uniform("uMaskEnabled"), 0)
         GLES20.glUniform1i(shader.uniform("uImageFxEnabled"), 0)
@@ -1448,6 +1449,7 @@ class VexoGlRenderer(
             return
         }
         GLES20.glEnable(GLES20.GL_BLEND)
+        GLES20.glBlendEquation(GLES20.GL_FUNC_ADD)
         when (mode) {
             BlendMode.ALPHA, BlendMode.PRE_MUL_ALPHA ->
                 GLES20.glBlendFuncSeparate(GLES20.GL_ONE, GLES20.GL_ONE_MINUS_SRC_ALPHA, GLES20.GL_ONE, GLES20.GL_ONE_MINUS_SRC_ALPHA)
