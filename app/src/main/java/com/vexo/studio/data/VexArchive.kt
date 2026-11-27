@@ -151,12 +151,18 @@ object VexArchive {
                     val file=legacyAssets.getValue(name);used.add(file)
                     return Uri.fromFile(file).toString()
                 }
-                fun safe(value:String):String = linked(value) ?: if(isLocal(value)) "" else value
+                fun safe(value:String):String {
+                    val resolved=linked(value)
+                    require(resolved!=null||(!value.startsWith("local:")&&!value.startsWith("asset:"))){"Missing bundled asset: $value"}
+                    return resolved ?: if(isLocal(value)) "" else value
+                }
                 val project=raw.copy(compositions=raw.compositions.map{comp->comp.copy(layers=comp.layers.map{layer->
                     val cfg=when(val c=layer.config){
                         is LayerConfig.Image -> {
                             val original=LegacyAssetReferences.rawValue(layer.common.extraFields["customImage"])
-                            val resolved=linked(original?:c.customUri)
+                            val reference=original?:c.customUri
+                            val resolved=linked(reference)
+                            require(resolved!=null||reference==null||(!reference.startsWith("local:")&&!reference.startsWith("asset:"))){"Missing bundled image: $reference"}
                             if(resolved!=null)c.copy(sourceType=com.vexo.studio.model.ImageSourceType.IMPORTED,customUri=resolved,maskImage=safe(c.maskImage),videoEnabled=LegacyAssetReferences.isVideo(original.orEmpty()))
                             else if(c.sourceType==com.vexo.studio.model.ImageSourceType.IMPORTED)c.copy(sourceType=com.vexo.studio.model.ImageSourceType.ALBUM_ART,customUri=null,maskImage=safe(c.maskImage))
                             else c.copy(maskImage=safe(c.maskImage))

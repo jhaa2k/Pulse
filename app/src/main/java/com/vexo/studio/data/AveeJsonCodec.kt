@@ -130,6 +130,7 @@ object AveeJsonCodec {
             val layers = mutableListOf<LayerNode>()
             val preserved = linkedMapOf<Int, String>()
             val providerIndices = mutableListOf<Int>()
+            val providerPositions = linkedMapOf<Int,Int>()
             elements.forEachIndexed { position, el ->
                 val obj = el as? JsonObject
                 if (obj == null) preserved[position] = el.toString()
@@ -137,6 +138,7 @@ object AveeJsonCodec {
                     val providerIndex = providers.size + 1
                     providers.add(parseAudioProvider(obj, providerIndex))
                     providerIndices.add(providerIndex)
+                    providerPositions[providerIndex]=position
                 } else {
                     val layer = decodeLayerByObjType(obj)
                     if (layer != null) layers.add(layer) else preserved[position] = obj.toString()
@@ -144,7 +146,7 @@ object AveeJsonCodec {
             }
             CompositionNode(index = index, name = if (index == 0) "Final Composition" else comp["_name"]?.primitiveString() ?: "Composition $index",
                 layers = layers, aveeMetadata = comp.filterKeys { it != "elements" && it != "layers" }.mapValues { it.value.toString() },
-                preservedElements = preserved, providerIndices = providerIndices)
+                preservedElements = preserved, providerIndices = providerIndices, providerElementPositions=providerPositions)
         }
         return VexoProject(name = name, audioProviders = providers.ifEmpty { listOf(AudioProviderConfig()) },
             compositions = result, aveeRootMetadata = root.filterKeys { it != "compositions" }.mapValues { it.value.toString() })
@@ -182,9 +184,16 @@ object AveeJsonCodec {
                         put("ver", "10")
                         val assigned = project.compositions.flatMap { it.providerIndices }.toSet()
                         val elements = mutableListOf<JsonElement>()
-                        project.audioProviders.filter { it.index in comp.providerIndices || (comp.index == 0 && it.index !in assigned) }.forEach { elements.add(encodeAudioProvider(it)) }
+                        val positioned=mutableListOf<Pair<Int,JsonElement>>()
+                        val unpositioned=mutableListOf<JsonElement>()
+                        project.audioProviders.filter { it.index in comp.providerIndices || (comp.index == 0 && it.index !in assigned) }.forEach { provider ->
+                            val pos=comp.providerElementPositions[provider.index]
+                            if(pos==null)unpositioned.add(encodeAudioProvider(provider)) else positioned.add(pos to encodeAudioProvider(provider))
+                        }
                         comp.layers.forEach { elements.add(encodeLayer(it)) }
-                        comp.preservedElements.toSortedMap().forEach { (index, raw) -> runCatching { json.parseToJsonElement(raw) }.getOrNull()?.let { elements.add(index.coerceIn(0, elements.size), it) } }
+                        comp.preservedElements.forEach { (index, raw) -> runCatching { json.parseToJsonElement(raw) }.getOrNull()?.let { positioned.add(index to it) } }
+                        positioned.sortedBy{it.first}.forEach{(index,value)->elements.add(index.coerceIn(0,elements.size),value)}
+                        elements.addAll(0,unpositioned)
                         put("elements", JsonArray(elements))
                     })
                 }
@@ -230,6 +239,7 @@ object AveeJsonCodec {
                         put("aveeMetadata", JsonObject(comp.aveeMetadata.mapValues { JsonPrimitive(it.value) }))
                         put("preservedElements", JsonObject(comp.preservedElements.mapKeys { it.key.toString() }.mapValues { JsonPrimitive(it.value) }))
                         put("providerIndices", JsonArray(comp.providerIndices.map { JsonPrimitive(it) }))
+                        put("providerElementPositions",JsonObject(comp.providerElementPositions.mapKeys{it.key.toString()}.mapValues{JsonPrimitive(it.value)}))
                         put("index", comp.index)
                         put("name", comp.name)
                         put("layers", buildJsonArray {
@@ -258,7 +268,8 @@ object AveeJsonCodec {
             CompositionNode(index = idx, name = cName, layers = cLayers,
                 aveeMetadata = (obj["aveeMetadata"] as? JsonObject)?.mapValues { it.value.primitiveString() ?: "" } ?: emptyMap(),
                 preservedElements = (obj["preservedElements"] as? JsonObject)?.mapNotNull { (k,v) -> k.toIntOrNull()?.let { it to (v.primitiveString() ?: "") } }?.toMap() ?: emptyMap(),
-                providerIndices = (obj["providerIndices"] as? JsonArray)?.mapNotNull { it.primitiveInt() } ?: emptyList())
+                providerIndices = (obj["providerIndices"] as? JsonArray)?.mapNotNull { it.primitiveInt() } ?: emptyList(),
+                providerElementPositions=(obj["providerElementPositions"] as? JsonObject)?.mapNotNull{(k,v)->k.toIntOrNull()?.let{index->v.primitiveInt()?.let{index to it}}}?.toMap()?:emptyMap())
         }?.ifEmpty { listOf(CompositionNode(index = 0)) } ?: listOf(CompositionNode(index = 0))
         return VexoProject(name = name, audioProviders = providers, compositions = comps,
             canvas = com.vexo.studio.model.CanvasConfig(aspectRatio = com.vexo.studio.model.AspectRatioPreset.entries.firstOrNull { it.name == inner["aspectRatio"]?.primitiveString() } ?: com.vexo.studio.model.AspectRatioPreset.RATIO_16_9),
@@ -370,7 +381,7 @@ object AveeJsonCodec {
             customImg.startsWith("composition:") ->
                 ImageSourceType.COMPOSITION to (customImg.substringAfter("composition:").toIntOrNull() ?: 0)
             customImg.startsWith("internalres:") -> ImageSourceType.INTERNAL to 0
-            customImg.startsWith("content://") || customImg.startsWith("file://") -> ImageSourceType.IMPORTED to 0
+            customImg.startsWith("content://") || customImg.startsWith("file://") || customImg.startsWith("local:") || customImg.startsWith("asset:") -> ImageSourceType.IMPORTED to 0
             else -> ImageSourceType.ALBUM_ART to 0
         }
         return LayerNode(
@@ -540,14 +551,22 @@ object AveeJsonCodec {
     private fun parseRgbSplitEffect(obj: JsonObject): LayerNode {
         val target = obj.propString("targetImage", "composition:1")
             .substringAfter("composition:", "1").toIntOrNull() ?: 1
+        val multiplierRaw=obj.propString("splitMultiplier","Constant 6 6")
+        val amountRaw=obj.propString("splitAmount","BeatRandomShake 0.5 0.5")
+        val amountMeasure=parseMvarf2Measure(amountRaw)
+        val amountParts=amountRaw.trim().split(Regex("\\s+"))
+        val constant=amountParts.firstOrNull()?.equals("Constant",true)==true
+        fun axis(index:Int)=amountParts.getOrNull(index)?.toFloatOrNull()?.takeIf{it.isFinite()}?.times(.015f)?:0f
         return LayerNode(
             type = LayerType.RGB_SPLIT_EFFECT,
             common = parseCommon(obj, "Rgb Split"),
             config = LayerConfig.RgbSplitEffect(
                 targetCompositionIndex = target,
-                splitMultiplier = parseMvarfValue(obj.propString("splitMultiplier", "Constant 6 6"), 6f),
-                splitAmountX = obj.propFloat("splitAmountX", 0.015f), splitAmountY = obj.propFloat("splitAmountY", 0.008f),
-                splitMeasure = parseMvarf2Measure(obj.propString("splitAmount", "BeatRandomShake 0.5 0.5")),
+                splitMultiplier = constantMvarf(multiplierRaw,6f),
+                splitMultiplierMeasure=parseMvarf2Measure(multiplierRaw),
+                splitAmountX = obj.propFloat("splitAmountX", if(constant)axis(1) else 0f),
+                splitAmountY = obj.propFloat("splitAmountY", if(constant)axis(2) else 0f),
+                splitMeasure = amountMeasure,
                 splitColor0Argb = obj.propInt("splitColor0", -65536),
                 splitColor1Argb = obj.propInt("splitColor1", -16711936),
                 splitColor2Argb = obj.propInt("splitColor2", -16776961),
@@ -752,7 +771,8 @@ object AveeJsonCodec {
             is LayerConfig.RgbSplitEffect -> {
                 put("targetImage", propObj("composition:${cfg.targetCompositionIndex}"))
                 put("splitAmountX", propObj(cfg.splitAmountX)); put("splitAmountY", propObj(cfg.splitAmountY))
-                put("splitMultiplier", propObj("Constant ${cfg.splitMultiplier} ${cfg.splitMultiplier}"))
+                put("splitMultiplier", propObj(encodeScalarMeasure(cfg.splitMultiplier,cfg.splitMultiplierMeasure)))
+                put("splitAmount",propObj(if(cfg.splitMeasure.measureWhat==MeasureWhat.NOTHING)"Constant ${cfg.splitAmountX/.015f} ${cfg.splitAmountY/.015f}" else "${cfg.splitMeasure.measureWhat.aveeName} ${cfg.splitMeasure.amountA} ${cfg.splitMeasure.amountB}"))
                 put("splitColor0", propObj(cfg.splitColor0Argb))
                 put("splitColor1", propObj(cfg.splitColor1Argb))
                 put("splitColor2", propObj(cfg.splitColor2Argb))

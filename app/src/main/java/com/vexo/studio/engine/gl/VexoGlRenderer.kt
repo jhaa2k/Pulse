@@ -468,7 +468,8 @@ class VexoGlRenderer(
             }
             is LayerConfig.Particles -> drawParticlesLayer(c.id, cfg, scene, deltaSec, opacity, w, h,scalar("particleSpeed",cfg.measureOverallSpeed))
             is LayerConfig.BlurEffect -> drawBlurEffect(cfg, scalar("blur",cfg.measureBlur), opacity, w, h, compTextures)
-            is LayerConfig.RgbSplitEffect -> drawRgbSplitEffect(cfg,measured("rgbSplit",cfg.splitMeasure),opacity,w,h,compTextures)
+            is LayerConfig.RgbSplitEffect -> drawRgbSplitEffect(cfg,measured("rgbSplit",cfg.splitMeasure),
+                measured("rgbMultiplier",cfg.splitMultiplierMeasure).x,opacity,w,h,compTextures)
             is LayerConfig.MotionBlurEffect -> {
                 val gain=scalar("motionAmount",cfg.blurAmountMeasure)
                 drawMotionBlurEffect(c.id,cfg.copy(blurAmountMultiplier=(cfg.blurAmountMultiplier+gain).coerceIn(0f,3f)), com.vexo.studio.engine.scene.MotionPose(tx/w,ty/h,rot,sx,sy), deltaSec, opacity, w, h, compTextures)
@@ -1203,14 +1204,16 @@ class VexoGlRenderer(
     private fun drawRgbSplitEffect(
         cfg: LayerConfig.RgbSplitEffect,
         delta: com.vexo.studio.engine.scene.EvaluatedPair,
+        multiplierDelta:Float,
         opacity: Float,
         w: Int,
         h: Int,
         compTextures: Map<Int, Int>
     ) {
         val srcTex = compTextures[cfg.targetCompositionIndex] ?: return
-        val offX=((cfg.splitAmountX+delta.x*.015f)*cfg.splitMultiplier*.4f).coerceIn(-.25f,.25f)
-        val offY=((cfg.splitAmountY+delta.y*.015f)*cfg.splitMultiplier*.4f).coerceIn(-.25f,.25f)
+        val multiplier=(cfg.splitMultiplier+multiplierDelta).takeIf{it.isFinite()}?.coerceIn(-100f,100f)?:0f
+        val offX=((cfg.splitAmountX+delta.x*.015f)*multiplier*.4f).coerceIn(-.25f,.25f)
+        val offY=((cfg.splitAmountY+delta.y*.015f)*multiplier*.4f).coerceIn(-.25f,.25f)
 
         if(cfg.showUnblurredContentUnder) drawEffectSource(srcTex,opacity,w,h,BlendMode.ALPHA)
         val shader = rgbSplitShader ?: return

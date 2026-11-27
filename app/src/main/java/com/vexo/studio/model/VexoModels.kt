@@ -662,7 +662,8 @@ sealed interface LayerConfig {
         val aberrationCenterY: Float = .5f,
         val blendModeContent: BlendMode = BlendMode.ADD,
         val showUnblurredContent: Boolean = false,
-        val showUnblurredContentUnder: Boolean = false
+        val showUnblurredContentUnder: Boolean = false,
+        val splitMultiplierMeasure: MeasureConfig = MeasureConfig()
     ) : LayerConfig
 }
 
@@ -681,7 +682,8 @@ data class CompositionNode(
     val layers: List<LayerNode> = emptyList(),
     val aveeMetadata: Map<String, String> = emptyMap(),
     val preservedElements: Map<Int, String> = emptyMap(),
-    val providerIndices: List<Int> = emptyList()
+    val providerIndices: List<Int> = emptyList(),
+    val providerElementPositions: Map<Int, Int> = emptyMap()
 )
 
 @Serializable
