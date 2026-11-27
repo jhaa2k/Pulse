@@ -744,6 +744,8 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         val current=_uiState.value.project
         val fresh=com.vexo.studio.data.PresetDraft.create(current,template,playbackController.currentAudioUri())
         replaceWithDraft(fresh,true)
+        val diagnostics=com.vexo.studio.data.TemplateDiagnostics.inspect(fresh)
+        _uiState.value=_uiState.value.copy(statusBanner=diagnostics.banner(fresh))
     }
 
     fun createNewProject(name:String,template:VexoProject=VexoTemplates.monochromeStudio()){
@@ -826,8 +828,10 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                 val imported = stream.use { s -> VexArchive.read(app, s, displayName.substringBeforeLast('.')) }
                 withContext(Dispatchers.Main) {
                     applyPreset(imported)
-                    val unsupported = imported.compositions.sumOf { it.preservedElements.size }
-                    _uiState.value = _uiState.value.copy(statusBanner = "Imported ${imported.compositions.size} compositions · ${imported.compositions.sumOf { it.layers.size }} editable layers" + if (unsupported > 0) " · $unsupported unsupported elements preserved" else "")
+                    if(_uiState.value.pendingPreset!=null){
+                        val diagnostics=com.vexo.studio.data.TemplateDiagnostics.inspect(imported)
+                        _uiState.value=_uiState.value.copy(statusBanner="Awaiting preset confirmation · "+diagnostics.banner(imported))
+                    }
                 }
             }.onFailure { err ->
                 withContext(Dispatchers.Main) {

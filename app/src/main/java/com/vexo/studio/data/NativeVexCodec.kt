@@ -30,7 +30,11 @@ object NativeVexCodec {
         val envelope = json.decodeFromString(Envelope.serializer(), text)
         require(envelope.format == FORMAT) { "Not a VEX project" }
         require(envelope.version == VERSION) { "Unsupported VEX format version ${envelope.version}" }
-        val p = envelope.project
+        return validateStructure(envelope.project)
+    }
+
+    /** Apply the same persistence limits to imported legacy scenes before autosave. */
+    fun validateStructure(p:VexoProject):VexoProject {
         require(runCatching { UUID.fromString(p.id).toString() == p.id }.getOrDefault(false)) { "Invalid project ID" }
         require(p.compositions.size in 1..64 && p.compositions.any { it.index == 0 }) { "Missing final composition or too many compositions" }
         require(p.compositions.map { it.index }.distinct().size == p.compositions.size) { "Duplicate composition index" }

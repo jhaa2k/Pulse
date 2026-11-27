@@ -79,7 +79,10 @@ object VexArchive {
             val bytes = ByteArrayOutputStream()
             copyLimited(buffered, bytes, NativeVexCodec.MAX_JSON_BYTES.toLong())
             val text = bytes.toString("UTF-8").removePrefix("\uFEFF")
-            return if (NativeVexCodec.isNative(text)) NativeVexCodec.decode(text) else AveeJsonCodec.importFromText(text, fallbackName)
+            val project=if(NativeVexCodec.isNative(text)) NativeVexCodec.decode(text)
+                else NativeVexCodec.validateStructure(AveeJsonCodec.importFromText(text,fallbackName))
+            TemplateDiagnostics.requireNoUnpackedAssets(project)
+            return project
         }
         val dir = File(context.filesDir, "vex_media/${UUID.randomUUID()}").apply { mkdirs() }
         val assets = linkedMapOf<String, File>()
@@ -144,7 +147,7 @@ object VexArchive {
             }
             val native = projectText
             if(native == null) {
-                val raw=AveeJsonCodec.importFromText(legacyText ?: error("No scene.json or project.json in archive"), fallbackName)
+                val raw=NativeVexCodec.validateStructure(AveeJsonCodec.importFromText(legacyText ?: error("No scene.json or project.json in archive"), fallbackName))
                 val used=mutableSetOf<File>()
                 fun linked(value:String?):String? {
                     val name=LegacyAssetReferences.match(value,legacyAssets.keys) ?: return null
