@@ -83,6 +83,8 @@ class VexoGlRenderer(
     private var colorShader: GlShaderProgram? = null
     private var imageShader: GlShaderProgram? = null
     private var blurShader: GlShaderProgram? = null
+    private data class StaticBlurKey(val source:Int,val width:Int,val height:Int,val targetW:Int,val targetH:Int,val sigma:Float,val quality:com.vexo.studio.model.BlurQuality)
+    private val staticBlurResults=mutableMapOf<String,Pair<StaticBlurKey,Int>>()
     private var rgbSplitShader: GlShaderProgram? = null
     private var mirrorShader: GlShaderProgram? = null
     private var particleShader: GlShaderProgram? = null
@@ -228,6 +230,7 @@ class VexoGlRenderer(
         blurShader?.release(); blurShader = null
         rgbSplitShader?.release(); rgbSplitShader = null
         mirrorShader?.release(); mirrorShader = null
+        staticBlurResults.clear()
         fboPool.releaseAll()
         bitmapSizes.clear()
         bitmapKeyColors.clear()
@@ -290,7 +293,7 @@ class VexoGlRenderer(
             barDelayHistory.keys.removeAll{it.removeSuffix("_segment2") !in cachedLayerIds}
             fboPool.retainSceneBuffers((0 until checkNotNull(cachedSlots).slotCount).toSet(),cachedTrails)
             if(activeLayers.none{it.config is LayerConfig.BlurEffect})fboPool.releaseByPrefix("blur_")
-            if(activeLayers.none{(it.config as? LayerConfig.Image)?.let{cfg->cfg.blurEnabled||cfg.blurredBorder}==true})fboPool.releaseByPrefix("image_blur_")
+            if(activeLayers.none{(it.config as? LayerConfig.Image)?.let{cfg->cfg.blurEnabled||cfg.blurredBorder}==true}){staticBlurResults.clear();fboPool.releaseByPrefix("image_blur_")}
         }
         val resolved=checkNotNull(cachedGraph)
         val slots=checkNotNull(cachedSlots)
@@ -709,8 +712,17 @@ class VexoGlRenderer(
         val blur=if(cfg.blurEnabled)cfg.blurRadius.coerceIn(0,64).toFloat()/cfg.blurDivider.coerceAtLeast(1)else 0f
         val imageRatio=sourceW.toFloat()/sourceH.coerceAtLeast(1)
         val needsBorder=cfg.blurredBorder&&cfg.keepAspectRatio&&!cfg.keepAspectRatioAndCropToFit&&cfg.shape==ImageShape.NONE&&kotlin.math.abs(imageRatio-w.toFloat()/h.coerceAtLeast(1))>.001f
-        val mainTex=if(blur>.001f)filterTexture(texId,sourceW,sourceH,sourceIsFbo,w,h,blur*.8f,0f,1f,com.vexo.studio.model.BlurQuality.BALANCED,prefix="image_blur_main")else texId
-        val borderTex=if(needsBorder)filterTexture(texId,sourceW,sourceH,sourceIsFbo,w,h,maxOf(10f,cfg.blurRadius*2f)*.8f,0f,1f,com.vexo.studio.model.BlurQuality.BALANCED,prefix="image_blur_border")else texId
+        val immutableSource=!sourceIsFbo&&!(cfg.sourceType==ImageSourceType.IMPORTED&&cfg.videoEnabled)
+        fun filtered(sigma:Float,prefix:String):Int{
+            val key=StaticBlurKey(texId,sourceW,sourceH,w,h,sigma,cfg.blurQuality)
+            if(immutableSource)staticBlurResults[prefix]?.let{if(it.first==key)return it.second}
+            staticBlurResults.remove(prefix)
+            val result=filterTexture(texId,sourceW,sourceH,sourceIsFbo,w,h,sigma,0f,1f,cfg.blurQuality,prefix=prefix)
+            if(immutableSource)staticBlurResults[prefix]=key to result
+            return result
+        }
+        val mainTex=if(blur>.001f)filtered(blur*.8f,"image_blur_main")else texId
+        val borderTex=if(needsBorder)filtered(maxOf(10f,cfg.blurRadius*2f)*.8f,"image_blur_border")else texId
         val mainIsFbo=sourceIsFbo||mainTex!=texId
         val shader = imageShader ?: return
         resetImageState(shader)
@@ -1020,6 +1032,8 @@ class VexoGlRenderer(
         threshold:Float=0f,knee:Float=.1f,prefix:String):Int{
         val shader=checkNotNull(blurShader){"Blur shader unavailable"}
         val plan=com.vexo.studio.engine.scene.SmoothBlurPlan.create(sourceW,sourceH,targetW,targetH,sigma,cross,quality,mode!=0)
+        // Release obsolete levels when the radius shrinks, rather than retaining a full pyramid.
+        for(i in plan.reductions.size..12)fboPool.releaseByPrefix("${prefix}_down_$i")
         val saved=IntArray(1);val viewport=IntArray(4)
         GLES20.glGetIntegerv(GLES20.GL_FRAMEBUFFER_BINDING,saved,0)
         GLES20.glGetIntegerv(GLES20.GL_VIEWPORT,viewport,0)
@@ -1493,6 +1507,7 @@ class VexoGlRenderer(
             val entry=iterator.next()
             if(entry.key=="internalres:white"||entry.key=="internalres:vignette80"||entry.key=="internalres:particle_circle_blur4")continue
             val id=entry.value;val size=bitmapSizes.remove(id);bitmapKeyColors.remove(id)
+            staticBlurResults.entries.removeAll{it.value.first.source==id}
             if(size!=null)bytes-=size.first.toLong()*size.second*4L
             GLES20.glDeleteTextures(1,intArrayOf(id),0);iterator.remove()
         }
@@ -1669,6 +1684,8 @@ class VexoGlRenderer(
     }
 
     private fun uploadBitmapToGl(bitmap: Bitmap): Int {
+        // A deleted/reuploaded source may reuse a GL texture name.
+        staticBlurResults.clear()
         val ids = IntArray(1)
         GLES20.glGenTextures(1, ids, 0)
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, ids[0])

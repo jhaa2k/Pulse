@@ -1201,6 +1201,7 @@ private fun PropertiesTab(
                     StudioToggleRow("Blurred Border (fit mode)",cfg.blurredBorder){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.Image).copy(blurredBorder=v))}}
                     StudioToggleRow("Image Blur", cfg.blurEnabled) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(blurEnabled = v)) } }
                     if (cfg.blurEnabled) {
+                        StudioChipSelector("Blur Quality",com.vexo.studio.model.BlurQuality.entries,cfg.blurQuality,{it.name}){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.Image).copy(blurQuality=v))}}
                         StudioSlider("Image Blur Radius", cfg.blurRadius.toFloat(), 0f, 64f, 7f, "px", 1f, onValueChange = { v -> beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(blurRadius = v.toInt())) } }, onCommit = ::endDrag)
                         StudioSlider("Blur Divider", cfg.blurDivider.toFloat(), 1f, 12f, 5f, "", 1f, onValueChange = { v -> beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(blurDivider = v.toInt())) } }, onCommit = ::endDrag)
                     }
@@ -1420,6 +1421,12 @@ private fun PropertiesTab(
                 ExpandableSectionHeader("Blur parameters", expandedSections["BlurEffect_Blurparameters"] == true, { toggleAccordion(expandedSections, "BlurEffect_Blurparameters") }) {
                     MediaAssetButton("IMPORT BLUR MASK"){uri->vm.attachLayerAsset(layer.common.id,uri,"mask")}
                     TextButton(onClick={vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.BlurEffect).copy(maskImage=""))}}){Text("CLEAR MASK")}
+                    Text("QUICK BLUR STYLES",style=MaterialTheme.typography.labelSmall)
+                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())){
+                        com.vexo.studio.engine.scene.BlurStyle.entries.forEach{style->
+                            TextButton(onClick={vm.updateLayer(layer.common.id){it.copy(config=style.apply(it.config as LayerConfig.BlurEffect))}}){Text(style.label)}
+                        }
+                    }
                     StudioChipSelector("Blur Quality",com.vexo.studio.model.BlurQuality.entries,cfg.blurQuality,{it.name}){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.BlurEffect).copy(blurQuality=v))}}
                     StudioChipSelector("Filter Mode",com.vexo.studio.model.BlurFilterMode.entries,cfg.filterMode,{it.name.replace('_',' ')}){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.BlurEffect).copy(filterMode=v))}}
                     if(cfg.filterMode!=com.vexo.studio.model.BlurFilterMode.GAUSSIAN){

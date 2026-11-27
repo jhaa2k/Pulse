@@ -463,6 +463,7 @@ sealed interface LayerConfig {
         val blurEnabled: Boolean = false,
         val blurRadius: Int = 7,
         val blurDivider: Int = 5,
+        val blurQuality: BlurQuality = BlurQuality.BALANCED,
         val blurredBorder: Boolean = false,
         val maskImage: String = "",
         val maskMode: MaskMode = MaskMode.TRANSPARENCY,
