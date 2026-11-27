@@ -73,7 +73,8 @@ data class RenderSceneSnapshot(
  */
 class VexoGlRenderer(
     private val context: Context,
-    private val isExportRenderer: Boolean = false
+    private val isExportRenderer: Boolean = false,
+    private val highResolutionTextures: Boolean = true
 ) : GLSurfaceView.Renderer {
 
     private val pendingScene = AtomicReference<RenderSceneSnapshot?>()
@@ -130,6 +131,7 @@ class VexoGlRenderer(
     private val textureCache = LinkedHashMap<String,Int>(32,.75f,true)
     private val failedImageUntil=LinkedHashMap<String,Long>()
     private var imageDecodeLimit=2048
+    private var gpuTextureLimit=2048
     private val lowRamDevice=(context.getSystemService(Context.ACTIVITY_SERVICE) as? android.app.ActivityManager)?.isLowRamDevice==true
     private val bitmapSizes = mutableMapOf<Int, Pair<Int, Int>>()
     private val bitmapKeyColors=mutableMapOf<Int,Int>()
@@ -206,7 +208,8 @@ class VexoGlRenderer(
         particleShader = GlShaderProgram(VexoShaders.PARTICLE_VERTEX,VexoShaders.PARTICLE_FRAGMENT)
         val maxTexture=IntArray(1)
         GLES20.glGetIntegerv(GLES20.GL_MAX_TEXTURE_SIZE,maxTexture,0)
-        imageDecodeLimit=minOf(if(!isExportRenderer&&lowRamDevice)1024 else 2048,maxTexture[0].coerceAtLeast(16))
+        gpuTextureLimit=maxTexture[0].coerceAtLeast(16)
+        imageDecodeLimit=TextureDecodePolicy.limit(false,lowRamDevice,highResolutionTextures,2048,gpuTextureLimit)
         ensureInternalTextures()
     }
 
@@ -253,6 +256,7 @@ class VexoGlRenderer(
         }
         viewportW = targetWidth.coerceAtLeast(16)
         viewportH = targetHeight.coerceAtLeast(16)
+        imageDecodeLimit=TextureDecodePolicy.limit(isExportRenderer,lowRamDevice,highResolutionTextures,maxOf(viewportW,viewportH),gpuTextureLimit)
 
         val position = scene.trackMeta.positionMs
         if (lastProjectId != scene.project.id || (lastPositionMs >= 0L && (position < lastPositionMs - 100L || position - lastPositionMs > 750L))) {
@@ -1463,9 +1467,10 @@ class VexoGlRenderer(
     private fun trimTextureCache(){
         var bytes=textureCache.values.sumOf{ id->val size=bitmapSizes[id];if(size==null)0L else size.first.toLong()*size.second*4L }
         val iterator=textureCache.entries.iterator()
-        while(iterator.hasNext() && (bytes>48L*1024*1024 || textureCache.size>48)){
+        val budget=if(isExportRenderer&&highResolutionTextures&&!lowRamDevice)128L*1024*1024 else 48L*1024*1024
+        while(iterator.hasNext() && (bytes>budget || textureCache.size>48)){
             val entry=iterator.next()
-            if(entry.key in setOf("internalres:white","internalres:vignette80","internalres:particle_circle_blur4"))continue
+            if(entry.key=="internalres:white"||entry.key=="internalres:vignette80"||entry.key=="internalres:particle_circle_blur4")continue
             val id=entry.value;val size=bitmapSizes.remove(id);bitmapKeyColors.remove(id)
             if(size!=null)bytes-=size.first.toLong()*size.second*4L
             GLES20.glDeleteTextures(1,intArrayOf(id),0);iterator.remove()
@@ -1484,8 +1489,7 @@ class VexoGlRenderer(
             return 0
         }
         failedImageUntil.remove(uriStr)
-        val id = uploadBitmapToGl(bmp)
-        bmp.recycle()
+        val id = try{uploadBitmapToGl(bmp)}finally{bmp.recycle()}
         textureCache[uriStr] = id
         return id
     }

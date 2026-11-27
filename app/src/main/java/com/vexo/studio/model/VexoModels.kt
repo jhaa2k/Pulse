@@ -720,6 +720,8 @@ data class ExportSettings(
     val trimStartMs: Long = 0L,
     val trimEndMs: Long = 0L, // 0 = full track
     val useHevcIfSupported: Boolean = false,
+    val smoothEdges: Boolean = true,
+    val highResolutionTextures: Boolean = true,
     val customOutputUri: String? = null
 )
 

@@ -427,6 +427,8 @@ fun ExportScreen(
         )
 
         StudioToggleRow("Prefer HEVC (H.265)",exp.useHevcIfSupported){v->vm.updateExportSettings{it.copy(useHevcIfSupported=v)}}
+        StudioToggleRow("Smooth edges (GPU MSAA)",exp.smoothEdges){v->vm.updateExportSettings{it.copy(smoothEdges=v)}}
+        StudioToggleRow("High resolution image textures",exp.highResolutionTextures){v->vm.updateExportSettings{it.copy(highResolutionTextures=v)}}
         Text("HEVC is used only if the device reports support; otherwise H.264 is selected.",style=MaterialTheme.typography.labelSmall,color=palette.textSecondary)
         val estimatedMs=(if(exp.trimEndMs>exp.trimStartMs)minOf(trackDurMs,exp.trimEndMs) else trackDurMs)-exp.trimStartMs
         val estimatedBytes=com.vexo.studio.export.ExportBudget.encodedBytes(estimatedMs.coerceAtLeast(0L)*1000L,exp.videoBitrateMbps.coerceIn(2,80)*1_000_000,exp.audioBitrateKbps*1000)

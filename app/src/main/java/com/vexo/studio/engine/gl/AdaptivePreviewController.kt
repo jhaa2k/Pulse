@@ -24,6 +24,14 @@ class AdaptivePreviewController(maxScale:Float,targetFps:Int){
     }
 }
 object TextureDecodePolicy{
+    fun limit(export:Boolean,lowRam:Boolean,highResolution:Boolean,outputMax:Int,gpuMax:Int):Int{
+        val requested=when{
+            !export&&lowRam->1024
+            export&&highResolution&&!lowRam&&outputMax>2048->4096
+            else->2048
+        }
+        return minOf(requested,gpuMax.coerceAtLeast(16))
+    }
     fun sampleSize(width:Int,height:Int,limit:Int):Int{
         val largest=maxOf(width,height).coerceAtLeast(1).toLong()
         val bound=limit.coerceAtLeast(1).toLong()

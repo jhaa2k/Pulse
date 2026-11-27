@@ -64,9 +64,7 @@ object SpectrumStudioMesh {
             val t=(i+.5f)/n
             val origin=point(t);val d=point(t+.25f/n)-point(t-.25f/n);val tangent=d.unit()
             val size=(sqrt(d.x*d.x+d.y*d.y)*2f*c.barWidth.coerceIn(.05f,1.5f)*(1f-c.barSpacing.coerceIn(0f,.95f))).coerceIn(.5f,maxOf(.5f,dim*.15f))
-            val phase = (i.toDouble()/n*c.sampleRepeats.coerceIn(1,8) + c.sampleOffset.coerceIn(-1f,1f))
-            val wrapped = phase - floor(phase)
-            val src = (wrapped * bars.size).toInt().coerceIn(0,bars.lastIndex)
+            val src = SpectrumGeometry.sampleIndex(i,n,bars.size,c.sampleRepeats,c.sampleOffset)
             val idx=if(c.flipInput)bars.lastIndex-src else src
             val raw=bars[idx].takeIf{it.isFinite()}?:0f
             val amplitude=((if(c.signedWaveform)abs(raw) else raw.coerceAtLeast(0f)).pow(c.amplitudeCurve.coerceIn(.25f,3f))*abs(gain)).coerceIn(if(c.signedWaveform)0f else lo,hi)

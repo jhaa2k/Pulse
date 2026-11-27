@@ -84,7 +84,9 @@ fun VexoPreviewSurface(
             setEGLContextClientVersion(2)
             setZOrderOnTop(false)
             holder.setFormat(android.graphics.PixelFormat.OPAQUE)
-            setEGLConfigChooser(8, 8, 8, 8, 0, 0)
+            setEGLConfigChooser(PreviewEglConfigChooser(
+                (context.getSystemService(android.content.Context.ACTIVITY_SERVICE) as? android.app.ActivityManager)?.isLowRamDevice==true
+            ))
             preserveEGLContextOnPause = true
             setRenderer(renderer)
             renderMode = if (continuousRendering) {

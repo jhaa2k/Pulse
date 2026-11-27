@@ -211,35 +211,34 @@ class VexoVideoExporter(private val context: Context) {
             eglDisplay = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY)
             val vers = IntArray(2)
             check(EGL14.eglInitialize(eglDisplay, vers, 0, vers, 1)) { "EGL initialization failed" }
-            val attribList = intArrayOf(
-                EGL14.EGL_RED_SIZE, 8,
-                EGL14.EGL_GREEN_SIZE, 8,
-                EGL14.EGL_BLUE_SIZE, 8,
-                EGL14.EGL_ALPHA_SIZE, 8,
-                EGL14.EGL_RENDERABLE_TYPE, EGL14.EGL_OPENGL_ES2_BIT,
-                0x3142, 1, // EGL_RECORDABLE_ANDROID
-                EGL14.EGL_NONE
-            )
-            val configs = arrayOfNulls<EGLConfig>(1)
-            val numConfigs = IntArray(1)
-            check(EGL14.eglChooseConfig(eglDisplay, attribList, 0, configs, 0, 1, numConfigs, 0) && numConfigs[0]>0) { "No recordable EGL configuration" }
-            eglContext = EGL14.eglCreateContext(
-                eglDisplay,
-                configs[0],
-                EGL14.EGL_NO_CONTEXT,
-                intArrayOf(EGL14.EGL_CONTEXT_CLIENT_VERSION, 2, EGL14.EGL_NONE),
-                0
-            )
-            eglSurface = EGL14.eglCreateWindowSurface(
-                eglDisplay,
-                configs[0],
-                encoderSurface,
-                intArrayOf(EGL14.EGL_NONE),
-                0
-            )
-            check(eglContext != EGL14.EGL_NO_CONTEXT && eglSurface != EGL14.EGL_NO_SURFACE && EGL14.eglMakeCurrent(eglDisplay, eglSurface, eglSurface, eglContext)) { "Cannot bind encoder EGL surface" }
+            // Prefer multisampled window surfaces. Some recordable configurations
+            // advertise MSAA but cannot bind the codec surface; retry without it.
+            var bound=false
+            for(samples in (if(settings.smoothEdges)listOf(4,2,0)else listOf(0))){
+                val attribList=intArrayOf(
+                    EGL14.EGL_RED_SIZE,8,EGL14.EGL_GREEN_SIZE,8,EGL14.EGL_BLUE_SIZE,8,EGL14.EGL_ALPHA_SIZE,8,
+                    EGL14.EGL_SURFACE_TYPE,EGL14.EGL_WINDOW_BIT,
+                    EGL14.EGL_RENDERABLE_TYPE,EGL14.EGL_OPENGL_ES2_BIT,
+                    EGL14.EGL_SAMPLE_BUFFERS,if(samples>0)1 else 0,EGL14.EGL_SAMPLES,samples,
+                    0x3142,1,EGL14.EGL_NONE
+                )
+                val configs=arrayOfNulls<EGLConfig>(1)
+                val count=IntArray(1)
+                if(!EGL14.eglChooseConfig(eglDisplay,attribList,0,configs,0,1,count,0)||count[0]==0)continue
+                eglContext=EGL14.eglCreateContext(eglDisplay,configs[0],EGL14.EGL_NO_CONTEXT,
+                    intArrayOf(EGL14.EGL_CONTEXT_CLIENT_VERSION,2,EGL14.EGL_NONE),0)
+                if(eglContext==EGL14.EGL_NO_CONTEXT)continue
+                eglSurface=EGL14.eglCreateWindowSurface(eglDisplay,configs[0],encoderSurface,intArrayOf(EGL14.EGL_NONE),0)
+                if(eglSurface!=EGL14.EGL_NO_SURFACE&&EGL14.eglMakeCurrent(eglDisplay,eglSurface,eglSurface,eglContext)){
+                    bound=true;break
+                }
+                if(eglSurface!=EGL14.EGL_NO_SURFACE)EGL14.eglDestroySurface(eglDisplay,eglSurface)
+                EGL14.eglDestroyContext(eglDisplay,eglContext)
+                eglSurface=EGL14.EGL_NO_SURFACE;eglContext=EGL14.EGL_NO_CONTEXT
+            }
+            check(bound){"Cannot bind a recordable EGL surface. Try disabling smooth edges or reducing export quality."}
 
-            val renderer = VexoGlRenderer(context, isExportRenderer = true).apply { initGlResources() }
+            val renderer = VexoGlRenderer(context, isExportRenderer = true,highResolutionTextures=settings.highResolutionTextures).apply { initGlResources() }
             glRenderer = renderer
             val engines = project.audioProviders.associate { it.index to AudioProviderEngine(it) }
 

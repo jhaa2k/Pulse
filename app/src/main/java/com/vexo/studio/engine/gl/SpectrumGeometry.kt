@@ -7,6 +7,15 @@ import kotlin.math.sqrt
 
 /** Geometry shared by the native preview and encoder renderer. */
 object SpectrumGeometry {
+    /** Exact integer mapping for unshifted samples; avoid rounding into the previous bin. */
+    fun sampleIndex(i:Int,count:Int,inputCount:Int,repeats:Int,offset:Float):Int{
+        if(count<=0||inputCount<=0)return 0
+        val r=repeats.coerceIn(1,8)
+        if(offset==0f||!offset.isFinite())return (((i.toLong()*r)%count+count)%count*inputCount/count).toInt()
+        val phase=i.toDouble()/count*r+offset.coerceIn(-1f,1f)
+        return ((phase-kotlin.math.floor(phase))*inputCount).toInt().coerceIn(0,inputCount-1)
+    }
+
     fun resample(input: FloatArray, requested: Int): FloatArray {
         if (requested <= 0 || requested == input.size || input.isEmpty()) return input
         val n = requested.coerceIn(1, 512)
