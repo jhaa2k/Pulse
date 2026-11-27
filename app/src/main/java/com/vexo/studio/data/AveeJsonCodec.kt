@@ -454,7 +454,10 @@ object AveeJsonCodec {
                 circleRadius = obj.propFloat("circleRadius", ((obj.rawProp("ShapePath") as? JsonObject)?.propFloat("radius", 1f) ?: 1f) * 0.28f),
                 polygonSides = obj.propInt("polygonSides", (obj.rawProp("ShapePath") as? JsonObject)?.propInt("sides", 6) ?: 6).coerceIn(3, 24),
                 pathAngleDeg = obj.propFloat("pathAngleDeg", 0f),
-                alternatingDirection = obj.propBool("alternatingDirection", seg1Obj?.propBool("flipEveryOther",false)?:false)
+                alternatingDirection = obj.propBool("alternatingDirection", seg1Obj?.propBool("flipEveryOther",false)?:false),
+                segment2AlternatingDirection = seg2Obj?.takeIf{seg2Type!=BarsSegmentType.NONE}?.propBool("flipEveryOther",false),
+                showPeaks=obj.propBool("vexoShowPeaks",false),
+                barCount=obj.propInt("vexoBarCount",0).coerceIn(0,512)
             )
         )
     }
@@ -695,17 +698,21 @@ object AveeJsonCodec {
                 put("polygonSides", propObj(cfg.polygonSides))
                 put("pathAngleDeg", propObj(cfg.pathAngleDeg))
                 put("alternatingDirection", propObj(if (cfg.alternatingDirection) 1 else 0))
+                put("vexoShowPeaks",propObj(if(cfg.showPeaks)1 else 0))
+                put("vexoBarCount",propObj(cfg.barCount))
                 put("Segment1", buildJsonObject {
                     put("v", cfg.segment1.aveeName)
                     put("barWidth", propObj(cfg.barWidth))
                     put("barHeightMultiplier", propObj(cfg.barHeightMultiplier))
                     put("fixedHeight", propObj(cfg.fixedHeight))
                     put("mirror", propObj(if (cfg.mirror) 1 else 0))
+                    put("flipEveryOther",propObj(if(cfg.alternatingDirection)1 else 0))
                     put("colorFrom", propObj(cfg.colorFromArgb))
                     put("colorTo", propObj(cfg.colorToArgb))
                 })
                 put("Segment2", buildJsonObject {
                     put("v", cfg.segment2.aveeName); put("barWidth", propObj(cfg.segment2Width)); put("barHeightMultiplier", propObj(cfg.segment2HeightMultiplier)); put("fixedHeight", propObj(cfg.segment2FixedHeight)); put("mirror", propObj(if (cfg.segment2Mirror) 1 else 0)); put("colorFrom", propObj(cfg.segment2ColorFrom)); put("colorTo", propObj(cfg.segment2ColorTo))
+                    put("flipEveryOther",propObj(if(cfg.segment2AlternatingDirection?:cfg.alternatingDirection)1 else 0))
                 })
             }
             is LayerConfig.Image -> {

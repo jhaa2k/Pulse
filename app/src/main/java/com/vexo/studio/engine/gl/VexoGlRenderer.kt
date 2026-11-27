@@ -489,7 +489,7 @@ class VexoGlRenderer(
         if (cfg.segment1 == BarsSegmentType.NONE && cfg.segment2 == BarsSegmentType.NONE) return
         if (cfg.segment2 != BarsSegmentType.NONE) {
             if (cfg.segment1 != BarsSegmentType.NONE) drawBarsLayer(layerId, cfg.copy(segment2 = BarsSegmentType.NONE), audioSnap, opacity, w, h)
-            drawBarsLayer("${layerId}_segment2", cfg.copy(segment1 = cfg.segment2, segment2 = BarsSegmentType.NONE, barWidth = cfg.segment2Width, barHeightMultiplier = cfg.segment2HeightMultiplier, fixedHeight = cfg.segment2FixedHeight, mirror = cfg.segment2Mirror, creativeStyle=cfg.secondaryCreativeStyle, colorFromArgb = cfg.segment2ColorFrom, colorToArgb = cfg.segment2ColorTo, barStrokeWidth=cfg.segment2StrokeWidth,barStrokeColorArgb=cfg.segment2StrokeColorArgb,barFillOpacity=cfg.segment2FillOpacity), audioSnap, opacity, w, h)
+            drawBarsLayer("${layerId}_segment2", cfg.copy(segment1 = cfg.segment2, segment2 = BarsSegmentType.NONE, barWidth = cfg.segment2Width, barHeightMultiplier = cfg.segment2HeightMultiplier, fixedHeight = cfg.segment2FixedHeight, mirror = cfg.segment2Mirror, alternatingDirection=cfg.segment2AlternatingDirection?:cfg.alternatingDirection, creativeStyle=cfg.secondaryCreativeStyle, colorFromArgb = cfg.segment2ColorFrom, colorToArgb = cfg.segment2ColorTo, barStrokeWidth=cfg.segment2StrokeWidth,barStrokeColorArgb=cfg.segment2StrokeColorArgb,barFillOpacity=cfg.segment2FillOpacity), audioSnap, opacity, w, h)
             return
         }
         val rawBars = (if(cfg.signedWaveform) audioSnap?.waveform else audioSnap?.bars) ?: FloatArray(64)
@@ -566,8 +566,7 @@ class VexoGlRenderer(
             val srcIdx = if (cfg.flipInput) count - 1 - i else i
             val rawAmp = delayedBars[srcIdx]
             val signedGain = cfg.heightScale * cfg.barHeightMultiplier
-            val amp = (rawAmp * kotlin.math.abs(signedGain))
-                .coerceIn(minOf(kotlin.math.abs(cfg.minHeightScale), kotlin.math.abs(cfg.maxHeightScale)), maxOf(kotlin.math.abs(cfg.minHeightScale), kotlin.math.abs(cfg.maxHeightScale))) * (if (signedGain < 0f) -1f else 1f)
+            val amp = com.vexo.studio.engine.scene.LegacySpectrumMath.signedAmplitude(rawAmp,signedGain,cfg.minHeightScale,cfg.maxHeightScale)
             val gradColor = MeasureEvaluator.blendArgb(
                 barColor0, barColor1,
                 ((i.toFloat() / count) + cfg.colorBlendOffset).coerceIn(0f, 1f)
@@ -609,7 +608,7 @@ class VexoGlRenderer(
                     val cx = w * 0.5f
                     val cy = h * 0.5f
                     val angle = Math.toRadians(cfg.pathAngleDeg.toDouble()).toFloat() +
-                        (i.toFloat() / count) * 2f * PI.toFloat() * (1f - cfg.pathGap.coerceIn(0f, 0.9f))
+                        i*com.vexo.studio.engine.scene.LegacySpectrumMath.arcStep(count,cfg.pathGap)
                     val baseR = if (cfg.shapePath == BarsShapePath.SIDED_POLYGON) {
                         val sides = cfg.polygonSides.coerceIn(3, 24)
                         val sector = (2f * PI.toFloat()) / sides
@@ -625,7 +624,7 @@ class VexoGlRenderer(
                     val ny = sin(angle)
                     val px = -ny
                     val py = nx
-                    val halfW = ((2f * PI.toFloat() * baseR) / count) * (cfg.barWidth.coerceIn(0.05f, 1.4f) * (1f - cfg.barSpacing.coerceIn(0f, 0.95f))) * 0.5f
+                    val halfW = com.vexo.studio.engine.scene.LegacySpectrumMath.arcStep(count,cfg.pathGap)*baseR * (cfg.barWidth.coerceIn(0.05f, 1.4f) * (1f - cfg.barSpacing.coerceIn(0f, 0.95f))) * 0.5f
                     val tipW = if (cfg.segment1 == BarsSegmentType.SHARP_BARS) halfW * 0.25f else halfW
 
                     emitQuad(
@@ -680,11 +679,11 @@ class VexoGlRenderer(
         fun point(i: Int,side:Float): Pair<Float, Float> {
             val idx = if (cfg.flipInput) count - 1 - i else i
             val gain = cfg.heightScale * cfg.barHeightMultiplier
-            val raw = (bars[idx] * kotlin.math.abs(gain)).coerceIn(0f, kotlin.math.abs(cfg.maxHeightScale))
-            val amp = raw * minDim * 0.42f * (if (gain < 0f) -1f else 1f)*side*(if(cfg.alternatingDirection && i%2==1)-1f else 1f)*(if(cfg.mirror).5f else 1f)
+            val raw = com.vexo.studio.engine.scene.LegacySpectrumMath.signedAmplitude(bars[idx],gain,cfg.minHeightScale,cfg.maxHeightScale)
+            val amp = raw * minDim * 0.42f *side*(if(cfg.alternatingDirection && i%2==1)-1f else 1f)*(if(cfg.mirror).5f else 1f)
             val t = i.toFloat() / (if (closed) count else count - 1)
             if (!closed) return if (cfg.shapePath == BarsShapePath.VERTICAL_LINE) (w * 0.5f + amp) to (h * (0.07f + t * 0.86f)) else (w * (0.07f + t * 0.86f)) to (h * 0.5f - amp)
-            val angle = Math.toRadians(cfg.pathAngleDeg.toDouble()).toFloat() + t * 2f * PI.toFloat() * (1f - cfg.pathGap.coerceIn(0f, 0.9f))
+            val angle = Math.toRadians(cfg.pathAngleDeg.toDouble()).toFloat() + i*com.vexo.studio.engine.scene.LegacySpectrumMath.arcStep(count,cfg.pathGap)
             val base = if (cfg.shapePath == BarsShapePath.SIDED_POLYGON) {
                 val sector = 2f * PI.toFloat() / cfg.polygonSides.coerceIn(3, 24)
                 val local = ((angle % sector) + sector) % sector - sector * 0.5f

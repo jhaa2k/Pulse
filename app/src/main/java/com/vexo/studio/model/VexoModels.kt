@@ -444,7 +444,8 @@ sealed interface LayerConfig {
         val peakMarkerThickness: Float = 1f,
         val peakMarkerOffset: Float = 0f,
         val peakMarkerColorArgb: Int? = null,
-        val gradientCycle: Boolean = false
+        val gradientCycle: Boolean = false,
+        val segment2AlternatingDirection: Boolean? = null
     ) : LayerConfig
 
     @Serializable
