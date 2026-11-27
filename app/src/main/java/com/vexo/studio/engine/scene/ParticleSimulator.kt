@@ -31,7 +31,7 @@ class ParticleSimulator(maxPool: Int = 3000) {
     private val sizeRand = FloatArray(capacity)
     private val phase = FloatArray(capacity)
 
-    private var spawnAccumulator = 0f
+    private val emission=ParticleEmissionClock()
     private val burstGate=ParticleBurstGate()
     private var stepAccumulator=0.0
     private var rng = Random(42)
@@ -50,7 +50,7 @@ class ParticleSimulator(maxPool: Int = 3000) {
 
     fun reset(seed: Int) {
         active.fill(false)
-        spawnAccumulator = 0f
+        emission.reset()
         burstGate.reset()
         stepAccumulator=0.0
         activeCount = 0
@@ -98,10 +98,7 @@ class ParticleSimulator(maxPool: Int = 3000) {
         val energy=ParticleBurstGate.signal(cfg.burstSource,burstSnapshot)
         val rate=1f+cfg.reactiveEmission.coerceIn(0f,5f)*energy
         val spawnInterval = (cfg.spawnTimeSec.coerceIn(0.004f, 0.25f)/rate).coerceAtLeast(.001f)
-        spawnAccumulator += cappedDt
-        var spawnsRemaining = (spawnAccumulator / spawnInterval).toInt().coerceAtMost(24)
-        spawnAccumulator -= spawnsRemaining * spawnInterval
-        spawnAccumulator=spawnAccumulator.coerceAtMost(spawnInterval)
+        var spawnsRemaining = emission.advance(cappedDt,spawnInterval)
         var burstRemaining=if(burstGate.update(energy,cfg.burstThreshold,cfg.burstCooldownMs,cappedDt,isPlaying))cfg.burstCount.coerceIn(0,256)else 0
         for(i in limit until capacity)active[i]=false
 
@@ -151,6 +148,7 @@ class ParticleSimulator(maxPool: Int = 3000) {
                 sin(age[i] * cfg.sideSineWaveFreq + phase[i]) * cfg.sideSineWaveMag * 0.01f * cappedDt
             } else 0f
 
+            val oldX=x[i];val oldY=y[i];val oldZ=z[i]
             x[i] += vx[i] * cappedDt * speedFactor + sineOffset
             y[i] += vy[i] * cappedDt * speedFactor
             z[i] += vz[i] * cappedDt * speedFactor
@@ -180,7 +178,10 @@ class ParticleSimulator(maxPool: Int = 3000) {
             outSize[currentCount] = sz.coerceIn(0f, 0.25f)
             outAlpha[currentCount] = alphaEnv*nearAlpha
             outProgress[currentCount] = p
-            outVx[currentCount]=vx[i];outVy[currentCount]=vy[i]
+            // Actual screen-space velocity includes audio speed, depth and side-wave motion.
+            val oldPersp=if(depth<=0f)1f else (depth/(depth+oldZ).coerceAtLeast(10f))*fovScale*.55f
+            outVx[currentCount]=(sx-(.5f+(oldX-.5f)*oldPersp))/cappedDt
+            outVy[currentCount]=(sy-(.5f+(oldY-.5f)*oldPersp))/cappedDt
             currentCount++
         }
         activeCount = currentCount

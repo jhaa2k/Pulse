@@ -968,6 +968,8 @@ class VexoGlRenderer(
         drawColorVertices(vIdx / 2, opacity)
     }
 
+    private val particleSpriteUv=floatArrayOf(0f,0f,1f,0f,0f,1f,0f,1f,1f,0f,1f,1f)
+
     private fun drawParticlesLayer(
         layerId: String,
         cfg: LayerConfig.Particles,
@@ -1001,7 +1003,7 @@ class VexoGlRenderer(
         var vIdx = 0
         var cIdx = 0
 
-        val spriteUv=floatArrayOf(0f,0f,1f,0f,0f,1f,0f,1f,1f,0f,1f,1f)
+        val spriteUv=particleSpriteUv
         for(i in 0 until count){
             val col=MeasureEvaluator.blendArgb(cfg.colorFromArgb,cfg.colorToArgb,sim.outProgress[i])
             val r=((col ushr 16) and 255)/255f*((cfg.colorArgb ushr 16) and 255)/255f
@@ -1010,7 +1012,8 @@ class VexoGlRenderer(
             val a=((col ushr 24) and 255)/255f*sim.outAlpha[i]*((cfg.colorArgb ushr 24) and 255)/255f
             if(a<=.001f||sim.outSize[i]<=0f)continue
             val half=sim.outSize[i]*minDim*.5f
-            val length=half*(1f+cfg.trailLength.coerceIn(0f,1f)*4f)
+            val length=half*com.vexo.studio.engine.scene.ParticleTrailMath.stretch(
+                cfg.trailLength,sim.outVx[i],sim.outVy[i],w,h)
             for(mx in 0 until if(cfg.mirrorX)2 else 1) for(my in 0 until if(cfg.mirrorY)2 else 1){
                 val px=(if(mx==1)1f-sim.outX[i] else sim.outX[i])*w
                 val py=(if(my==1)1f-sim.outY[i] else sim.outY[i])*h
