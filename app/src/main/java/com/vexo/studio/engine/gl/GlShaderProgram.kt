@@ -92,6 +92,38 @@ object VexoShaders {
         }
     """
 
+    // Alpha-aware, edge-adaptive resolve for ordinary GLES2 offscreen FBOs.
+    // All samples remain premultiplied; no straight-RGB halo on transparency.
+    const val EDGE_AA_FRAGMENT = """
+        #ifdef GL_FRAGMENT_PRECISION_HIGH
+        precision highp float;
+        #else
+        precision mediump float;
+        #endif
+        varying vec2 vUv;
+        uniform sampler2D uTex;
+        uniform vec2 uPixel;
+        float edgeValue(vec4 p){return max(dot(p.rgb,vec3(.299,.587,.114)),p.a*.5);}
+        void main(){
+            vec4 center=texture2D(uTex,vUv);
+            float m=edgeValue(center);
+            float nw=edgeValue(texture2D(uTex,vUv+vec2(-1.0,1.0)*uPixel));
+            float ne=edgeValue(texture2D(uTex,vUv+vec2(1.0,1.0)*uPixel));
+            float sw=edgeValue(texture2D(uTex,vUv+vec2(-1.0,-1.0)*uPixel));
+            float se=edgeValue(texture2D(uTex,vUv+vec2(1.0,-1.0)*uPixel));
+            float lo=min(m,min(min(nw,ne),min(sw,se)));
+            float hi=max(m,max(max(nw,ne),max(sw,se)));
+            if(hi-lo<max(.04,hi*.125)){gl_FragColor=center;return;}
+            vec2 dir=vec2(-((nw+ne)-(sw+se)),(nw+sw)-(ne+se));
+            float reduce=max((nw+ne+sw+se)*.03125,.0078125);
+            dir=clamp(dir/(min(abs(dir.x),abs(dir.y))+reduce),vec2(-2.0),vec2(2.0))*uPixel;
+            vec4 a=.5*(texture2D(uTex,vUv+dir*(-.1666667))+texture2D(uTex,vUv+dir*.1666667));
+            vec4 b=a*.5+.25*(texture2D(uTex,vUv-dir*.5)+texture2D(uTex,vUv+dir*.5));
+            float l=edgeValue(b);
+            gl_FragColor=mix(center,(l<lo||l>hi)?a:b,.8);
+        }
+    """
+
     const val IMAGE_FRAGMENT = """
         precision mediump float;
         varying vec2 vUv;

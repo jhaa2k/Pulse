@@ -83,6 +83,8 @@ class VexoGlRenderer(
     private var colorShader: GlShaderProgram? = null
     private var imageShader: GlShaderProgram? = null
     private var blurShader: GlShaderProgram? = null
+    private var edgeShader: GlShaderProgram? = null
+    private val edgeMatrix=FloatArray(16)
     private data class StaticBlurKey(val source:Int,val width:Int,val height:Int,val targetW:Int,val targetH:Int,val sigma:Float,val quality:com.vexo.studio.model.BlurQuality)
     private val staticBlurResults=mutableMapOf<String,Pair<StaticBlurKey,Int>>()
     private var rgbSplitShader: GlShaderProgram? = null
@@ -204,6 +206,7 @@ class VexoGlRenderer(
         colorShader = GlShaderProgram(VexoShaders.COLOR_VERTEX, VexoShaders.COLOR_FRAGMENT)
         imageShader = GlShaderProgram(VexoShaders.TEXTURE_VERTEX, VexoShaders.IMAGE_FRAGMENT)
         blurShader = GlShaderProgram(VexoShaders.TEXTURE_VERTEX, VexoShaders.BLUR_FRAGMENT)
+        edgeShader=runCatching{GlShaderProgram(VexoShaders.TEXTURE_VERTEX,VexoShaders.EDGE_AA_FRAGMENT)}.getOrNull()
         rgbSplitShader = GlShaderProgram(VexoShaders.TEXTURE_VERTEX, VexoShaders.RGB_SPLIT_FRAGMENT)
         mirrorShader = GlShaderProgram(VexoShaders.TEXTURE_VERTEX, VexoShaders.MIRROR_FRAGMENT)
         motionShader = GlShaderProgram(VexoShaders.TEXTURE_VERTEX,VexoShaders.MOTION_FRAGMENT)
@@ -228,6 +231,7 @@ class VexoGlRenderer(
         colorShader?.release(); colorShader = null
         imageShader?.release(); imageShader = null
         blurShader?.release(); blurShader = null
+        edgeShader?.release();edgeShader=null
         rgbSplitShader?.release(); rgbSplitShader = null
         mirrorShader?.release(); mirrorShader = null
         staticBlurResults.clear()
@@ -290,23 +294,29 @@ class VexoGlRenderer(
             measureFilter.retain(cachedLayerIds)
             previousMotionTarget.keys.retainAll(cachedTrails)
             particleSims.keys.retainAll(cachedLayerIds)
-            barDelayHistory.keys.removeAll{it.removeSuffix("_segment2") !in cachedLayerIds}
+            barDelayHistory.keys.removeAll{it.removeSuffix("_waveform").removeSuffix("_segment2") !in cachedLayerIds}
             fboPool.retainSceneBuffers((0 until checkNotNull(cachedSlots).slotCount).toSet(),cachedTrails)
             if(activeLayers.none{it.config is LayerConfig.BlurEffect})fboPool.releaseByPrefix("blur_")
             if(activeLayers.none{(it.config as? LayerConfig.Image)?.let{cfg->cfg.blurEnabled||cfg.blurredBorder}==true}){staticBlurResults.clear();fboPool.releaseByPrefix("image_blur_")}
         }
         val resolved=checkNotNull(cachedGraph)
         val slots=checkNotNull(cachedSlots)
+        val smoothOffscreen=scene.project.exportSettings.offscreenSmoothEdges&&edgeShader!=null&&
+            (if(isExportRenderer)scene.project.exportSettings.smoothEdges else !lowRamDevice)
+        if(!smoothOffscreen)fboPool.releaseByPrefix("edge_scratch")
         // Render in dependency order, reusing only slots whose previous output is dead.
         for (comp in resolved.order) {
             if (comp.index !in cachedReachable || comp.index == displayIndex) continue
             val slot=slots.slotByComposition.getValue(comp.index)
             slots.retireBefore[comp.index].orEmpty().forEach{compTextures.remove(it)}
             val fbo = fboPool.obtain("comp_$slot", viewportW, viewportH)
-            GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, fbo.fboId)
-            GLES20.glViewport(0, 0, fbo.width, fbo.height)
+            val smooth=smoothOffscreen&&com.vexo.studio.engine.scene.OffscreenEdges.hasGeometry(comp)
+            val target=if(smooth)fboPool.obtain("edge_scratch",fbo.width,fbo.height)else fbo
+            GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, target.fboId)
+            GLES20.glViewport(0, 0, target.width, target.height)
             clearBackground(if(comp.index==0)scene.project.canvas.backgroundColorArgb else 0x00000000)
-            renderComposition(comp, scene, deltaSec, fbo.width, fbo.height, compTextures,applyCamera=false)
+            renderComposition(comp, scene, deltaSec, target.width, target.height, compTextures,applyCamera=false)
+            if(smooth)resolveCompositionEdges(target,fbo)
             compTextures[comp.index] = fbo.textureId
         }
 
@@ -326,6 +336,21 @@ class VexoGlRenderer(
         }
         trimTextureCache()
 
+    }
+
+    private fun resolveCompositionEdges(source:GlFbo,destination:GlFbo){
+        val shader=checkNotNull(edgeShader)
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER,destination.fboId)
+        GLES20.glViewport(0,0,destination.width,destination.height)
+        GLES20.glDisable(GLES20.GL_BLEND)
+        shader.use()
+        Matrix.orthoM(edgeMatrix,0,0f,destination.width.toFloat(),destination.height.toFloat(),0f,-1f,1f)
+        GLES20.glUniformMatrix4fv(shader.uniform("uMvp"),1,false,edgeMatrix,0)
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D,source.textureId)
+        GLES20.glUniform1i(shader.uniform("uTex"),0)
+        GLES20.glUniform2f(shader.uniform("uPixel"),1f/source.width,1f/source.height)
+        drawTexturedQuad(shader,0f,0f,destination.width.toFloat(),destination.height.toFloat(),flipV=true)
     }
 
     private fun renderComposition(
@@ -463,7 +488,7 @@ class VexoGlRenderer(
         }
         val rawBars = (if(cfg.signedWaveform) audioSnap?.waveform else audioSnap?.bars) ?: FloatArray(64)
         val sampled = SpectrumGeometry.resample(rawBars, cfg.barCount)
-        val delayedBars = applyReactionDelay(layerId, if(cfg.signedWaveform) sampled else SpectrumFilters.smooth(sampled,cfg.softness), (cfg.reactionDelay + cfg.reactionAccumulatedDelay).coerceIn(0, 9))
+        val delayedBars = applyReactionDelay(if(cfg.signedWaveform)"${layerId}_waveform" else layerId, if(cfg.signedWaveform) sampled else SpectrumFilters.smooth(sampled,cfg.softness), (cfg.reactionDelay + cfg.reactionAccumulatedDelay).coerceIn(0, 9))
         val count = delayedBars.size
         if (count == 0) return
         val peaks=if(!cfg.signedWaveform && cfg.showPeaks && audioSnap!=null && audioSnap.peakBars.isNotEmpty()) SpectrumGeometry.resample(audioSnap.peakBars,count) else null

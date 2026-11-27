@@ -988,6 +988,7 @@ private fun PropertiesTab(
                 }
                 ExpandableSectionHeader("Wave detail",expandedSections["wave_detail"]==true,{toggleAccordion(expandedSections,"wave_detail")}){
                     Text("Use line, double line, ribbon or fill to customize connected waves.",style=MaterialTheme.typography.labelSmall,color=palette.textSecondary)
+                    StudioToggleRow("Smooth Wave Joins",cfg.waveSmoothJoins){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.Bars).copy(waveSmoothJoins=v))}}
                     StudioSlider("Curve Tension",cfg.waveCurveTension,0f,1f,.5f,"",.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.Bars).copy(waveCurveTension=v,curveSubdivisions=maxOf(2,(it.config as LayerConfig.Bars).curveSubdivisions)))}},onCommit=::endDrag)
                     StudioSlider("Double Wave Gap",cfg.waveLineGap,.25f,12f,2.5f,"x",.05f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.Bars).copy(waveLineGap=v))}},onCommit=::endDrag)
                     StudioSlider("Ribbon Thickness",cfg.waveRibbonWidth,.1f,5f,1f,"x",.05f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.Bars).copy(waveRibbonWidth=v))}},onCommit=::endDrag)

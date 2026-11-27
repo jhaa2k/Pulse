@@ -16,7 +16,7 @@ object SpectrumStudioMesh {
         fun p(x:Float,y:Float)=origin+tangent*x+normal*y
         fun mix(t:Float)=base+(tip-base)*t
     }
-    private fun closed(c:LayerConfig.Bars)=if(c.customPathEnabled && c.customPathPoints.size>=2) c.customPathClosed else c.pathGap<=.0001f&&when(c.creativePath){
+    private fun closed(c:LayerConfig.Bars,custom:CustomSpectrumPath?)=if(custom!=null) c.customPathClosed else c.pathGap<=.0001f&&when(c.creativePath){
         CreativeSpectrumPath.LEGACY->c.shapePath==BarsShapePath.CIRCLE||c.shapePath==BarsShapePath.SIDED_POLYGON
         CreativeSpectrumPath.ARC,CreativeSpectrumPath.SPIRAL,CreativeSpectrumPath.SINE,CreativeSpectrumPath.DIAGONAL,CreativeSpectrumPath.ZIGZAG->false
         else->true
@@ -31,10 +31,10 @@ object SpectrumStudioMesh {
         if(bars.isEmpty()||width<=0||height<=0)return
         val n=bars.size.coerceAtMost(512)
         val w=width.toFloat();val h=height.toFloat();val dim=minOf(w,h)
-        val style=styleFor(c);val closed=closed(c)
+        val custom=if(c.customPathEnabled) CustomSpectrumPath.create(c.customPathPoints,c.customPathClosed) else null
+        val style=styleFor(c);val closed=closed(c,custom)
         val stroke=(c.creativeStrokeWidth.coerceIn(.25f,24f)*dim/720f).coerceAtLeast(.65f)
         val horizontal=c.creativePath in setOf(CreativeSpectrumPath.SINE,CreativeSpectrumPath.DIAGONAL,CreativeSpectrumPath.ZIGZAG)
-        val custom=if(c.customPathEnabled) CustomSpectrumPath.create(c.customPathPoints,c.customPathClosed) else null
         fun rawPoint(t:Float):P{
             val u=if(closed)((t%1f)+1f)%1f else t.coerceIn(0f,1f)
             if(custom!=null){
@@ -169,9 +169,29 @@ object SpectrumStudioMesh {
                 }
             }
             fun smooth(i:Int, offset:(Sample)->Float){
+                if(c.waveDashRatio<.999f||!c.waveSmoothJoins){
+                    for(j in 0 until divisions){
+                        val t0=j.toFloat()/divisions;val t1=(j+1f)/divisions
+                        waveLine(i,t0,t1,at(i,t0,offset),at(i,t1,offset),color(i,t0),color(i,t1))
+                    }
+                    return
+                }
+                val total=segments*divisions
+                fun position(k:Int):P{
+                    val n=if(closed)((k%total)+total)%total else k.coerceIn(0,total)
+                    if(!closed&&n==total)return at(segments-1,1f,offset)
+                    return at(n/divisions,(n%divisions).toFloat()/divisions,offset)
+                }
+                fun join(k:Int):Pair<P,P>{
+                    val cur=position(k);val prev=position(k-1);val next=position(k+1)
+                    val o=WaveStrokeJoin.offset(prev.x,prev.y,cur.x,cur.y,next.x,next.y,stroke*.5f)
+                    val v=P(o.first,o.second)
+                    return cur-v to cur+v
+                }
                 for(j in 0 until divisions){
-                    val t0=j.toFloat()/divisions;val t1=(j+1f)/divisions
-                    waveLine(i,t0,t1,at(i,t0,offset),at(i,t1,offset),color(i,t0),color(i,t1))
+                    val k=i*divisions+j
+                    val a=join(k);val b=join(k+1)
+                    quad(a.first,a.second,b.first,b.second,color(i,j.toFloat()/divisions),color(i,(j+1f)/divisions))
                 }
             }
             fun strip(i:Int,low:(Sample)->Float,high:(Sample)->Float,lowAlpha:Float,highAlpha:Float){

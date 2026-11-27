@@ -425,6 +425,7 @@ sealed interface LayerConfig {
         val waveRibbonWidth: Float = 1f,
         val waveLineGap: Float = 2.5f,
         val waveCurveTension: Float = .5f,
+        val waveSmoothJoins: Boolean = true,
         val waveDashRatio: Float = 1f,
         val waveDashCount: Int = 12,
         val gradientSpeed: Float = 0f,
@@ -723,6 +724,7 @@ data class ExportSettings(
     val trimEndMs: Long = 0L, // 0 = full track
     val useHevcIfSupported: Boolean = false,
     val smoothEdges: Boolean = true,
+    val offscreenSmoothEdges: Boolean = true,
     val highResolutionTextures: Boolean = true,
     val customOutputUri: String? = null
 )
