@@ -10,6 +10,14 @@ plugins {
     id("org.jetbrains.kotlin.plugin.serialization")
 }
 
+// Production signing is opt-in and never falls back to the debug key.
+val releaseSigningEnv = listOf("VEXO_RELEASE_KEYSTORE", "VEXO_RELEASE_STORE_PASSWORD", "VEXO_RELEASE_KEY_ALIAS", "VEXO_RELEASE_KEY_PASSWORD")
+    .associateWith { providers.environmentVariable(it).orNull }
+val hasReleaseSigning = releaseSigningEnv.values.all { !it.isNullOrBlank() }
+require(hasReleaseSigning || releaseSigningEnv.values.all { it.isNullOrBlank() }) {
+    "Incomplete release signing configuration; provide all four VEXO_RELEASE variables."
+}
+
 android {
     namespace = "com.vexo.studio"
     sourceSets.getByName("main").res.srcDir(layout.buildDirectory.dir("generated/studioFonts/res").get().asFile)
@@ -26,6 +34,15 @@ android {
     }
 
     signingConfigs {
+        if (hasReleaseSigning) {
+            create("production") {
+                storeFile = file(requireNotNull(releaseSigningEnv["VEXO_RELEASE_KEYSTORE"]))
+                require(storeFile?.isFile == true) { "Release keystore does not exist" }
+                storePassword = releaseSigningEnv["VEXO_RELEASE_STORE_PASSWORD"]
+                keyAlias = releaseSigningEnv["VEXO_RELEASE_KEY_ALIAS"]
+                keyPassword = releaseSigningEnv["VEXO_RELEASE_KEY_PASSWORD"]
+            }
+        }
         getByName("debug") {
             val customDebugKeystore = file("${rootDir}/debug.keystore")
             if (customDebugKeystore.exists()) {
@@ -39,6 +56,8 @@ android {
 
     buildTypes {
         release {
+            if (hasReleaseSigning) signingConfig = signingConfigs.getByName("production")
+            // Keep current unminified behavior until R8/device regression validation.
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

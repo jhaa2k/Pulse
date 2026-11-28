@@ -24,3 +24,7 @@ A compact, modern native Android audio visualizer and layered video creation stu
 ```bash
 ./gradlew testDebugUnitTest assembleDebug
 ```
+
+## Release candidate builds
+
+See [Phase 83 release packaging](docs/PHASE_83.md) and [release readiness](docs/RELEASE_READINESS.md). Debug CI, emulator smoke testing, and release packaging are separate checks. Signed candidates require privately configured production credentials. Nothing is automatically published.
