@@ -27,7 +27,7 @@ internal object BackdropBlur {
         val w=(source.width*scale).roundToInt().coerceAtLeast(1)
         val h=(source.height*scale).roundToInt().coerceAtLeast(1)
         val resized=Bitmap.createScaledBitmap(source,w,h,true)
-        val readable=if(resized.config==Bitmap.Config.HARDWARE)resized.copy(Bitmap.Config.ARGB_8888,false) else resized
+        val readable=if(android.os.Build.VERSION.SDK_INT>=26&&resized.config==Bitmap.Config.HARDWARE)resized.copy(Bitmap.Config.ARGB_8888,false)?:return source else resized
         val pixels=IntArray(w*h)
         readable.getPixels(pixels,0,w,0,0,w,h)
         val tmp=IntArray(pixels.size)

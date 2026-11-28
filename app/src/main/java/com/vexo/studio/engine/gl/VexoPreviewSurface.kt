@@ -1,6 +1,16 @@
 package com.vexo.studio.engine.gl
 
 import android.opengl.GLSurfaceView
+import android.graphics.Bitmap
+import android.view.PixelCopy
+import android.os.Handler
+import android.os.Looper
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
+import com.vexo.studio.ui.components.BackdropBlur
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -51,7 +61,9 @@ fun VexoPreviewSurface(
     continuousRendering: Boolean = true,
     renderScale: Float = 1f,
     showDiagnostics:Boolean=false,
-    adaptiveQuality:Boolean=false
+    adaptiveQuality:Boolean=false,
+    glassBlurDp:Float?=null,
+    onGlassFrame:((Bitmap?)->Unit)?=null
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -98,6 +110,24 @@ fun VexoPreviewSurface(
     }
 
     var viewSize by remember { mutableStateOf(IntSize.Zero) }
+    val callback by rememberUpdatedState(onGlassFrame)
+    val density=LocalDensity.current.density
+    LaunchedEffect(glView,resumed,glassBlurDp,viewSize,density,onGlassFrame!=null){
+        if(!resumed||glassBlurDp==null||onGlassFrame==null||viewSize.width<=0||viewSize.height<=0){callback?.invoke(null);return@LaunchedEffect}
+        val scale=(480f/maxOf(viewSize.width,viewSize.height)).coerceAtMost(1f)
+        val w=(viewSize.width*scale).toInt().coerceAtLeast(1)
+        val h=(viewSize.height*scale).toInt().coerceAtLeast(1)
+        while(true){
+            if(glView.holder.surface.isValid){
+                val captured=copyGlassFrame(glView,w,h)
+                if(captured!=null){
+                    val blurred=withContext(Dispatchers.Default){BackdropBlur.apply(captured,glassBlurDp.coerceIn(0f,48f)*density*scale,480)}
+                    callback?.invoke(blurred)
+                }
+            }
+            delay(300)
+        }
+    }
     LaunchedEffect(viewSize,effectiveScale){
         if(viewSize.width>0&&viewSize.height>0){
             val scale=effectiveScale.coerceIn(.5f,1f)
@@ -185,5 +215,22 @@ fun VexoPreviewSurface(
             val d=diagnostics
             Text("%.1f FPS · %.1f ms CPU · %d%% preview\n%d × %d · %d comps / %d layers\n%d composition slots · %.1f MiB textures + %.1f MiB FBO".format(d.fps,d.cpuFrameMs,(effectiveScale*100).toInt(),d.width,d.height,d.compositions,d.layers,d.compositionSlots,d.textureBytes/1048576.0,d.framebufferBytes/1048576.0),modifier=Modifier.align(Alignment.TopStart).background(Color.Black.copy(alpha=.85f)).padding(5.dp),style=MaterialTheme.typography.labelSmall,color=palette.accent)
         }
+    }
+}
+
+/** PixelCopy reads the real GL surface. Only one bounded capture is in flight. */
+private suspend fun copyGlassFrame(view:GLSurfaceView,w:Int,h:Int):Bitmap?=suspendCancellableCoroutine{continuation->
+    val bitmap=Bitmap.createBitmap(w,h,Bitmap.Config.ARGB_8888)
+    try{
+        PixelCopy.request(view,bitmap,{result->
+            if(result==PixelCopy.SUCCESS&&continuation.isActive)continuation.resume(bitmap)
+            else{
+                bitmap.recycle()
+                if(continuation.isActive)continuation.resume(null)
+            }
+        },Handler(Looper.getMainLooper()))
+    }catch(_:IllegalArgumentException){
+        bitmap.recycle()
+        if(continuation.isActive)continuation.resume(null)
     }
 }
