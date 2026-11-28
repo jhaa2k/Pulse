@@ -190,23 +190,28 @@ fun VexoPreviewSurface(
             },
         contentAlignment = Alignment.Center
     ) {
-        val surfaceModifier = if (fillBounds) {
-            Modifier.fillMaxSize()
-        } else {
-            val availW = maxWidth
-            val availH = maxHeight
-            val fitW = min(availW.value, availH.value * ratio).coerceAtLeast(0f)
-            val fitH = fitW / ratio
-            Modifier.size(
-                width = androidx.compose.ui.unit.Dp(fitW.coerceAtLeast(0f)),
-                height = androidx.compose.ui.unit.Dp(fitH.coerceAtLeast(0f))
-            )
-        }
-
+        val fitW=if(fillBounds)maxWidth.value else min(maxWidth.value,maxHeight.value*ratio).coerceAtLeast(0f)
+        val fitH=if(fillBounds)maxHeight.value else fitW/ratio
+        val density=LocalDensity.current
+        val childW=with(density){fitW.dp.roundToPx()}.coerceAtLeast(1)
+        val childH=with(density){fitH.dp.roundToPx()}.coerceAtLeast(1)
         AndroidView(
-            factory = { glView },
-            update = {},
-            modifier = surfaceModifier.onSizeChanged{viewSize=it}
+            factory={
+                android.widget.FrameLayout(context).apply{
+                    setBackgroundColor(android.graphics.Color.BLACK)
+                    clipChildren=true
+                    clipToPadding=true
+                    (glView.parent as? android.view.ViewGroup)?.removeView(glView)
+                    addView(glView,android.widget.FrameLayout.LayoutParams(childW,childH,android.view.Gravity.CENTER))
+                }
+            },
+            update={host->
+                val lp=glView.layoutParams as android.widget.FrameLayout.LayoutParams
+                if(lp.width!=childW||lp.height!=childH){lp.width=childW;lp.height=childH;glView.layoutParams=lp}
+                val next=IntSize(childW,childH)
+                if(viewSize!=next)viewSize=next
+            },
+            modifier=Modifier.fillMaxSize()
         )
         if(renderError!=null){
             Text(renderError.orEmpty(),modifier=Modifier.align(Alignment.Center).background(Color.Black.copy(alpha=.9f)).padding(12.dp),style=MaterialTheme.typography.bodySmall,color=LocalVexoPalette.current.textPrimary)

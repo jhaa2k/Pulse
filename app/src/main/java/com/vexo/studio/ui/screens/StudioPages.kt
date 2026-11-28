@@ -573,6 +573,7 @@ fun SettingsScreen(
     ) {
         val sections = remember { mutableStateMapOf<String, Boolean>() }
         Text("Settings", style = MaterialTheme.typography.titleMedium)
+        UserProfilePanel(vm,settings)
         ExpandableSectionHeader("Custom wallpaper",sections["wallpaper"]==true,{toggleAccordion(sections,"wallpaper")}){WallpaperSettings(vm,settings)}
         ExpandableSectionHeader("Local crash diagnostics",sections["crash"]==true,{toggleAccordion(sections,"crash")}){LocalCrashPanel()}
         ExpandableSectionHeader("Appearance", sections["appearance"] == true, { toggleAccordion(sections,"appearance") }) {
@@ -590,7 +591,15 @@ fun SettingsScreen(
             StudioSlider("Artwork backdrop blur", settings.backdropBlurDp, 0f, 48f, 24f, "dp", 1f, onValueChange = { value -> vm.updateSettings { it.copy(backdropBlurDp = value) } })
             Text("Blur uses wallpaper, album art or sampled preview frames. Lower panel opacity to reveal the glass.", style = MaterialTheme.typography.bodySmall, color = palette.textSecondary)
         }
-        StudioSlider("Corner radius", settings.cornerRadiusDp, 0f, 28f, 12f, "dp", 1f, onValueChange = { value -> vm.updateSettings { it.copy(cornerRadiusDp = value) } })
+        StudioToggleRow("Separate corner controls",settings.separateCornerRadii){v->vm.updateSettings{it.copy(separateCornerRadii=v)}}
+        if(!settings.separateCornerRadii)StudioSlider("Global corner radius", settings.cornerRadiusDp, 0f, 28f, 12f, "dp", 1f, onValueChange = { value -> vm.updateSettings { it.copy(cornerRadiusDp = value) } })
+        else{
+            StudioSlider("Cards & lists",settings.cardRadiusDp,0f,40f,12f,"dp",1f,onValueChange={v->vm.updateSettings{it.copy(cardRadiusDp=v)}})
+            StudioSlider("Buttons & chips",settings.buttonRadiusDp,0f,40f,12f,"dp",1f,onValueChange={v->vm.updateSettings{it.copy(buttonRadiusDp=v)}})
+            StudioSlider("Dialogs",settings.dialogRadiusDp,0f,40f,20f,"dp",1f,onValueChange={v->vm.updateSettings{it.copy(dialogRadiusDp=v)}})
+            StudioSlider("Navigation",settings.navigationRadiusDp,0f,40f,32f,"dp",1f,onValueChange={v->vm.updateSettings{it.copy(navigationRadiusDp=v)}})
+            StudioSlider("Music player",settings.playerRadiusDp,0f,40f,16f,"dp",1f,onValueChange={v->vm.updateSettings{it.copy(playerRadiusDp=v)}})
+        }
         StudioSlider("Slider control size", settings.controlScale, 0.85f, 1.25f, 1f, "x", 0.05f, onValueChange = { value -> vm.updateSettings { it.copy(controlScale = value) } })
         StudioSlider("Interface text size", settings.uiTextScale, 0.9f, 1.25f, 1f, "x", 0.05f, onValueChange = { value -> vm.updateSettings { it.copy(uiTextScale = value) } })
 
@@ -604,7 +613,7 @@ fun SettingsScreen(
         StudioToggleRow("Live preview diagnostics",settings.showPreviewDiagnostics){v->vm.updateSettings{it.copy(showPreviewDiagnostics=v)}}
         Text("Reports measured render callbacks, CPU submission time and estimated texture/FBO allocation. Not total GPU memory or GPU execution time.",style=MaterialTheme.typography.labelSmall)
         Text("Lower preview resolution reduces GPU load. MP4 export resolution stays unchanged.",style=MaterialTheme.typography.labelSmall)
-        TextButton(onClick = { vm.updateSettings { current -> current.copy(themePreset = ThemePreset.LIME_STUDIO, customAccentArgb = 0xFFC5F84A.toInt(), glassEnabled = true, glassOpacity = 0.62f, backdropBlurDp = 36f, cornerRadiusDp = 12f, controlScale = 1f, uiTextScale = 1f, previewFps = 30, previewScale=1f, adaptivePreview=false, showPreviewDiagnostics=false, previewShare = 0.41f, portraitOverlay = false) } }) { Text("RESET INTERFACE SETTINGS") }
+        TextButton(onClick = { vm.updateSettings { current -> current.copy(themePreset = ThemePreset.LIME_STUDIO, customAccentArgb = 0xFFC5F84A.toInt(), glassEnabled = true, glassOpacity = 0.62f, backdropBlurDp = 36f, cornerRadiusDp = 12f, separateCornerRadii=false, cardRadiusDp=12f, buttonRadiusDp=12f, dialogRadiusDp=20f, navigationRadiusDp=32f, playerRadiusDp=16f, controlScale = 1f, uiTextScale = 1f, previewFps = 30, previewScale=1f, adaptivePreview=false, showPreviewDiagnostics=false, previewShare = 0.41f, portraitOverlay = false) } }) { Text("RESET INTERFACE SETTINGS") }
 
         }
         ExpandableSectionHeader("Audio analysis", sections["audio"] == true, { toggleAccordion(sections,"audio") }) {
@@ -621,7 +630,7 @@ fun SettingsScreen(
             vm.updateSettings { it.copy(showPropertyHelpHints = show) }
         }
         }
-        UserProfilePanel(vm,settings)
+        ExpandableSectionHeader("About Vexo",sections["about"]==true,{toggleAccordion(sections,"about")}){AboutVexoPanel()}
         DeveloperPanel()
     }
 }
@@ -692,5 +701,17 @@ private fun DeveloperPanel(){
             TextButton(onClick={links.openUri("https://github.com/jhaa2k/Vexo-Audio-Visualization")}){Text("REPOSITORY")}
         }
         TextButton(onClick={links.openUri("https://github.com/jhaa2k/Vexo-Audio-Visualization/releases")}){Text("LATEST APP / RELEASES")}
+    }
+}
+
+@Composable
+private fun AboutVexoPanel(){
+    val p=LocalVexoPalette.current
+    Column(Modifier.fillMaxWidth().padding(8.dp),verticalArrangement=Arrangement.spacedBy(6.dp)){
+        Text("VEXO AUDIO VISUALIZATION",style=MaterialTheme.typography.titleMedium,color=p.accent)
+        Text("Version "+com.vexo.studio.BuildConfig.VERSION_NAME+" · Android 7+",style=MaterialTheme.typography.labelSmall,color=p.textSecondary)
+        Text("Native audio visualization studio for creating music-reactive videos, editing compositions, layers and effects, managing local audio, and exporting MP4.",style=MaterialTheme.typography.bodySmall,color=p.textPrimary)
+        Text("Projects, presets, creator profile and settings are stored locally. Export resolution and frame rate depend on device encoder capabilities. Artwork and UI backdrop are separate from exported scenes.",style=MaterialTheme.typography.bodySmall,color=p.textSecondary)
+        Text("Built with Kotlin, Jetpack Compose, Media3 and OpenGL ES.",style=MaterialTheme.typography.labelSmall,color=p.textSecondary)
     }
 }

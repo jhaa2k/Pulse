@@ -5,7 +5,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.zIndexToBounds
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.setProgress
@@ -156,9 +157,9 @@ fun EditorScreen(
         var glassFrame by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
         FullscreenPreviewOrientation(landscapePreview,vm::toggleFullscreenPreview)
         Column(Modifier.fillMaxSize().background(Color.Black),verticalArrangement=Arrangement.spacedBy(4.dp)) {
-            com.vexo.studio.ui.components.SceneGlass(glassFrame,Modifier.fillMaxWidth().padding(horizontal=6.dp,vertical=4.dp)) {
-                Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
-                    Text(uiState.project.canvas.aspectRatio.label,modifier=Modifier.weight(1f).padding(start=12.dp),style=MaterialTheme.typography.labelMedium,color=palette.textSecondary)
+            com.vexo.studio.ui.components.SceneGlass(glassFrame,Modifier.fillMaxWidth().height(56.dp).zIndex(2f).padding(horizontal=6.dp,vertical=4.dp)) {
+                Row(Modifier.fillMaxWidth().height(48.dp),verticalAlignment=Alignment.CenterVertically) {
+                    Text(uiState.project.canvas.aspectRatio.label,modifier=Modifier.weight(1f).padding(start=8.dp),style=MaterialTheme.typography.labelMedium,color=palette.textPrimary,maxLines=1)
                     IconButton(onClick=vm::resetPreviewCamera){Icon(Icons.Outlined.CropFree,"Reset camera",tint=palette.textPrimary)}
                     IconButton(onClick=vm::toggleSafeAreaGuides){Icon(Icons.Outlined.GridOn,"Safe area",tint=if(uiState.project.canvas.showSafeAreaGuides)palette.accent else palette.textSecondary)}
                     IconButton(onClick={landscapePreview=!landscapePreview}){Icon(Icons.Outlined.Refresh,"Rotate fullscreen manually",tint=palette.textPrimary)}
@@ -335,7 +336,7 @@ fun CompactTransportBar(
     val pos=(scrub?:playback.positionMs.toFloat()).coerceIn(0f,maxDur)
     val enabled=playback.durationMs>0
     val seek by rememberUpdatedState(onSeek)
-    Column(modifier.padding(horizontal=3.dp,vertical=3.dp) .clip(palette.shape).background(if(glassBacked)Color.Transparent else palette.glassPanel,palette.shape).border(1.dp,palette.border.copy(alpha=.8f),palette.shape).padding(horizontal=10.dp,vertical=4.dp)){
+    Column(modifier.padding(horizontal=3.dp,vertical=3.dp) .clip(palette.playerShape).background(if(glassBacked)Color.Transparent else palette.glassPanel,palette.playerShape).border(1.dp,palette.border.copy(alpha=.8f),palette.playerShape).padding(horizontal=10.dp,vertical=4.dp)){
         Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
             Column(Modifier.weight(1f)){
                 Text(if(playback.importTotal>0)"Importing ${playback.importCompleted}/${playback.importTotal}" else if(playback.queue.isEmpty())"Import music" else playback.trackMeta.title,style=MaterialTheme.typography.bodySmall,fontWeight=FontWeight.SemiBold,color=palette.textPrimary,maxLines=1,overflow=TextOverflow.Ellipsis)
@@ -343,7 +344,7 @@ fun CompactTransportBar(
             }
             IconButton(onClick=onPickAudio,modifier=Modifier.size(36.dp)){Icon(Icons.Outlined.FolderOpen,"Import audio",tint=palette.accent,modifier=Modifier.size(18.dp))}
             IconButton(onClick=onPrev,enabled=playback.queue.isNotEmpty(),modifier=Modifier.size(36.dp)){Icon(Icons.Default.SkipPrevious,"Previous",tint=palette.textPrimary,modifier=Modifier.size(20.dp))}
-            IconButton(onClick=onTogglePlay,enabled=playback.queue.isNotEmpty(),modifier=Modifier.size(44.dp).clip(palette.shape).background(if(playback.queue.isNotEmpty())palette.accent else palette.border,palette.shape)){Icon(if(playback.isPlaying)Icons.Default.Pause else Icons.Default.PlayArrow,if(playback.isPlaying)"Pause" else "Play",tint=palette.accentOn,modifier=Modifier.size(23.dp))}
+            IconButton(onClick=onTogglePlay,enabled=playback.queue.isNotEmpty(),modifier=Modifier.size(44.dp).clip(palette.buttonShape).background(if(playback.queue.isNotEmpty())palette.accent else palette.border,palette.buttonShape)){Icon(if(playback.isPlaying)Icons.Default.Pause else Icons.Default.PlayArrow,if(playback.isPlaying)"Pause" else "Play",tint=palette.accentOn,modifier=Modifier.size(23.dp))}
             IconButton(onClick=onNext,enabled=playback.queue.isNotEmpty(),modifier=Modifier.size(36.dp)){Icon(Icons.Default.SkipNext,"Next",tint=palette.textPrimary,modifier=Modifier.size(20.dp))}
         }
         Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)){
@@ -377,6 +378,16 @@ private fun StudioWorkspacePanel(
 ) {
     val palette = LocalVexoPalette.current
     Column(modifier = modifier.background(if(glassBacked)Color.Transparent else palette.glassPanel).clipToBounds()) {
+        Row(Modifier.fillMaxWidth().padding(horizontal=4.dp,vertical=3.dp),horizontalArrangement=Arrangement.spacedBy(3.dp)){
+            StudioTab.entries.forEach{tab->
+                val selected=uiState.studioTab==tab
+                val icon=when(tab){StudioTab.LAYERS->Icons.Outlined.Layers;StudioTab.PROPERTIES->Icons.Outlined.Tune;StudioTab.ASSETS->Icons.Outlined.Image;StudioTab.PRESETS->Icons.Outlined.Dashboard}
+                Row(Modifier.weight(1f).height(34.dp).clip(palette.buttonShape).background(if(selected)palette.accent else palette.glassElevated,palette.buttonShape).clickable{vm.selectStudioTab(tab)},horizontalArrangement=Arrangement.Center,verticalAlignment=Alignment.CenterVertically){
+                    Icon(icon,tab.label,tint=if(selected)palette.accentOn else palette.textSecondary,modifier=Modifier.size(16.dp))
+                    if(selected)Text(tab.label,style=MaterialTheme.typography.labelSmall,color=palette.accentOn,maxLines=1,overflow=TextOverflow.Ellipsis,modifier=Modifier.padding(start=3.dp))
+                }
+            }
+        }
         Box(Modifier.weight(1f).fillMaxWidth().clipToBounds()) {
         when (uiState.studioTab) {
             StudioTab.LAYERS -> LayersTab(vm = vm, uiState = uiState)

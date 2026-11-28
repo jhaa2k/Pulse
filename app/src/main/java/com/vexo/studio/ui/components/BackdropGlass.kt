@@ -86,7 +86,7 @@ internal fun SceneGlass(frame:Bitmap?,modifier:Modifier=Modifier,content:@Compos
     val p=LocalVexoPalette.current
     Box(modifier.clip(p.shape)){
         if(p.glassEnabled&&frame!=null)Image(frame.asImageBitmap(),null,Modifier.matchParentSize(),contentScale=ContentScale.Crop)
-        Box(Modifier.matchParentSize().background(p.glassPanel))
+        Box(Modifier.matchParentSize().background(if(frame==null)p.panel else p.glassPanel))
         content()
     }
 }

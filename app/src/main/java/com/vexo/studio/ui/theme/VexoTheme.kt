@@ -37,9 +37,20 @@ data class VexoPalette(
     val controlScale: Float = 1f,
     val glassEnabled: Boolean = true,
     val glassOpacity: Float = 0.82f,
-    val wallpaperActive: Boolean = false
+    val wallpaperActive: Boolean = false,
+    val separateCorners:Boolean=false,
+    val cardRadius:Float=12f,
+    val buttonRadius:Float=12f,
+    val dialogRadius:Float=20f,
+    val navigationRadius:Float=32f,
+    val playerRadius:Float=16f
 ) {
-    val shape get() = RoundedCornerShape(radiusDp.coerceIn(0f, 28f).dp)
+    private fun rounded(value:Float)=RoundedCornerShape(value.takeIf{it.isFinite()}?.coerceIn(0f,40f)?.dp?:12.dp)
+    val shape get() = rounded(if(separateCorners)cardRadius else radiusDp)
+    val buttonShape get() = rounded(if(separateCorners)buttonRadius else radiusDp)
+    val dialogShape get() = rounded(if(separateCorners)dialogRadius else radiusDp)
+    val navShape get() = rounded(if(separateCorners)navigationRadius else radiusDp.coerceIn(0f,28f)*2f)
+    val playerShape get() = rounded(if(separateCorners)playerRadius else radiusDp)
     val glassPanel get() = if (glassEnabled) panel.copy(alpha=glassOpacity.coerceIn(.30f,1f)) else panel
     val glassElevated get() = if (glassEnabled) panelElevated.copy(alpha=glassOpacity.coerceIn(.30f,1f)) else panelElevated
 }
@@ -118,7 +129,7 @@ fun VexoTheme(
     }
 
     val themed = if(settings.customAccentAllThemes) basePalette.copy(accent=customAccent,accentOn=if(customAccent.luminance()>.179f) Color.Black else Color.White) else basePalette
-    val palette = themed.copy(radiusDp = settings.cornerRadiusDp, controlScale = settings.controlScale.coerceIn(0.85f, 1.25f), glassEnabled = settings.glassEnabled, glassOpacity = settings.glassOpacity, wallpaperActive=settings.wallpaperUri.isNotBlank())
+    val palette = themed.copy(radiusDp = settings.cornerRadiusDp, controlScale = settings.controlScale.coerceIn(0.85f, 1.25f), glassEnabled = settings.glassEnabled, glassOpacity = settings.glassOpacity, wallpaperActive=settings.wallpaperUri.isNotBlank(),separateCorners=settings.separateCornerRadii,cardRadius=settings.cardRadiusDp,buttonRadius=settings.buttonRadiusDp,dialogRadius=settings.dialogRadiusDp,navigationRadius=settings.navigationRadiusDp,playerRadius=settings.playerRadiusDp)
     val isLight = settings.themePreset in setOf(ThemePreset.CLEAN_LIGHT,ThemePreset.CITRUS_LIGHT)
     val colorScheme = if (isLight) {
         lightColorScheme(
@@ -183,11 +194,11 @@ fun VexoTheme(
     }
 
     val sharpShapes = Shapes(
-        extraSmall = palette.shape,
-        small = palette.shape,
+        extraSmall = palette.buttonShape,
+        small = palette.buttonShape,
         medium = palette.shape,
         large = palette.shape,
-        extraLarge = palette.shape
+        extraLarge = palette.dialogShape
     )
 
     val poppins=FontFamily(Font(R.font.poppins_regular,FontWeight.Normal),Font(R.font.poppins_medium,FontWeight.Medium),Font(R.font.poppins_semibold,FontWeight.SemiBold),Font(R.font.poppins_bold,FontWeight.Bold))
