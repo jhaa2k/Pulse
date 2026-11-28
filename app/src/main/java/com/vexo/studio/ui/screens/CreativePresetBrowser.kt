@@ -133,7 +133,7 @@ private fun renderThumbnail(project:VexoProject):Bitmap{
             canvas.scale(common.scaleX,if(common.scaleIsUniform)common.scaleX else common.scaleY)
             canvas.translate(-common.alignmentX*w,-common.alignmentY*h)
             if(cfg.segment1!=BarsSegmentType.NONE)draw(cfg)
-            if(cfg.segment2!=BarsSegmentType.NONE)draw(cfg.copy(segment1=cfg.segment2,segment2=BarsSegmentType.NONE,creativeStyle=cfg.secondaryCreativeStyle,barWidth=cfg.segment2Width,barHeightMultiplier=cfg.segment2HeightMultiplier,fixedHeight=cfg.segment2FixedHeight,mirror=cfg.segment2Mirror,colorFromArgb=cfg.segment2ColorFrom,colorToArgb=cfg.segment2ColorTo,barStrokeWidth=cfg.segment2StrokeWidth,barStrokeColorArgb=cfg.segment2StrokeColorArgb,barFillOpacity=cfg.segment2FillOpacity))
+            if(cfg.segment2!=BarsSegmentType.NONE)draw(cfg.copy(segment1=cfg.segment2,segment2=BarsSegmentType.NONE,creativeStyle=cfg.secondaryCreativeStyle,barWidth=cfg.segment2Width,barHeightMultiplier=cfg.segment2HeightMultiplier,fixedHeight=cfg.segment2FixedHeight,mirror=cfg.segment2Mirror,alternatingDirection=cfg.segment2AlternatingDirection?:cfg.alternatingDirection,barWidthAffectedByShape=cfg.segment2WidthAffectedByShape,colorFromArgb=cfg.segment2ColorFrom,colorToArgb=cfg.segment2ColorTo,barStrokeWidth=cfg.segment2StrokeWidth,barStrokeColorArgb=cfg.segment2StrokeColorArgb,barFillOpacity=cfg.segment2FillOpacity))
             canvas.restore()
         }
     }

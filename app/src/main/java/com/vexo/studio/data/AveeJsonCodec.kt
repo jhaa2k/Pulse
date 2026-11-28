@@ -458,6 +458,9 @@ object AveeJsonCodec {
                 pathAngleDeg = obj.propFloat("pathAngleDeg", 0f),
                 alternatingDirection = obj.propBool("alternatingDirection", seg1Obj?.propBool("flipEveryOther",false)?:false),
                 segment2AlternatingDirection = seg2Obj?.takeIf{seg2Type!=BarsSegmentType.NONE}?.propBool("flipEveryOther",false),
+                barWidthAffectedByShape=seg1Obj?.takeIf{it.rawProp("barWidthAffectedByShape")!=null}?.propBool("barWidthAffectedByShape",true)
+                    ?:obj.takeIf{it.rawProp("barWidthAffectedByShape")!=null}?.propBool("barWidthAffectedByShape",true),
+                segment2WidthAffectedByShape=seg2Obj?.takeIf{it.rawProp("barWidthAffectedByShape")!=null}?.propBool("barWidthAffectedByShape",true),
                 showPeaks=obj.propBool("vexoShowPeaks",false),
                 barCount=obj.propInt("vexoBarCount",0).coerceIn(0,512)
             )
@@ -731,12 +734,14 @@ object AveeJsonCodec {
                     put("fixedHeight", propObj(cfg.fixedHeight))
                     put("mirror", propObj(if (cfg.mirror) 1 else 0))
                     put("flipEveryOther",propObj(if(cfg.alternatingDirection)1 else 0))
+                    cfg.barWidthAffectedByShape?.let{put("barWidthAffectedByShape",propObj(if(it)1 else 0))}
                     put("colorFrom", propObj(cfg.colorFromArgb))
                     put("colorTo", propObj(cfg.colorToArgb))
                 })
                 put("Segment2", buildJsonObject {
                     put("v", cfg.segment2.aveeName); put("barWidth", propObj(cfg.segment2Width)); put("barHeightMultiplier", propObj(cfg.segment2HeightMultiplier)); put("fixedHeight", propObj(cfg.segment2FixedHeight)); put("mirror", propObj(if (cfg.segment2Mirror) 1 else 0)); put("colorFrom", propObj(cfg.segment2ColorFrom)); put("colorTo", propObj(cfg.segment2ColorTo))
                     put("flipEveryOther",propObj(if(cfg.segment2AlternatingDirection?:cfg.alternatingDirection)1 else 0))
+                    cfg.segment2WidthAffectedByShape?.let{put("barWidthAffectedByShape",propObj(if(it)1 else 0))}
                 })
             }
             is LayerConfig.Image -> {

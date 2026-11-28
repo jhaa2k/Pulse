@@ -63,7 +63,7 @@ object SpectrumStudioMesh {
         for(i in 0 until n){
             val t=(i+.5f)/n
             val origin=point(t);val d=point(t+.25f/n)-point(t-.25f/n);val tangent=d.unit()
-            val size=(sqrt(d.x*d.x+d.y*d.y)*2f*c.barWidth.coerceIn(.05f,1.5f)*(1f-c.barSpacing.coerceIn(0f,.95f))).coerceIn(.5f,maxOf(.5f,dim*.15f))
+            val size=(LegacySpectrumMath.slotWidth(sqrt(d.x*d.x+d.y*d.y)*2f,dim,n,c.barWidthAffectedByShape)*c.barWidth.coerceIn(.05f,1.5f)*(1f-c.barSpacing.coerceIn(0f,.95f))).coerceIn(.5f,maxOf(.5f,dim*.15f))
             val src = SpectrumGeometry.sampleIndex(i,n,bars.size,c.sampleRepeats,c.sampleOffset)
             val idx=if(c.flipInput)bars.lastIndex-src else src
             val raw=bars[idx].takeIf{it.isFinite()}?:0f

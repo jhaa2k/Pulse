@@ -90,7 +90,6 @@ object TemplateDiagnostics {
                 }
                 // Known legacy properties that are not implemented; raw metadata stays intact.
                 val unsupported=buildList {
-                    if(cfg is LayerConfig.Bars&&c.extraFields.keys.any{it.equals("barWidthAffectedByShape",true)})add("shape-dependent bar width")
                 }
                 if(unsupported.isNotEmpty())warn("LEGACY_PROPERTY","${c.name}: preserved but not implemented: "+unsupported.joinToString())
             }

@@ -967,6 +967,7 @@ private fun PropertiesTab(
                     StudioToggleRow("Flip Input", cfg.flipInput) { f ->
                         vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(flipInput = f)) }
                     }
+                    StudioChipSelector("Bar Width Mode",listOf("AUTO","PATH","FIXED"),when(cfg.barWidthAffectedByShape){true->"PATH";false->"FIXED";null->"AUTO"},{it}){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.Bars).copy(barWidthAffectedByShape=when(v){"PATH"->true;"FIXED"->false;else->null}))}}
                     StudioToggleRow("Alternating Dir", cfg.alternatingDirection) { a ->
                         vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(alternatingDirection = a)) }
                     }
@@ -999,6 +1000,7 @@ private fun PropertiesTab(
                         StudioColorPickerRow("Segment 2 Stroke Color",cfg.segment2StrokeColorArgb){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.Bars).copy(segment2StrokeColorArgb=v))}}
                         StudioSlider("Segment 2 Fill Opacity",cfg.segment2FillOpacity,0f,1f,1f,"",.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.Bars).copy(segment2FillOpacity=v))}},onCommit=::endDrag)
                         StudioToggleRow("Segment 2 Mirror", cfg.segment2Mirror) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(segment2Mirror = v)) } }
+                        StudioChipSelector("Segment 2 Width Mode",listOf("AUTO","PATH","FIXED"),when(cfg.segment2WidthAffectedByShape){true->"PATH";false->"FIXED";null->"AUTO"},{it}){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.Bars).copy(segment2WidthAffectedByShape=when(v){"PATH"->true;"FIXED"->false;else->null}))}}
                         StudioToggleRow("Segment 2 Alternating Direction",cfg.segment2AlternatingDirection?:cfg.alternatingDirection){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.Bars).copy(segment2AlternatingDirection=v))}}
                         if(cfg.segment2AlternatingDirection!=null)TextButton(onClick={vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.Bars).copy(segment2AlternatingDirection=null))}}){Text("INHERIT PRIMARY DIRECTION")}
                         StudioColorPickerRow("Segment 2 Color From", cfg.segment2ColorFrom) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(segment2ColorFrom = v)) } }
