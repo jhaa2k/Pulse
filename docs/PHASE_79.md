@@ -1,0 +1,3 @@
+# Phase 79 — GPU/media resource lifetime
+
+Phase 78 CI passed (46098185949). Retain only active visible reachable imported media on scene changes; distinct video timing configurations keep independent decoder keys. Bound video failure caches. Reuse GIF Canvas and same-size GIF/video GL storage via texSubImage2D. Include estimated RGBA video/GIF textures in diagnostics (excludes codec internal buffers, CPU bitmaps and driver overhead). Reject zero GL allocations and incomplete framebuffers, restore previous bindings and clean partial resources. Three JVM tests for active media selection. GL error checks can expose a prior unconsumed error; no physical benchmark or lifecycle instrumented test. Main unchanged.

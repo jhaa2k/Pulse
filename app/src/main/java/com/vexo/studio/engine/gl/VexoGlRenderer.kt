@@ -205,7 +205,7 @@ class VexoGlRenderer(
         lastFrameDurationMs = (System.nanoTime() - nowNs) / 1_000_000f
         if(diagnosticsEnabled){
             diagnosticCounter.frame(nowNs,lastFrameDurationMs)?.let{(fps,ms)->
-                diagnostics=PreviewDiagnostics(fps,ms,viewportW,viewportH,cachedReachable.size,cachedLayerIds.size,bitmapSizes.values.sumOf{it.first.toLong()*it.second*4L},fboPool.allocatedBytes(),cachedSlots?.slotCount?:0)
+                diagnostics=PreviewDiagnostics(fps,ms,viewportW,viewportH,cachedReachable.size,cachedLayerIds.size,bitmapSizes.values.sumOf{it.first.toLong()*it.second*4L}+videoFrames.allocatedBytes()+animatedImages.allocatedBytes(),fboPool.allocatedBytes(),cachedSlots?.slotCount?:0)
             }
         }else diagnosticCounter.reset()
     }
@@ -307,6 +307,9 @@ class VexoGlRenderer(
             cachedReachable=checkNotNull(cachedGraph).order.mapTo(linkedSetOf()){it.index}
             cachedSlots=com.vexo.studio.engine.scene.CompositionSlotPlan.create(checkNotNull(cachedGraph).order,cachedReachable,displayIndex)
             val activeLayers=scene.project.compositions.filter{it.index in cachedReachable}.flatMap{it.layers}.filter{it.common.visible}
+            val activeMedia=ActiveMediaKeys.from(activeLayers)
+            videoFrames.retain(activeMedia.videoKeys,activeMedia.videoUris)
+            animatedImages.retain(activeMedia.imageUris)
             cachedLayerIds=activeLayers.map{it.common.id}.toSet()
             cachedTrails=activeLayers.filter{it.config is LayerConfig.MotionBlurEffect}.map{it.common.id}.toSet()
             previousMotion.keys.retainAll(cachedTrails)

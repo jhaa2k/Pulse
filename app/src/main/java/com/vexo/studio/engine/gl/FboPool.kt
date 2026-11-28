@@ -82,35 +82,38 @@ class FboPool {
         GLES20.glGetIntegerv(GLES20.GL_TEXTURE_BINDING_2D, previousTex, 0)
         val texIds = IntArray(1)
         val fboIds = IntArray(1)
-        GLES20.glGenTextures(1, texIds, 0)
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texIds[0])
-        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR)
-        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR)
-        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE)
-        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE)
-        GLES20.glTexImage2D(
-            GLES20.GL_TEXTURE_2D, 0, GLES20.GL_RGBA,
-            width, height, 0, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, null
-        )
-
-        GLES20.glGenFramebuffers(1, fboIds, 0)
-        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, fboIds[0])
-        GLES20.glFramebufferTexture2D(
-            GLES20.GL_FRAMEBUFFER, GLES20.GL_COLOR_ATTACHMENT0,
-            GLES20.GL_TEXTURE_2D, texIds[0], 0
-        )
-        val status = GLES20.glCheckFramebufferStatus(GLES20.GL_FRAMEBUFFER)
-        if (status == GLES20.GL_FRAMEBUFFER_COMPLETE) {
-            GLES20.glClearColor(0f, 0f, 0f, 0f)
+        var success=false
+        try{
+            GLES20.glGenTextures(1,texIds,0)
+            check(texIds[0]!=0){"GPU texture allocation returned zero"}
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D,texIds[0])
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D,GLES20.GL_TEXTURE_MIN_FILTER,GLES20.GL_LINEAR)
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D,GLES20.GL_TEXTURE_MAG_FILTER,GLES20.GL_LINEAR)
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D,GLES20.GL_TEXTURE_WRAP_S,GLES20.GL_CLAMP_TO_EDGE)
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D,GLES20.GL_TEXTURE_WRAP_T,GLES20.GL_CLAMP_TO_EDGE)
+            GLES20.glTexImage2D(GLES20.GL_TEXTURE_2D,0,GLES20.GL_RGBA,width,height,0,GLES20.GL_RGBA,GLES20.GL_UNSIGNED_BYTE,null)
+            val allocationError=GLES20.glGetError()
+            check(allocationError==GLES20.GL_NO_ERROR){"Texture allocation GL error 0x"+allocationError.toString(16)}
+            GLES20.glGenFramebuffers(1,fboIds,0)
+            check(fboIds[0]!=0){"GPU framebuffer allocation returned zero"}
+            GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER,fboIds[0])
+            GLES20.glFramebufferTexture2D(GLES20.GL_FRAMEBUFFER,GLES20.GL_COLOR_ATTACHMENT0,GLES20.GL_TEXTURE_2D,texIds[0],0)
+            val status=GLES20.glCheckFramebufferStatus(GLES20.GL_FRAMEBUFFER)
+            check(status==GLES20.GL_FRAMEBUFFER_COMPLETE){"Incomplete framebuffer 0x"+status.toString(16)}
+            GLES20.glClearColor(0f,0f,0f,0f)
             GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
+            success=true
+            return GlFbo(fboIds[0],texIds[0],width,height)
+        }catch(e:IllegalStateException){
+            throw IllegalStateException("GPU cannot allocate ${width}×${height} framebuffer. Reduce preview scale or export resolution. "+e.message,e)
+        }finally{
+            GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER,previousFbo[0])
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D,previousTex[0])
+            if(!success){
+                if(fboIds[0]!=0)GLES20.glDeleteFramebuffers(1,fboIds,0)
+                if(texIds[0]!=0)GLES20.glDeleteTextures(1,texIds,0)
+            }
         }
-        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, previousFbo[0])
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, previousTex[0])
-        if (status != GLES20.GL_FRAMEBUFFER_COMPLETE) {
-            deleteFbo(GlFbo(fboIds[0], texIds[0], width, height))
-            error("GPU cannot allocate ${width}×${height} framebuffer (0x${status.toString(16)}). Reduce preview scale or export resolution.")
-        }
-        return GlFbo(fboIds[0], texIds[0], width, height)
     }
 
     private fun deleteFbo(fbo: GlFbo) {

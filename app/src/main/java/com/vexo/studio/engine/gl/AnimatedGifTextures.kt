@@ -16,7 +16,7 @@ import java.io.ByteArrayOutputStream
 @Suppress("DEPRECATION")
 class AnimatedGifTextures(private val context:Context){
     data class Frame(val id:Int,val size:Pair<Int,Int>)
-    private data class Entry(val movie:Movie,val bitmap:Bitmap,val frame:Frame,var lastTime:Int=-1)
+    private data class Entry(val movie:Movie,val bitmap:Bitmap,val frame:Frame,val canvas:Canvas=Canvas(bitmap),var lastTime:Int=-1)
     private val entries=LinkedHashMap<String,Entry>(4,.75f,true)
     private val unsupported=LinkedHashSet<String>()
     fun texture(uri:String?,position:Long,limit:Int):Frame?{
@@ -34,13 +34,17 @@ class AnimatedGifTextures(private val context:Context){
         if(entry.lastTime==time)return entry.frame
         try{
             entry.movie.setTime(time)
-            val canvas=Canvas(entry.bitmap)
+            val canvas=entry.canvas
             canvas.drawColor(Color.TRANSPARENT,PorterDuff.Mode.CLEAR)
-            canvas.scale(entry.bitmap.width.toFloat()/entry.movie.width(),entry.bitmap.height.toFloat()/entry.movie.height())
-            entry.movie.draw(canvas,0f,0f)
+            val saved=canvas.save()
+            try{
+                canvas.scale(entry.bitmap.width.toFloat()/entry.movie.width(),entry.bitmap.height.toFloat()/entry.movie.height())
+                entry.movie.draw(canvas,0f,0f)
+            }finally{canvas.restoreToCount(saved)}
             GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
             GLES20.glBindTexture(GLES20.GL_TEXTURE_2D,entry.frame.id)
-            GLUtils.texImage2D(GLES20.GL_TEXTURE_2D,0,entry.bitmap,0)
+            if(entry.lastTime<0)GLUtils.texImage2D(GLES20.GL_TEXTURE_2D,0,entry.bitmap,0)
+            else GLUtils.texSubImage2D(GLES20.GL_TEXTURE_2D,0,0,0,entry.bitmap)
             check(GLES20.glGetError()==GLES20.GL_NO_ERROR){"GIF texture upload failed"}
             entry.lastTime=time
             return entry.frame
@@ -83,5 +87,10 @@ class AnimatedGifTextures(private val context:Context){
         }
     }
     private fun dispose(e:Entry){GLES20.glDeleteTextures(1,intArrayOf(e.frame.id),0);e.bitmap.recycle()}
+    fun retain(uris:Set<String>){
+        entries.keys.filter{it !in uris}.forEach{entries.remove(it)?.let(::dispose)}
+        unsupported.retainAll(uris)
+    }
+    fun allocatedBytes():Long=entries.values.sumOf{it.frame.size.first.toLong()*it.frame.size.second*4L}
     fun close(){entries.values.forEach(::dispose);entries.clear();unsupported.clear()}
 }
