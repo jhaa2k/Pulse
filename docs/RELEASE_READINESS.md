@@ -1,6 +1,6 @@
-# Release readiness — remaining work after Phase 71
+# Release readiness — remaining verification after Phase 82
 
-The branch has a passing Phase 70 JVM test/lint/APK workflow (46033778998); the Phase 71 commit requires CI confirmation. APK compilation is not evidence of device rendering or export accuracy. Do not label the app production-ready until release gates have evidence.
+Phase 81 JVM tests, lint, debug APK and instrumentation APK compilation passed (46100384930). Phase 82 adds a separate emulator smoke workflow and three project/queue persistence tests; execution is unverified until CI completes. APK compilation is not evidence of device rendering or export accuracy. Do not label the app production-ready until release gates have evidence.
 
 ## P0 — release blockers / verification gates
 - Run the existing Android instrumented MP4 export test and extend it across 480p/720p/1080p/1440p/4K, 24/25/30/50/60fps on representative hardware; unsupported combinations must report a clear error. Validate audio sync, trim, orientation, codec fallback, cancel, file publication and repeated exports.
