@@ -21,6 +21,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.outlined.LibraryMusic
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
@@ -288,28 +292,29 @@ fun AudioLibraryScreen(
                 Text("No audio tracks imported yet. Tap IMPORT AUDIO to load MP3, WAV, FLAC, AAC, or OGG files.", style = MaterialTheme.typography.bodyMedium, color = palette.textSecondary)
             }
         } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            LazyColumn(Modifier.weight(1f).fillMaxWidth(),verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 itemsIndexed(playback.queue, key = { _, t -> t.id }) { idx, track ->
                     val current = idx == playback.currentIndex
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .clip(palette.shape)
+                            .background(if(current)palette.glassElevated else palette.glassPanel,palette.shape)
                             .border(1.dp, if (current) palette.accent else palette.border, palette.shape)
-                            .background(palette.glassPanel, palette.shape)
                             .clickable { vm.playbackController.playIndex(idx) }
-                            .padding(10.dp),
+                            .padding(horizontal=8.dp,vertical=6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Box(Modifier.size(38.dp).background(if(current)palette.accent else palette.panelElevated,palette.shape),contentAlignment=Alignment.Center){
-                            Icon(Icons.Outlined.LibraryMusic,"Audio track ${idx+1}",tint=if(current)palette.accentOn else palette.textSecondary,modifier=Modifier.size(20.dp))
+                        IconButton(onClick={if(current)vm.playbackController.togglePlayPause() else vm.playbackController.playIndex(idx)},modifier=Modifier.size(40.dp)){
+                            Icon(if(current&&playback.isPlaying)Icons.Default.Pause else Icons.Default.PlayArrow,if(current&&playback.isPlaying)"Pause track" else "Play track",tint=if(current)palette.accent else palette.textSecondary,modifier=Modifier.size(18.dp))
                         }
-                        Spacer(Modifier.width(8.dp))
+                        Spacer(Modifier.width(6.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(track.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text("${if(current) "ACTIVE · " else "${idx+1} · "}${track.artist} · ${formatDuration(track.durationMs)}", style = MaterialTheme.typography.labelSmall, color = if(current)palette.accent else palette.textSecondary, maxLines = 1)
                         }
-                        TextButton(enabled=idx>0,onClick={vm.playbackController.moveQueueItem(idx,idx-1)},contentPadding=PaddingValues(0.dp),modifier=Modifier.width(30.dp)){Text("↑")}
-                        TextButton(enabled=idx<playback.queue.lastIndex,onClick={vm.playbackController.moveQueueItem(idx,idx+1)},contentPadding=PaddingValues(0.dp),modifier=Modifier.width(30.dp)){Text("↓")}
+                        IconButton(enabled=idx>0,onClick={vm.playbackController.moveQueueItem(idx,idx-1)},modifier=Modifier.size(36.dp)){Icon(Icons.Default.ArrowUpward,"Move track up",tint=if(idx>0)palette.textPrimary else palette.border,modifier=Modifier.size(18.dp))}
+                        IconButton(enabled=idx<playback.queue.lastIndex,onClick={vm.playbackController.moveQueueItem(idx,idx+1)},modifier=Modifier.size(36.dp)){Icon(Icons.Default.ArrowDownward,"Move track down",tint=if(idx<playback.queue.lastIndex)palette.textPrimary else palette.border,modifier=Modifier.size(18.dp))}
                         IconButton(onClick = { vm.playbackController.removeFromQueue(idx) }, modifier = Modifier.size(28.dp)) {
                             Icon(Icons.Outlined.Delete, "Remove", tint = palette.danger, modifier = Modifier.size(15.dp))
                         }
@@ -575,7 +580,7 @@ fun SettingsScreen(
         if (settings.glassEnabled) {
             StudioSlider("Panel opacity", settings.glassOpacity * 100f, 65f, 100f, 82f, "%", 1f, onValueChange = { value -> vm.updateSettings { it.copy(glassOpacity = value / 100f) } })
             StudioSlider("Artwork backdrop blur", settings.backdropBlurDp, 0f, 48f, 24f, "dp", 1f, onValueChange = { value -> vm.updateSettings { it.copy(backdropBlurDp = value) } })
-            Text("Artwork blur uses Android 12+; older devices use a lightweight gradient.", style = MaterialTheme.typography.bodySmall, color = palette.textSecondary)
+            Text("Artwork blur uses bounded software blur on all supported Android versions.", style = MaterialTheme.typography.bodySmall, color = palette.textSecondary)
         }
         StudioSlider("Corner radius", settings.cornerRadiusDp, 0f, 28f, 12f, "dp", 1f, onValueChange = { value -> vm.updateSettings { it.copy(cornerRadiusDp = value) } })
         StudioSlider("Slider control size", settings.controlScale, 0.85f, 1.25f, 1f, "x", 0.05f, onValueChange = { value -> vm.updateSettings { it.copy(controlScale = value) } })
@@ -658,7 +663,7 @@ private fun WallpaperSettings(vm:StudioViewModel,settings:AppSettings){
     }
     StudioSlider("Wallpaper blur",settings.wallpaperBlurDp,0f,48f,16f,"dp",1f,onValueChange={v->vm.updateSettings{it.copy(wallpaperBlurDp=v)}})
     StudioSlider("Wallpaper dim",settings.wallpaperDim*100f,25f,95f,72f,"%",1f,onValueChange={v->vm.updateSettings{it.copy(wallpaperDim=v/100f)}})
-    Text("UI only. Blur uses Android 12+; wallpaper never enters exported video.",style=MaterialTheme.typography.labelSmall,color=p.textSecondary)
+    Text("UI only. Wallpaper blur works on all supported Android versions; never enters exported video.",style=MaterialTheme.typography.labelSmall,color=p.textSecondary)
 }
 @Composable
 private fun DeveloperPanel(){

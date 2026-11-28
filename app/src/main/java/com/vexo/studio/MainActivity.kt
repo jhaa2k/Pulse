@@ -202,13 +202,12 @@ private fun VexoRootApp(vm: StudioViewModel, settings:com.vexo.studio.model.AppS
     }
     Box(Modifier.fillMaxSize().background(palette.bg)) {
         if(wallpaper!=null){
-            Image(bitmap=wallpaper!!.asImageBitmap(),contentDescription=null,contentScale=ContentScale.Crop,modifier=Modifier.fillMaxSize().blur(settings.wallpaperBlurDp.coerceIn(0f,48f).dp))
+            com.vexo.studio.ui.components.BlurredBackdrop(wallpaper!!,settings.wallpaperBlurDp,Modifier.fillMaxSize())
             Box(Modifier.fillMaxSize().background(palette.bg.copy(alpha=settings.wallpaperDim.coerceIn(.25f,.95f))))
         } else if (settings.glassEnabled && uiState.navDestination != NavDestination.STUDIO) {
             val artwork = playback.trackMeta.artwork
-            if (artwork != null && Build.VERSION.SDK_INT >= 31) {
-                Image(bitmap = artwork.asImageBitmap(), contentDescription = null, contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize().blur(settings.backdropBlurDp.coerceIn(0f, 48f).dp))
+            if (artwork != null) {
+                com.vexo.studio.ui.components.BlurredBackdrop(artwork,settings.backdropBlurDp,Modifier.fillMaxSize())
                 Box(Modifier.fillMaxSize().background(palette.bg.copy(alpha = 0.68f)))
             } else {
                 Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(palette.panelElevated, palette.bg))))
@@ -222,7 +221,7 @@ private fun VexoRootApp(vm: StudioViewModel, settings:com.vexo.studio.model.AppS
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(palette.panel)
+                        .background(palette.glassPanel)
                         .statusBarsPadding()
                         .padding(horizontal = 8.dp, vertical = 2.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -278,7 +277,7 @@ private fun VexoRootApp(vm: StudioViewModel, settings:com.vexo.studio.model.AppS
                 val destinations=NavDestination.entries.filter{it!=NavDestination.STUDIO&&it!=NavDestination.TEMPLATES}
                 val activeIndex=if(uiState.navDestination==NavDestination.STUDIO)StudioTab.entries.indexOf(uiState.studioTab) else StudioTab.entries.size+destinations.indexOf(uiState.navDestination)
                 LaunchedEffect(activeIndex){if(activeIndex>=0&&navState.layoutInfo.visibleItemsInfo.none{it.index==activeIndex})navState.animateScrollToItem(activeIndex)}
-                Surface(modifier=Modifier.fillMaxWidth().padding(horizontal=6.dp,vertical=4.dp),shape=palette.shape,color=palette.panel,tonalElevation=2.dp,shadowElevation=3.dp){
+                Surface(modifier=Modifier.fillMaxWidth().padding(horizontal=6.dp,vertical=4.dp),shape=palette.shape,color=palette.glassPanel,tonalElevation=0.dp,shadowElevation=0.dp,border=androidx.compose.foundation.BorderStroke(1.dp,palette.border)){
                     LazyRow(state=navState,modifier=Modifier.fillMaxWidth().padding(horizontal=4.dp,vertical=3.dp),
                         horizontalArrangement=Arrangement.spacedBy(2.dp),verticalAlignment=Alignment.CenterVertically){
                         items(StudioTab.entries.size){i->

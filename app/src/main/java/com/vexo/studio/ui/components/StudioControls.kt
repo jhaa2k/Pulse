@@ -76,8 +76,7 @@ import com.vexo.studio.ui.theme.LocalVexoPalette
 import kotlin.math.roundToInt
 
 /**
- * Compact sharp-edged studio slider with:
- * - Thin 2dp track + larger 14x18dp rectangular handle
+ * Transport-style slider with rounded track, tick marks and ring thumb
  * - Default value tick marker on the track
  * - Double-tap anywhere on track OR label to reset to default
  * - Tap numeric readout for exact keyboard editing
@@ -193,7 +192,7 @@ fun StudioSlider(
                             currentCommit()
                         },
                         onTap = { offset ->
-                            val ratio = ((offset.x - (7f * palette.controlScale).dp.toPx()) / (trackWidthPx - (14f * palette.controlScale).dp.toPx()).coerceAtLeast(1f)).coerceIn(0f, 1f)
+                            val ratio = ((offset.x - (9f * palette.controlScale).dp.toPx()) / (trackWidthPx - (18f * palette.controlScale).dp.toPx()).coerceAtLeast(1f)).coerceIn(0f, 1f)
                             currentChange(quantize(min + ratio * range))
                             currentCommit()
                         }
@@ -205,44 +204,12 @@ fun StudioSlider(
                         onDragCancel = { currentCommit() }
                     ) { change, _ ->
                         change.consume()
-                        val ratio = ((change.position.x - (7f * palette.controlScale).dp.toPx()) / (trackWidthPx - (14f * palette.controlScale).dp.toPx()).coerceAtLeast(1f)).coerceIn(0f, 1f)
+                        val ratio = ((change.position.x - (9f * palette.controlScale).dp.toPx()) / (trackWidthPx - (18f * palette.controlScale).dp.toPx()).coerceAtLeast(1f)).coerceIn(0f, 1f)
                         currentChange(quantize(min + ratio * range))
                     }
                 }
         ) {
-            val midY = size.height * 0.5f
-            val pad = (7f * palette.controlScale).dp.toPx()
-            val usable = (size.width - pad * 2f).coerceAtLeast(1f)
-
-            // Base thin track
-            drawRect(
-                color = palette.border,
-                topLeft = Offset(pad, midY - 1.dp.toPx()),
-                size = Size(usable, 2.dp.toPx())
-            )
-            // Active fill
-            drawRect(
-                color = palette.accent,
-                topLeft = Offset(pad, midY - 1.5.dp.toPx()),
-                size = Size(usable * norm, 3.dp.toPx())
-            )
-            // Default value tick marker
-            val defX = pad + usable * defaultNorm
-            drawRect(
-                color = palette.textSecondary,
-                topLeft = Offset(defX - 0.5.dp.toPx(), midY - 5.dp.toPx()),
-                size = Size(1.dp.toPx(), 10.dp.toPx())
-            )
-            // Sharp rectangular studio handle
-            val thumbX = pad + usable * norm
-            val thumbW = (14f * palette.controlScale).dp.toPx()
-            val thumbH = (18f * palette.controlScale).dp.toPx()
-            drawRoundRect(
-                color = palette.accent,
-                cornerRadius = CornerRadius(palette.radiusDp.coerceIn(0f, 7f).dp.toPx()),
-                topLeft = Offset(thumbX - thumbW * 0.5f, midY - thumbH * 0.5f),
-                size = Size(thumbW, thumbH)
-            )
+            drawStudioTrack(palette,norm,true,palette.controlScale,defaultNorm)
         }
     }
 

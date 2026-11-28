@@ -40,7 +40,8 @@ data class VexoPalette(
     val wallpaperActive: Boolean = false
 ) {
     val shape get() = RoundedCornerShape(radiusDp.coerceIn(0f, 28f).dp)
-    val glassPanel get() = if (wallpaperActive) panel.copy(alpha=glassOpacity.coerceIn(.65f,1f)) else if (glassEnabled) androidx.compose.ui.graphics.lerp(bg,panel,glassOpacity.coerceIn(0.65f,1f)) else panel
+    val glassPanel get() = if (glassEnabled) panel.copy(alpha=glassOpacity.coerceIn(.65f,1f)) else panel
+    val glassElevated get() = if (glassEnabled) panelElevated.copy(alpha=glassOpacity.coerceIn(.65f,1f)) else panelElevated
 }
 
 val LocalVexoPalette = staticCompositionLocalOf {

@@ -48,10 +48,10 @@ internal fun ColumnScope.LayerTimelinePanel(vm:StudioViewModel,ui:StudioUiState,
     StudioChipSelector("Drag mode",TimelineDragMode.entries,mode,{it.name.replace('_',' ')}){mode=it}
     Row(Modifier.fillMaxWidth().padding(horizontal=6.dp),verticalAlignment=Alignment.CenterVertically){
         Text("ZOOM ${zoom.toInt()}X",style=MaterialTheme.typography.labelSmall,modifier=Modifier.width(72.dp))
-        Slider(zoom,{zoom=it},valueRange=1f..16f,steps=14,modifier=Modifier.weight(1f).height(32.dp))
+        com.vexo.studio.ui.components.CompactStudioSlider("Timeline zoom",zoom,{zoom=it},Modifier.weight(1f).height(32.dp),1f,16f,1f)
         TextButton(onClick={scrollFraction=TimelineWindow.centerFraction(total,zoom,playback.positionMs)}){Text("PLAYHEAD")}
     }
-    if(window.span<total)Slider(scrollFraction,{scrollFraction=it},modifier=Modifier.fillMaxWidth().height(28.dp).padding(horizontal=6.dp))
+    if(window.span<total)com.vexo.studio.ui.components.CompactStudioSlider("Timeline scroll",scrollFraction,{scrollFraction=it},Modifier.fillMaxWidth().height(28.dp).padding(horizontal=6.dp))
     Row(Modifier.fillMaxWidth().padding(horizontal=6.dp),verticalAlignment=Alignment.CenterVertically){
         Text("FRAME SNAP",style=MaterialTheme.typography.labelSmall,modifier=Modifier.weight(1f))
         Switch(checked=snap,onCheckedChange={snap=it},modifier=Modifier.height(32.dp))
