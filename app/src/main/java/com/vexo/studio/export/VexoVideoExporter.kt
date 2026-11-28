@@ -466,7 +466,7 @@ class VexoVideoExporter(private val context: Context) {
 
             verifyMp4File(tempFile,width,height,totalDurationUs,videoMime,fps)
             currentCoroutineContext().ensureActive()
-            val publishedUri = publishVideo(tempFile, project.name, settings.customOutputUri)
+            val publishedUri = publishVideo(tempFile, settings.outputFileName, settings.customOutputUri)
             tempFile.delete()
 
             onProgress(
@@ -636,9 +636,8 @@ class VexoVideoExporter(private val context: Context) {
         }
     }
 
-    private suspend fun publishVideo(tempFile: File, projectName: String, customSafUri: String?): String {
-        val safeName = projectName.replace(Regex("[^A-Za-z0-9_-]"), "_").ifBlank { "Vexo_Export" }
-        val fileName = "${safeName}_${System.currentTimeMillis()}.mp4"
+    private suspend fun publishVideo(tempFile: File, requestedName: String, customSafUri: String?): String {
+        val fileName = ExportFileName.normalize(requestedName)
 
         if (!customSafUri.isNullOrBlank()) {
             val uri = Uri.parse(customSafUri)

@@ -749,7 +749,8 @@ data class ExportSettings(
     val offscreenSmoothEdges: Boolean = true,
     val highResolutionTextures: Boolean = true,
     val customOutputUri: String? = null,
-    val adaptiveVideoBitrate:Boolean=false
+    val adaptiveVideoBitrate:Boolean=false,
+    val outputFileName: String = ""
 )
 
 @Serializable
@@ -808,7 +809,11 @@ data class AppSettings(
     val wallpaperUri: String = "",
     val wallpaperBlurDp: Float = 16f,
     val wallpaperDim: Float = .72f,
-    val customAccentAllThemes: Boolean = false
+    val customAccentAllThemes: Boolean = false,
+    val profileName: String = "",
+    val profileGender: String = "",
+    val profileBio: String = "",
+    val profilePhotoUri: String = ""
 )
 
 @Serializable

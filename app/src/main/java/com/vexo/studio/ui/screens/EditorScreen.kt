@@ -143,7 +143,8 @@ fun EditorScreen(
     onPickAudio: () -> Unit,
     onPickImage: () -> Unit,
     onImportPreset: () -> Unit,
-    onExportPreset: () -> Unit
+    onExportPreset: () -> Unit,
+    onSceneGlass:((android.graphics.Bitmap?)->Unit)?=null
 ) {
     val palette = LocalVexoPalette.current
     val configuration = LocalConfiguration.current
@@ -176,7 +177,7 @@ fun EditorScreen(
                 adaptiveQuality=settings.adaptivePreview,
                 continuousRendering=playback.isPlaying||settings.pauseBehavior!=PauseBehavior.FREEZE,
                 glassBlurDp=if(settings.glassEnabled)settings.backdropBlurDp else null,
-                onGlassFrame={glassFrame=it}
+                onGlassFrame={glassFrame=it;onSceneGlass?.invoke(it)}
             )
             com.vexo.studio.ui.components.SceneGlass(glassFrame,Modifier.fillMaxWidth().padding(horizontal=6.dp,vertical=4.dp)) {
                 CompactTransportBar(playback,{vm.playbackController.togglePlayPause()},{vm.playbackController.previous()},{vm.playbackController.next()},{vm.playbackController.seekTo(it)},onPickAudio,Modifier.fillMaxWidth(),glassBacked=true)
@@ -197,6 +198,7 @@ fun EditorScreen(
                 showDiagnostics = settings.showPreviewDiagnostics,
                 adaptiveQuality = settings.adaptivePreview,
                     continuousRendering = playback.isPlaying || settings.pauseBehavior != PauseBehavior.FREEZE,
+                    glassBlurDp=if(settings.glassEnabled)settings.backdropBlurDp else null,onGlassFrame=onSceneGlass,
                     modifier = Modifier.weight(1f).fillMaxWidth()
                 )
                 CompactTransportBar(
@@ -230,7 +232,7 @@ fun EditorScreen(
         Box(Modifier.fillMaxSize()) {
             PreviewBlock(vm, uiState, sceneSnapshot, settings.previewFps,
                 playback.isPlaying || settings.pauseBehavior != PauseBehavior.FREEZE,
-                modifier = Modifier.fillMaxSize(),renderScale=settings.previewScale,showDiagnostics=settings.showPreviewDiagnostics,adaptiveQuality=settings.adaptivePreview,glassBlurDp=if(settings.glassEnabled)settings.backdropBlurDp else null,onGlassFrame={glassFrame=it})
+                modifier = Modifier.fillMaxSize(),renderScale=settings.previewScale,showDiagnostics=settings.showPreviewDiagnostics,adaptiveQuality=settings.adaptivePreview,glassBlurDp=if(settings.glassEnabled)settings.backdropBlurDp else null,onGlassFrame={glassFrame=it;onSceneGlass?.invoke(it)})
             com.vexo.studio.ui.components.SceneGlass(glassFrame,Modifier.align(Alignment.BottomCenter).fillMaxWidth().fillMaxHeight(1f - previewShare).padding(horizontal=4.dp)) {
             Column(Modifier.fillMaxSize().clipToBounds()) {
                 CompactTransportBar(playback, { vm.playbackController.togglePlayPause() }, { vm.playbackController.previous() }, { vm.playbackController.next() }, { vm.playbackController.seekTo(it) }, onPickAudio, Modifier.fillMaxWidth(),glassBacked=true)
@@ -249,6 +251,7 @@ fun EditorScreen(
                 showDiagnostics = settings.showPreviewDiagnostics,
                 adaptiveQuality = settings.adaptivePreview,
                 continuousRendering = playback.isPlaying || settings.pauseBehavior != PauseBehavior.FREEZE,
+                glassBlurDp=if(settings.glassEnabled)settings.backdropBlurDp else null,onGlassFrame=onSceneGlass,
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(previewShare)

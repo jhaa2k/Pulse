@@ -332,10 +332,12 @@ fun ExportScreen(
     uiState: StudioUiState,
     playback: PlaybackUiState,
     exportState: ExportProgress,
-    onPickExportUri: () -> Unit
+    onPickExportUri: (String) -> Unit
 ) {
     val palette = LocalVexoPalette.current
     val exp = uiState.project.exportSettings
+    var filename by androidx.compose.runtime.saveable.rememberSaveable(uiState.project.id){mutableStateOf(exp.outputFileName.ifBlank{com.vexo.studio.export.ExportFileName.defaultName()})}
+    val safeFilename=com.vexo.studio.export.ExportFileName.normalize(filename)
     val trackDurMs = playback.durationMs.coerceAtLeast(1000L)
     // Recompute only when encoder-relevant settings change, off the UI thread.
     val capabilityState=remember(exp.aspectRatio,exp.adaptiveVideoBitrate,exp.videoBitrateMbps,exp.useHevcIfSupported){
@@ -446,13 +448,16 @@ fun ExportScreen(
 
         }
         ExportPanel("SAVE LOCATION"){
+        OutlinedTextField(value=filename,onValueChange={filename=it.take(180)},enabled=!exportState.isRunning&&exp.customOutputUri==null,singleLine=true,label={Text("VIDEO FILE NAME")},modifier=Modifier.fillMaxWidth())
+        Text(if(exp.customOutputUri==null)"SAVE AS: $safeFilename" else "The selected document name is used. Reset location to edit.",style=MaterialTheme.typography.labelSmall,color=palette.textSecondary)
+        TextButton(enabled=!exportState.isRunning&&exp.customOutputUri==null,onClick={filename=com.vexo.studio.export.ExportFileName.defaultName()}){Text("AUTO DATE / TIME NAME")}
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .border(1.dp, palette.border, palette.shape)
                     .background(palette.glassPanel, palette.shape)
-                    .clickable(onClick = onPickExportUri)
+                    .clickable(enabled=!exportState.isRunning){onPickExportUri(safeFilename)}
                     .padding(vertical = 10.dp),
                 contentAlignment = Alignment.Center
             ) {
@@ -515,7 +520,7 @@ fun ExportScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(if(canExport)palette.accent else palette.panelElevated,palette.shape)
-                    .clickable(enabled=canExport) { vm.startVideoExport() }
+                    .clickable(enabled=canExport) { vm.startVideoExport(safeFilename) }
                     .padding(vertical = 14.dp),
                 contentAlignment = Alignment.Center
             ) {
@@ -564,7 +569,6 @@ fun SettingsScreen(
     ) {
         val sections = remember { mutableStateMapOf<String, Boolean>() }
         Text("Settings", style = MaterialTheme.typography.titleMedium)
-        DeveloperPanel()
         ExpandableSectionHeader("Custom wallpaper",sections["wallpaper"]==true,{toggleAccordion(sections,"wallpaper")}){WallpaperSettings(vm,settings)}
         ExpandableSectionHeader("Local crash diagnostics",sections["crash"]==true,{toggleAccordion(sections,"crash")}){LocalCrashPanel()}
         ExpandableSectionHeader("Appearance", sections["appearance"] == true, { toggleAccordion(sections,"appearance") }) {
@@ -578,9 +582,9 @@ fun SettingsScreen(
         }
         StudioToggleRow("Glass interface", settings.glassEnabled) { value -> vm.updateSettings { it.copy(glassEnabled = value) } }
         if (settings.glassEnabled) {
-            StudioSlider("Panel opacity", settings.glassOpacity * 100f, 65f, 100f, 82f, "%", 1f, onValueChange = { value -> vm.updateSettings { it.copy(glassOpacity = value / 100f) } })
+            StudioSlider("Panel opacity", settings.glassOpacity * 100f, 30f, 100f, 62f, "%", 1f, onValueChange = { value -> vm.updateSettings { it.copy(glassOpacity = value / 100f) } })
             StudioSlider("Artwork backdrop blur", settings.backdropBlurDp, 0f, 48f, 24f, "dp", 1f, onValueChange = { value -> vm.updateSettings { it.copy(backdropBlurDp = value) } })
-            Text("Artwork blur uses bounded software blur on all supported Android versions.", style = MaterialTheme.typography.bodySmall, color = palette.textSecondary)
+            Text("Blur uses wallpaper, album art or sampled preview frames. Lower panel opacity to reveal the glass.", style = MaterialTheme.typography.bodySmall, color = palette.textSecondary)
         }
         StudioSlider("Corner radius", settings.cornerRadiusDp, 0f, 28f, 12f, "dp", 1f, onValueChange = { value -> vm.updateSettings { it.copy(cornerRadiusDp = value) } })
         StudioSlider("Slider control size", settings.controlScale, 0.85f, 1.25f, 1f, "x", 0.05f, onValueChange = { value -> vm.updateSettings { it.copy(controlScale = value) } })
@@ -596,7 +600,7 @@ fun SettingsScreen(
         StudioToggleRow("Live preview diagnostics",settings.showPreviewDiagnostics){v->vm.updateSettings{it.copy(showPreviewDiagnostics=v)}}
         Text("Reports measured render callbacks, CPU submission time and estimated texture/FBO allocation. Not total GPU memory or GPU execution time.",style=MaterialTheme.typography.labelSmall)
         Text("Lower preview resolution reduces GPU load. MP4 export resolution stays unchanged.",style=MaterialTheme.typography.labelSmall)
-        TextButton(onClick = { vm.updateSettings { current -> current.copy(themePreset = ThemePreset.LIME_STUDIO, customAccentArgb = 0xFFC5F84A.toInt(), glassEnabled = true, glassOpacity = 0.82f, backdropBlurDp = 24f, cornerRadiusDp = 12f, controlScale = 1f, uiTextScale = 1f, previewFps = 30, previewScale=1f, adaptivePreview=false, showPreviewDiagnostics=false, previewShare = 0.41f, portraitOverlay = false) } }) { Text("RESET INTERFACE SETTINGS") }
+        TextButton(onClick = { vm.updateSettings { current -> current.copy(themePreset = ThemePreset.LIME_STUDIO, customAccentArgb = 0xFFC5F84A.toInt(), glassEnabled = true, glassOpacity = 0.62f, backdropBlurDp = 36f, cornerRadiusDp = 12f, controlScale = 1f, uiTextScale = 1f, previewFps = 30, previewScale=1f, adaptivePreview=false, showPreviewDiagnostics=false, previewShare = 0.41f, portraitOverlay = false) } }) { Text("RESET INTERFACE SETTINGS") }
 
         }
         ExpandableSectionHeader("Audio analysis", sections["audio"] == true, { toggleAccordion(sections,"audio") }) {
@@ -613,6 +617,8 @@ fun SettingsScreen(
             vm.updateSettings { it.copy(showPropertyHelpHints = show) }
         }
         }
+        UserProfilePanel(vm,settings)
+        DeveloperPanel()
     }
 }
 
@@ -663,7 +669,7 @@ private fun WallpaperSettings(vm:StudioViewModel,settings:AppSettings){
     }
     StudioSlider("Wallpaper blur",settings.wallpaperBlurDp,0f,48f,16f,"dp",1f,onValueChange={v->vm.updateSettings{it.copy(wallpaperBlurDp=v)}})
     StudioSlider("Wallpaper dim",settings.wallpaperDim*100f,25f,95f,72f,"%",1f,onValueChange={v->vm.updateSettings{it.copy(wallpaperDim=v/100f)}})
-    Text("UI only. Wallpaper blur works on all supported Android versions; never enters exported video.",style=MaterialTheme.typography.labelSmall,color=p.textSecondary)
+    Text("UI only. With glass enabled, backdrop blur is also applied to wallpaper. Never enters exported video.",style=MaterialTheme.typography.labelSmall,color=p.textSecondary)
 }
 @Composable
 private fun DeveloperPanel(){

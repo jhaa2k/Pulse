@@ -993,7 +993,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         commitProjectChange(p.copy(exportSettings = transform(p.exportSettings)))
     }
 
-    fun startVideoExport() {
+    fun startVideoExport(requestedName:String = "") {
         if(playbackState.value.importTotal>0){_uiState.value=_uiState.value.copy(statusBanner="Finish audio import before exporting");return}
         val audioUri = playbackController.currentAudioUri()
         if (exportState.value.isRunning) return
@@ -1016,7 +1016,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         ExportService.startExport(
             app,
             ExportService.ExportRequest(
-                project = _uiState.value.project,
+                project = _uiState.value.project.copy(exportSettings=exp.copy(outputFileName=com.vexo.studio.export.ExportFileName.normalize(requestedName.ifBlank{exp.outputFileName}))),
                 audioUri = audioUri,
                 trackMeta = playbackState.value.trackMeta
             )
@@ -1025,6 +1025,15 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
 
     fun cancelVideoExport() {
         ExportService.cancelExport(app)
+    }
+
+    fun setProfilePhoto(uri:Uri){
+        runCatching{app.contentResolver.takePersistableUriPermission(uri,android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)}
+        viewModelScope.launch {
+            val valid=withContext(Dispatchers.IO){com.vexo.studio.data.UiWallpaper.decode(app,uri.toString())!=null}
+            if(valid)settingsRepo.update{it.copy(profilePhotoUri=uri.toString())}
+            else _uiState.value=_uiState.value.copy(statusBanner="Profile image could not be opened")
+        }
     }
 
     fun setWallpaper(uri:Uri){

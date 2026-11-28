@@ -193,6 +193,7 @@ private fun VexoRootApp(vm: StudioViewModel, settings:com.vexo.studio.model.AppS
         ActivityResultContracts.CreateDocument("video/mp4")
     ) { uri ->
         if (uri != null) {
+            runCatching{context.contentResolver.takePersistableUriPermission(uri,android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION)}
             vm.updateExportSettings { it.copy(customOutputUri = uri.toString()) }
         }
     }
@@ -200,15 +201,19 @@ private fun VexoRootApp(vm: StudioViewModel, settings:com.vexo.studio.model.AppS
     val wallpaper by androidx.compose.runtime.produceState<android.graphics.Bitmap?>(null,settings.wallpaperUri){
         value=kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO){com.vexo.studio.data.UiWallpaper.decode(context,settings.wallpaperUri)}
     }
+    var sceneGlass by remember(uiState.project.id){mutableStateOf<android.graphics.Bitmap?>(null)}
     Box(Modifier.fillMaxSize().background(palette.bg)) {
         if(wallpaper!=null){
-            com.vexo.studio.ui.components.BlurredBackdrop(wallpaper!!,settings.wallpaperBlurDp,Modifier.fillMaxSize())
+            com.vexo.studio.ui.components.BlurredBackdrop(wallpaper!!,if(settings.glassEnabled)maxOf(settings.wallpaperBlurDp,settings.backdropBlurDp) else settings.wallpaperBlurDp,Modifier.fillMaxSize())
             Box(Modifier.fillMaxSize().background(palette.bg.copy(alpha=settings.wallpaperDim.coerceIn(.25f,.95f))))
         } else if (settings.glassEnabled) {
             val artwork = playback.trackMeta.artwork
             if (artwork != null) {
                 com.vexo.studio.ui.components.BlurredBackdrop(artwork,settings.backdropBlurDp,Modifier.fillMaxSize())
-                Box(Modifier.fillMaxSize().background(palette.bg.copy(alpha = 0.68f)))
+                Box(Modifier.fillMaxSize().background(palette.bg.copy(alpha = 0.36f)))
+            } else if(sceneGlass!=null){
+                Image(bitmap=sceneGlass!!.asImageBitmap(),contentDescription=null,contentScale=ContentScale.Crop,modifier=Modifier.fillMaxSize())
+                Box(Modifier.fillMaxSize().background(palette.bg.copy(alpha=.36f)))
             } else {
                 Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(palette.panelElevated, palette.bg))))
             }
@@ -320,7 +325,8 @@ private fun VexoRootApp(vm: StudioViewModel, settings:com.vexo.studio.model.AppS
                         imagePicker.launch(arrayOf("image/*", "video/*"))
                     },
                     onImportPreset = { presetImportPicker.launch(arrayOf("application/json", "application/octet-stream", "*/*")) },
-                    onExportPreset = { presetExportPicker.launch("${uiState.project.name}.VEX") }
+                    onExportPreset = { presetExportPicker.launch("${uiState.project.name}.VEX") },
+                    onSceneGlass={sceneGlass=it}
                 )
                 NavDestination.PROJECTS -> ProjectsScreen(vm = vm, uiState = uiState)
                 NavDestination.AUDIO -> AudioLibraryScreen(
@@ -334,7 +340,7 @@ private fun VexoRootApp(vm: StudioViewModel, settings:com.vexo.studio.model.AppS
                     uiState = uiState,
                     playback = playback,
                     exportState = exportState,
-                    onPickExportUri = { exportDestPicker.launch("${uiState.project.name}.mp4") }
+                    onPickExportUri = { filename -> exportDestPicker.launch(filename) }
                 )
                 NavDestination.SETTINGS -> SettingsScreen(vm = vm, settings = settings)
             }

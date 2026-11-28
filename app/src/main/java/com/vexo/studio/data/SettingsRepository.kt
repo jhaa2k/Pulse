@@ -39,6 +39,10 @@ class SettingsRepository(private val context: Context) {
         val WALLBLUR = floatPreferencesKey("wallpaperBlurDp")
         val WALLDIM = floatPreferencesKey("wallpaperDim")
         val ALLACCENT = booleanPreferencesKey("customAccentAllThemes")
+        val PROFILE_NAME = stringPreferencesKey("profile_name")
+        val PROFILE_GENDER = stringPreferencesKey("profile_gender")
+        val PROFILE_BIO = stringPreferencesKey("profile_bio")
+        val PROFILE_PHOTO = stringPreferencesKey("profile_photo")
     }
 
     val settingsFlow: Flow<AppSettings> = context.vexoDataStore.data.map { prefs ->
@@ -71,7 +75,11 @@ class SettingsRepository(private val context: Context) {
                 wallpaperUri = prefs[Keys.WALLPAPER] ?: "",
                 wallpaperBlurDp = prefs[Keys.WALLBLUR] ?: 16f,
                 wallpaperDim = prefs[Keys.WALLDIM] ?: .72f,
-                customAccentAllThemes = prefs[Keys.ALLACCENT] ?: false
+                customAccentAllThemes = prefs[Keys.ALLACCENT] ?: false,
+                profileName = prefs[Keys.PROFILE_NAME] ?: "",
+                profileGender = prefs[Keys.PROFILE_GENDER] ?: "",
+                profileBio = prefs[Keys.PROFILE_BIO] ?: "",
+                profilePhotoUri = prefs[Keys.PROFILE_PHOTO] ?: ""
         )
     }
 
@@ -101,7 +109,11 @@ class SettingsRepository(private val context: Context) {
                 wallpaperUri = prefs[Keys.WALLPAPER] ?: "",
                 wallpaperBlurDp = prefs[Keys.WALLBLUR] ?: 16f,
                 wallpaperDim = prefs[Keys.WALLDIM] ?: .72f,
-                customAccentAllThemes = prefs[Keys.ALLACCENT] ?: false
+                customAccentAllThemes = prefs[Keys.ALLACCENT] ?: false,
+                profileName = prefs[Keys.PROFILE_NAME] ?: "",
+                profileGender = prefs[Keys.PROFILE_GENDER] ?: "",
+                profileBio = prefs[Keys.PROFILE_BIO] ?: "",
+                profilePhotoUri = prefs[Keys.PROFILE_PHOTO] ?: ""
             )
             val next = transform(current)
             prefs[Keys.THEME_PRESET] = next.themePreset.name
@@ -126,6 +138,10 @@ class SettingsRepository(private val context: Context) {
             prefs[Keys.WALLBLUR] = next.wallpaperBlurDp
             prefs[Keys.WALLDIM] = next.wallpaperDim
             prefs[Keys.ALLACCENT] = next.customAccentAllThemes
+            prefs[Keys.PROFILE_NAME] = next.profileName
+            prefs[Keys.PROFILE_GENDER] = next.profileGender
+            prefs[Keys.PROFILE_BIO] = next.profileBio
+            prefs[Keys.PROFILE_PHOTO] = next.profilePhotoUri
         }
     }
 }
