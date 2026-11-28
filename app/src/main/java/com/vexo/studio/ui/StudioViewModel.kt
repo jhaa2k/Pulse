@@ -40,6 +40,9 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -94,8 +97,13 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
 
     val playbackState: StateFlow<PlaybackUiState> = playbackController.state
     val exportState: StateFlow<ExportProgress> = ExportService.exportState
-    val appSettings: StateFlow<AppSettings> = settingsRepo.settingsFlow
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AppSettings())
+    // Null means preferences are still loading; never render a default-colored editor in this state.
+    val loadedSettings: StateFlow<AppSettings?> = settingsRepo.settingsFlow
+        .map<AppSettings, AppSettings?> { it }
+        .catch { error -> if(error is java.io.IOException) emit(AppSettings()) else throw error }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+    val appSettings: StateFlow<AppSettings> = loadedSettings.filterNotNull()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings())
 
     private val _uiState = MutableStateFlow(StudioUiState())
     val uiState: StateFlow<StudioUiState> = _uiState.asStateFlow()

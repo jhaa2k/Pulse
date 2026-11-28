@@ -27,6 +27,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
 import com.vexo.studio.ui.theme.StudioText as Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -332,7 +335,7 @@ fun StudioToggleRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onCheckedChange(!checked) }
+            .toggleable(value=checked,role=Role.Switch,onValueChange=onCheckedChange)
             .padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
@@ -342,7 +345,10 @@ fun StudioToggleRow(
             style = MaterialTheme.typography.labelSmall,
             color = palette.textSecondary
         )
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
+        Switch(checked=checked,onCheckedChange=null,colors=SwitchDefaults.colors(
+            checkedThumbColor=palette.accentOn,checkedTrackColor=palette.accent,checkedBorderColor=palette.accent,
+            uncheckedThumbColor=palette.textSecondary,uncheckedTrackColor=palette.panelElevated,uncheckedBorderColor=palette.border
+        ))
     }
 }
 
@@ -405,7 +411,7 @@ fun StudioColorPickerRow(label:String,argb:Int,onColorChange:(Int)->Unit){
 @Composable
 private fun ColorSwatch(argb:Int,modifier:Modifier=Modifier){
     val p=LocalVexoPalette.current
-    Canvas(modifier.clip(RoundedCornerShape(8.dp)).border(1.dp,p.border,RoundedCornerShape(8.dp))){
+    Canvas(modifier.clip(p.shape).border(1.dp,p.border,p.shape)){
         val cell=6.dp.toPx()
         for(y in 0..(size.height/cell).toInt())for(x in 0..(size.width/cell).toInt())drawRect(if((x+y)%2==0)Color(0xFFCCCCCC) else Color(0xFF777777),Offset(x*cell,y*cell),Size(cell,cell))
         drawRect(Color(argb))

@@ -97,6 +97,12 @@ fun VexoTheme(
             accentOn = Color(0xFF090807),
             danger = Color(0xFFEF4444)
         )
+        ThemePreset.CITRUS_LIGHT -> VexoPalette(
+            bg=Color(0xFFFAF9F7),panel=Color(0xFFFFFFFF),panelElevated=Color(0xFFF1EFEC),border=Color(0xFFE3DFDA),textPrimary=Color(0xFF121212),textSecondary=Color(0xFF585653),accent=Color(0xFFFF7900),accentOn=Color(0xFF17100A),danger=Color(0xFFC62828)
+        )
+        ThemePreset.CITRUS_DARK -> VexoPalette(
+            bg=Color(0xFF111110),panel=Color(0xFF1C1B19),panelElevated=Color(0xFF2B2926),border=Color(0xFF393632),textPrimary=Color(0xFFF9F6F2),textSecondary=Color(0xFFB6AFA7),accent=Color(0xFFFF7900),accentOn=Color(0xFF17100A),danger=Color(0xFFFF6B65)
+        )
         ThemePreset.CLEAN_LIGHT -> VexoPalette(
             bg = Color(0xFFF4F4F5),
             panel = Color(0xFFFFFFFF),
@@ -112,7 +118,7 @@ fun VexoTheme(
 
     val themed = if(settings.customAccentAllThemes) basePalette.copy(accent=customAccent,accentOn=if(customAccent.luminance()>.179f) Color.Black else Color.White) else basePalette
     val palette = themed.copy(radiusDp = settings.cornerRadiusDp, controlScale = settings.controlScale.coerceIn(0.85f, 1.25f), glassEnabled = settings.glassEnabled, glassOpacity = settings.glassOpacity, wallpaperActive=settings.wallpaperUri.isNotBlank())
-    val isLight = settings.themePreset == ThemePreset.CLEAN_LIGHT
+    val isLight = settings.themePreset in setOf(ThemePreset.CLEAN_LIGHT,ThemePreset.CITRUS_LIGHT)
     val colorScheme = if (isLight) {
         lightColorScheme(
             primary = palette.accent,

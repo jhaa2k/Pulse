@@ -81,7 +81,7 @@ private fun SpectrumSample(cfg:LayerConfig.Bars,modifier:Modifier){
         }
         grouped
     }
-    Canvas(modifier.background(Color(0xFF101318))){
+    Canvas(modifier.background(Color(0xFF101318),com.vexo.studio.ui.theme.LocalVexoPalette.current.shape)){
         val factor=minOf(size.width/240f,size.height/140f)
         withTransform({translate((size.width-240f*factor)*.5f,(size.height-140f*factor)*.5f);scale(factor,factor,pivot=Offset.Zero)}){
             paths.forEach{(color,path)->drawPath(path,Color(color))}

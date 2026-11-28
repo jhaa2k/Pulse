@@ -774,7 +774,9 @@ enum class ThemePreset(val label: String) {
     MONOCHROME_DARK("Monochrome Dark"),
     LIME_STUDIO("Signal Lime"),
     AMBER_CONSOLE("Amber Console"),
-    CLEAN_LIGHT("Studio Light")
+    CLEAN_LIGHT("Studio Light"),
+    CITRUS_LIGHT("Citrus Light"),
+    CITRUS_DARK("Citrus Dark")
 }
 
 @Serializable

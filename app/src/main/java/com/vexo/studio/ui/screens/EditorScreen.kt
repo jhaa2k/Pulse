@@ -34,31 +34,31 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Layers
-import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.Dashboard
+import androidx.compose.material.icons.outlined.Layers
+import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.Dashboard
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.CropFree
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.FolderOpen
-import androidx.compose.material.icons.filled.Fullscreen
-import androidx.compose.material.icons.filled.FullscreenExit
-import androidx.compose.material.icons.filled.GridOn
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.CropFree
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material.icons.outlined.Fullscreen
+import androidx.compose.material.icons.outlined.FullscreenExit
+import androidx.compose.material.icons.outlined.GridOn
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Redo
+import androidx.compose.material.icons.outlined.Redo
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
-import androidx.compose.material.icons.filled.Undo
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.outlined.Undo
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material.icons.filled.MoreVert
@@ -69,7 +69,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import com.vexo.studio.ui.theme.StudioText as Text
@@ -175,20 +175,20 @@ fun EditorScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = vm::resetPreviewCamera) {
-                    Icon(Icons.Default.CropFree, "Reset camera", tint = palette.textPrimary)
+                    Icon(Icons.Outlined.CropFree, "Reset camera", tint = palette.textPrimary)
                 }
                 IconButton(onClick = vm::toggleSafeAreaGuides) {
                     Icon(
-                        Icons.Default.GridOn,
+                        Icons.Outlined.GridOn,
                         "Safe area",
                         tint = if (uiState.project.canvas.showSafeAreaGuides) palette.accent else palette.textSecondary
                     )
                 }
                 IconButton(onClick = {landscapePreview=!landscapePreview}) {
-                    Icon(Icons.Default.Refresh, "Rotate fullscreen", tint = palette.textPrimary)
+                    Icon(Icons.Outlined.Refresh, "Rotate fullscreen", tint = palette.textPrimary)
                 }
                 IconButton(onClick = vm::toggleFullscreenPreview) {
-                    Icon(Icons.Default.FullscreenExit, "Exit fullscreen", tint = palette.accent)
+                    Icon(Icons.Outlined.FullscreenExit, "Exit fullscreen", tint = palette.accent)
                 }
             }
             CompactTransportBar(
@@ -311,12 +311,12 @@ private fun PreviewBlock(
     val palette = LocalVexoPalette.current
     Column(modifier=modifier.background(palette.panel).clipToBounds()){
         Row(Modifier.fillMaxWidth().background(palette.panel).horizontalScroll(rememberScrollState()).padding(horizontal=4.dp),verticalAlignment=Alignment.CenterVertically){
-            IconButton(onClick=vm::undo,enabled=uiState.canUndo,modifier=Modifier.size(32.dp)){Icon(Icons.Default.Undo,"Undo",modifier=Modifier.size(17.dp),tint=if(uiState.canUndo)palette.textPrimary else palette.border)}
-            IconButton(onClick=vm::redo,enabled=uiState.canRedo,modifier=Modifier.size(32.dp)){Icon(Icons.Default.Redo,"Redo",modifier=Modifier.size(17.dp),tint=if(uiState.canRedo)palette.textPrimary else palette.border)}
+            IconButton(onClick=vm::undo,enabled=uiState.canUndo,modifier=Modifier.size(32.dp)){Icon(Icons.Outlined.Undo,"Undo",modifier=Modifier.size(17.dp),tint=if(uiState.canUndo)palette.textPrimary else palette.border)}
+            IconButton(onClick=vm::redo,enabled=uiState.canRedo,modifier=Modifier.size(32.dp)){Icon(Icons.Outlined.Redo,"Redo",modifier=Modifier.size(17.dp),tint=if(uiState.canRedo)palette.textPrimary else palette.border)}
             Row(verticalAlignment=Alignment.CenterVertically){
                 AspectRatioPreset.entries.forEach{ratio->
                     val active=ratio==uiState.project.canvas.aspectRatio
-                    Text(ratio.label,style=MaterialTheme.typography.labelSmall,color=if(active)palette.accentOn else palette.textSecondary,modifier=Modifier.background(if(active)palette.accent else Color.Transparent).clickable{vm.setAspectRatio(ratio)}.padding(horizontal=8.dp,vertical=7.dp))
+                    Text(ratio.label,style=MaterialTheme.typography.labelSmall,color=if(active)palette.accentOn else palette.textSecondary,modifier=Modifier.background(if(active)palette.accent else Color.Transparent,palette.shape).clickable{vm.setAspectRatio(ratio)}.padding(horizontal=8.dp,vertical=7.dp))
                 }
             }
             val selectedPreview=uiState.previewSelectedComposition&&uiState.selectedCompositionIndex!=0
@@ -324,9 +324,9 @@ private fun PreviewBlock(
                 .background(if(selectedPreview)palette.accent else palette.panelElevated,palette.shape)
                 .semantics{androidx.compose.ui.semantics.SemanticsProperties.ContentDescription.let{this[it]=listOf(if(selectedPreview)"Previewing selected composition ${uiState.selectedCompositionIndex}, switch to final" else "Previewing final composition")}}
                 .clickable(enabled=uiState.selectedCompositionIndex!=0){vm.toggleCompositionPreview()}.padding(horizontal=10.dp,vertical=8.dp))
-            IconButton(onClick=vm::toggleSafeAreaGuides,modifier=Modifier.size(32.dp)){Icon(Icons.Default.GridOn,"Safe area",tint=if(uiState.project.canvas.showSafeAreaGuides)palette.accent else palette.textSecondary,modifier=Modifier.size(16.dp))}
-            IconButton(onClick=vm::resetPreviewCamera,modifier=Modifier.size(32.dp)){Icon(Icons.Default.CropFree,"Reset zoom",tint=palette.textSecondary,modifier=Modifier.size(16.dp))}
-            IconButton(onClick=vm::toggleFullscreenPreview,modifier=Modifier.size(32.dp)){Icon(Icons.Default.Fullscreen,"Fullscreen",tint=palette.textPrimary,modifier=Modifier.size(18.dp))}
+            IconButton(onClick=vm::toggleSafeAreaGuides,modifier=Modifier.size(32.dp)){Icon(Icons.Outlined.GridOn,"Safe area",tint=if(uiState.project.canvas.showSafeAreaGuides)palette.accent else palette.textSecondary,modifier=Modifier.size(16.dp))}
+            IconButton(onClick=vm::resetPreviewCamera,modifier=Modifier.size(32.dp)){Icon(Icons.Outlined.CropFree,"Reset zoom",tint=palette.textSecondary,modifier=Modifier.size(16.dp))}
+            IconButton(onClick=vm::toggleFullscreenPreview,modifier=Modifier.size(32.dp)){Icon(Icons.Outlined.Fullscreen,"Fullscreen",tint=palette.textPrimary,modifier=Modifier.size(18.dp))}
         }
         VexoPreviewSurface(aspectRatio=uiState.project.canvas.aspectRatio,sceneSnapshot=sceneSnapshot.collectAsState().value,onTransformGesture=vm::updatePreviewTransform,modifier=Modifier.weight(1f).fillMaxWidth().clipToBounds(),targetFps=targetFps,continuousRendering=continuousRendering,renderScale=renderScale,showDiagnostics=showDiagnostics,adaptiveQuality=adaptiveQuality)
     }
@@ -354,9 +354,9 @@ fun CompactTransportBar(
                 Text(if(playback.importTotal>0)"Importing ${playback.importCompleted}/${playback.importTotal}" else if(playback.queue.isEmpty())"Import music" else playback.trackMeta.title,style=MaterialTheme.typography.bodySmall,fontWeight=FontWeight.SemiBold,color=palette.textPrimary,maxLines=1,overflow=TextOverflow.Ellipsis)
                 Text(if(playback.queue.isEmpty())"Select audio" else playback.trackMeta.artist,style=MaterialTheme.typography.labelSmall,color=palette.textSecondary,maxLines=1,overflow=TextOverflow.Ellipsis)
             }
-            IconButton(onClick=onPickAudio,modifier=Modifier.size(36.dp)){Icon(Icons.Default.FolderOpen,"Import audio",tint=palette.accent,modifier=Modifier.size(18.dp))}
+            IconButton(onClick=onPickAudio,modifier=Modifier.size(36.dp)){Icon(Icons.Outlined.FolderOpen,"Import audio",tint=palette.accent,modifier=Modifier.size(18.dp))}
             IconButton(onClick=onPrev,enabled=playback.queue.isNotEmpty(),modifier=Modifier.size(36.dp)){Icon(Icons.Default.SkipPrevious,"Previous",tint=palette.textPrimary,modifier=Modifier.size(20.dp))}
-            IconButton(onClick=onTogglePlay,enabled=playback.queue.isNotEmpty(),modifier=Modifier.size(40.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp)).background(palette.accent)){Icon(if(playback.isPlaying)Icons.Default.Pause else Icons.Default.PlayArrow,if(playback.isPlaying)"Pause" else "Play",tint=palette.accentOn,modifier=Modifier.size(23.dp))}
+            IconButton(onClick=onTogglePlay,enabled=playback.queue.isNotEmpty(),modifier=Modifier.size(40.dp).clip(palette.shape).background(palette.accent,palette.shape)){Icon(if(playback.isPlaying)Icons.Default.Pause else Icons.Default.PlayArrow,if(playback.isPlaying)"Pause" else "Play",tint=palette.accentOn,modifier=Modifier.size(23.dp))}
             IconButton(onClick=onNext,enabled=playback.queue.isNotEmpty(),modifier=Modifier.size(36.dp)){Icon(Icons.Default.SkipNext,"Next",tint=palette.textPrimary,modifier=Modifier.size(20.dp))}
         }
         Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)){
@@ -527,7 +527,7 @@ private fun LayersTab(
                         modifier = Modifier.size(40.dp)
                     ) {
                         Icon(
-                            if (layer.common.visible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                            if (layer.common.visible) Icons.Outlined.Visibility else Icons.Outlined.VisibilityOff,
                             "Toggle visibility",
                             tint = if (layer.common.visible) palette.accent else palette.textSecondary,
                             modifier = Modifier.size(16.dp)
@@ -1574,7 +1574,7 @@ private fun AudioProviderEditorSection(
         Box(
             modifier = Modifier
                 .border(1.dp, palette.border, palette.shape)
-                .background(palette.panelElevated)
+                .background(palette.panelElevated,palette.shape)
                 .clickable { vm.addAudioProvider() }
                 .padding(horizontal = 10.dp, vertical = 6.dp)
         ) {
@@ -1582,6 +1582,7 @@ private fun AudioProviderEditorSection(
         }
     }
 
+    ProviderMonitor(vm,provider)
     var providerAction by remember(provider.id){mutableStateOf("")}
     var providerName by remember(provider.id){mutableStateOf(provider.tag)}
     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())){
@@ -1784,7 +1785,7 @@ private fun AssetsTab(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(palette.accent)
+                .background(palette.accent,palette.shape)
                 .clickable(onClick = onPickImage)
                 .padding(vertical = 12.dp),
             contentAlignment = Alignment.Center
@@ -1855,7 +1856,7 @@ private fun PresetsTab(
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .background(palette.accent)
+                    .background(palette.accent,palette.shape)
                     .clickable(onClick = onImportPreset)
                     .padding(vertical = 11.dp),
                 contentAlignment = Alignment.Center
@@ -1956,7 +1957,7 @@ private fun TransformKeyframePanel(vm:StudioViewModel,ui:StudioUiState,layer:Lay
     if(zoom>1f)StudioSlider("Timeline scroll",scroll,0f,1f,0f,"",.01f,onValueChange={scroll=it})
     TextButton(onClick={scroll=com.vexo.studio.engine.scene.TimelineWindow.centerFraction(duration,zoom,playback.positionMs)}){Text("CENTER PLAYHEAD")}
     Text("Drag a diamond to move it. Tap a diamond to edit or ruler to seek.",style=MaterialTheme.typography.labelSmall)
-    Canvas(Modifier.fillMaxWidth().height(44.dp).background(palette.panelElevated).pointerInput(window,track,playback.durationMs){
+    Canvas(Modifier.fillMaxWidth().height(44.dp).background(palette.panelElevated,palette.shape).pointerInput(window,track,playback.durationMs){
         detectTapGestures{p->
             val hit=visibleFrames.minByOrNull{kotlin.math.abs(window.fraction(it.timeMs)*size.width-p.x)}
                 ?.takeIf{kotlin.math.abs(window.fraction(it.timeMs)*size.width-p.x)<=12.dp.toPx()}
@@ -2043,7 +2044,7 @@ private fun TimingNumber(label:String,ms:Long,commit:(Long)->Unit){
 @Composable
 private fun CurvePreview(mode:com.vexo.studio.model.InterpolationType){
     val palette=LocalVexoPalette.current
-    Canvas(Modifier.fillMaxWidth().height(64.dp).background(palette.panelElevated)){
+    Canvas(Modifier.fillMaxWidth().height(64.dp).background(palette.panelElevated,palette.shape)){
         val pad=6.dp.toPx()
         fun y(v:Float)=size.height-pad-(v+.15f)/1.3f*(size.height-2*pad)
         drawLine(palette.border,Offset(pad,y(0f)),Offset(size.width-pad,y(0f)),1.dp.toPx())
@@ -2115,13 +2116,13 @@ private fun LayerPresetLibrary(vm:StudioViewModel){
     else {
         CompactStudioSearch(query,{query=it.take(80)},"Find layer preset",Modifier.fillMaxWidth())
         presets.filter{it.name.contains(query,true)||it.layer.type.label.contains(query,true)}.forEach{p->
-            Row(Modifier.fillMaxWidth().background(palette.panelElevated).padding(6.dp),verticalAlignment=Alignment.CenterVertically){
+            Row(Modifier.fillMaxWidth().background(palette.panelElevated,palette.shape).padding(6.dp),verticalAlignment=Alignment.CenterVertically){
                 Column(Modifier.weight(1f)){
                     Text(p.name,maxLines=1,overflow=TextOverflow.Ellipsis,style=MaterialTheme.typography.bodyMedium)
                     Text(p.layer.type.label+" · "+p.tracks.sumOf{it.keyframes.size}+" keys",style=MaterialTheme.typography.labelSmall,color=palette.textSecondary)
                 }
                 TextButton(onClick={vm.addSavedLayerPreset(p.id)}){Text("ADD")}
-                IconButton(onClick={remove=p.id},modifier=Modifier.size(32.dp)){Icon(Icons.Default.Delete,"Delete preset",tint=palette.danger,modifier=Modifier.size(16.dp))}
+                IconButton(onClick={remove=p.id},modifier=Modifier.size(32.dp)){Icon(Icons.Outlined.Delete,"Delete preset",tint=palette.danger,modifier=Modifier.size(16.dp))}
             }
         }
     }

@@ -21,9 +21,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.LibraryMusic
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.outlined.LibraryMusic
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
@@ -96,7 +96,7 @@ fun ProjectsScreen(
             Text("PROJECTS", style = MaterialTheme.typography.labelMedium, color = palette.accent)
             Box(
                 modifier = Modifier
-                    .background(palette.accent)
+                    .background(palette.accent,palette.shape)
                     .clickable { showNewDialog = true }
                     .padding(horizontal = 12.dp, vertical = 7.dp)
             ) {
@@ -134,10 +134,10 @@ fun ProjectsScreen(
                     }
                     TextButton(onClick={vm.restorePreviousProject(proj.id)}){Text("RECOVER",style=MaterialTheme.typography.labelSmall)}
                     IconButton(onClick = { vm.duplicateProject(proj.id) }, modifier = Modifier.size(30.dp)) {
-                        Icon(Icons.Default.ContentCopy, "Duplicate", tint = palette.textSecondary, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Outlined.ContentCopy, "Duplicate", tint = palette.textSecondary, modifier = Modifier.size(16.dp))
                     }
                     IconButton(onClick = { deleteTarget = proj }, modifier = Modifier.size(30.dp)) {
-                        Icon(Icons.Default.Delete, "Delete", tint = palette.danger, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Outlined.Delete, "Delete", tint = palette.danger, modifier = Modifier.size(16.dp))
                     }
                 }
             }
@@ -211,7 +211,7 @@ fun AudioLibraryScreen(
             Text("AUDIO QUEUE (${playback.queue.size})", style = MaterialTheme.typography.labelMedium, color = palette.accent)
             Box(
                 modifier = Modifier
-                    .background(palette.accent)
+                    .background(palette.accent,palette.shape)
                     .clickable(onClick = onImportAudio)
                     .padding(horizontal = 12.dp, vertical = 7.dp)
             ) {
@@ -301,7 +301,7 @@ fun AudioLibraryScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box(Modifier.size(38.dp).background(if(current)palette.accent else palette.panelElevated,palette.shape),contentAlignment=Alignment.Center){
-                            Icon(Icons.Default.LibraryMusic,"Audio track ${idx+1}",tint=if(current)palette.accentOn else palette.textSecondary,modifier=Modifier.size(20.dp))
+                            Icon(Icons.Outlined.LibraryMusic,"Audio track ${idx+1}",tint=if(current)palette.accentOn else palette.textSecondary,modifier=Modifier.size(20.dp))
                         }
                         Spacer(Modifier.width(8.dp))
                         Column(modifier = Modifier.weight(1f)) {
@@ -311,7 +311,7 @@ fun AudioLibraryScreen(
                         TextButton(enabled=idx>0,onClick={vm.playbackController.moveQueueItem(idx,idx-1)},contentPadding=PaddingValues(0.dp),modifier=Modifier.width(30.dp)){Text("↑")}
                         TextButton(enabled=idx<playback.queue.lastIndex,onClick={vm.playbackController.moveQueueItem(idx,idx+1)},contentPadding=PaddingValues(0.dp),modifier=Modifier.width(30.dp)){Text("↓")}
                         IconButton(onClick = { vm.playbackController.removeFromQueue(idx) }, modifier = Modifier.size(28.dp)) {
-                            Icon(Icons.Default.Delete, "Remove", tint = palette.danger, modifier = Modifier.size(15.dp))
+                            Icon(Icons.Outlined.Delete, "Remove", tint = palette.danger, modifier = Modifier.size(15.dp))
                         }
                     }
                 }

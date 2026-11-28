@@ -24,20 +24,20 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.filled.FolderOpen
-import androidx.compose.material.icons.filled.LibraryMusic
-import androidx.compose.material.icons.filled.Dashboard
-import androidx.compose.material.icons.filled.FileUpload
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material.icons.outlined.LibraryMusic
+import androidx.compose.material.icons.outlined.Dashboard
+import androidx.compose.material.icons.outlined.FileUpload
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.outlined.ArrowBack
 import kotlinx.coroutines.delay
-import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.outlined.Save
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
 import androidx.compose.foundation.layout.fillMaxSize
@@ -70,8 +70,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.common.util.UnstableApi
 import com.vexo.studio.model.NavDestination
 import com.vexo.studio.model.StudioTab
-import androidx.compose.material.icons.filled.Layers
-import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.outlined.Layers
+import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.widthIn
@@ -83,8 +83,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Surface
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.draw.clip
 import androidx.compose.runtime.DisposableEffect
@@ -106,9 +106,14 @@ class MainActivity : ComponentActivity() {
         window.decorView.setBackgroundColor(android.graphics.Color.BLACK)
         setContent {
             val vm: StudioViewModel = viewModel()
-            val settings by vm.appSettings.collectAsState()
-            VexoTheme(settings = settings) {
-                VexoRootApp(vm = vm)
+            val loaded by vm.loadedSettings.collectAsState()
+            val settings=loaded
+            if(settings==null){
+                Box(Modifier.fillMaxSize().background(Color.Black))
+            }else{
+                VexoTheme(settings = settings) {
+                    VexoRootApp(vm = vm, settings = settings)
+                }
             }
         }
     }
@@ -116,14 +121,13 @@ class MainActivity : ComponentActivity() {
 
 @UnstableApi
 @Composable
-private fun VexoRootApp(vm: StudioViewModel) {
+private fun VexoRootApp(vm: StudioViewModel, settings:com.vexo.studio.model.AppSettings) {
     val context = LocalContext.current
     val palette = LocalVexoPalette.current
     val uiState by vm.uiState.collectAsState()
     val playback by vm.playbackState.collectAsState()
     val sceneSnapshot = vm.sceneSnapshot
     val exportState by vm.exportState.collectAsState()
-    val settings by vm.appSettings.collectAsState()
     DisposableEffect(context){
         val token=androidx.media3.session.SessionToken(context,android.content.ComponentName(context,com.vexo.studio.playback.VexoPlaybackService::class.java))
         val future=androidx.media3.session.MediaController.Builder(context,token).buildAsync()
@@ -251,7 +255,7 @@ private fun VexoRootApp(vm: StudioViewModel) {
                         }
                     }
                     IconButton(onClick = {vm.saveCurrentProject()},modifier=Modifier.size(36.dp)) {
-                        Icon(Icons.Default.Save, "Save to project library", tint = if(uiState.unsaved)palette.accent else palette.textSecondary)
+                        Icon(Icons.Outlined.Save, "Save to project library", tint = if(uiState.unsaved)palette.accent else palette.textSecondary)
                     }
                     Box(
                         modifier = Modifier
@@ -279,18 +283,18 @@ private fun VexoRootApp(vm: StudioViewModel) {
                         horizontalArrangement=Arrangement.spacedBy(2.dp),verticalAlignment=Alignment.CenterVertically){
                         items(StudioTab.entries.size){i->
                             val tab=StudioTab.entries[i]
-                            val glyph=when(tab){StudioTab.LAYERS->Icons.Default.Layers;StudioTab.PROPERTIES->Icons.Default.Tune;StudioTab.ASSETS->Icons.Default.Image;StudioTab.PRESETS->Icons.Default.Dashboard}
+                            val glyph=when(tab){StudioTab.LAYERS->Icons.Outlined.Layers;StudioTab.PROPERTIES->Icons.Outlined.Tune;StudioTab.ASSETS->Icons.Outlined.Image;StudioTab.PRESETS->Icons.Outlined.Dashboard}
                             StudioNavItem(tab.label,glyph,uiState.navDestination==NavDestination.STUDIO&&uiState.studioTab==tab){vm.navigateTo(NavDestination.STUDIO);vm.selectStudioTab(tab)}
                         }
                         items(destinations.size){i->
                             val dest=destinations[i]
                             val glyph=when(dest){
-                                NavDestination.STUDIO->Icons.Default.Tune
-                                NavDestination.PROJECTS->Icons.Default.FolderOpen
-                                NavDestination.AUDIO->Icons.Default.LibraryMusic
-                                NavDestination.TEMPLATES->Icons.Default.Dashboard
-                                NavDestination.EXPORT->Icons.Default.FileUpload
-                                NavDestination.SETTINGS->Icons.Default.Settings
+                                NavDestination.STUDIO->Icons.Outlined.Tune
+                                NavDestination.PROJECTS->Icons.Outlined.FolderOpen
+                                NavDestination.AUDIO->Icons.Outlined.LibraryMusic
+                                NavDestination.TEMPLATES->Icons.Outlined.Dashboard
+                                NavDestination.EXPORT->Icons.Outlined.FileUpload
+                                NavDestination.SETTINGS->Icons.Outlined.Settings
                             }
                             StudioNavItem(dest.label,glyph,uiState.navDestination==dest){vm.navigateTo(dest)}
                         }
@@ -340,11 +344,11 @@ private fun VexoRootApp(vm: StudioViewModel) {
             if(banner!=null){
                 val isError=playback.errorMessage!=null||banner.contains("failed",true)||banner.contains("error",true)
                 val tint=if(isError)palette.danger else palette.accent
-                Surface(modifier=Modifier.align(Alignment.TopCenter).padding(horizontal=12.dp,vertical=8.dp),shape=RoundedCornerShape(14.dp),color=palette.panelElevated,shadowElevation=8.dp,border=androidx.compose.foundation.BorderStroke(1.dp,tint.copy(alpha=.65f))){
+                Surface(modifier=Modifier.align(Alignment.TopCenter).padding(horizontal=12.dp,vertical=8.dp),shape=palette.shape,color=palette.panelElevated,shadowElevation=8.dp,border=androidx.compose.foundation.BorderStroke(1.dp,tint.copy(alpha=.65f))){
                     Row(Modifier.padding(start=12.dp,end=4.dp,top=3.dp,bottom=3.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)){
-                        Icon(if(isError)Icons.Default.Info else Icons.Default.CheckCircle,null,tint=tint,modifier=Modifier.size(20.dp))
+                        Icon(if(isError)Icons.Outlined.Info else Icons.Default.CheckCircle,null,tint=tint,modifier=Modifier.size(20.dp))
                         Text(banner,style=MaterialTheme.typography.bodySmall,color=palette.textPrimary,modifier=Modifier.weight(1f,fill=false),maxLines=4,overflow=TextOverflow.Ellipsis)
-                        IconButton(onClick={vm.clearBanner();vm.playbackController.clearError()},modifier=Modifier.size(36.dp)){Icon(Icons.Default.Close,"Dismiss message",tint=palette.textSecondary,modifier=Modifier.size(18.dp))}
+                        IconButton(onClick={vm.clearBanner();vm.playbackController.clearError()},modifier=Modifier.size(36.dp)){Icon(Icons.Outlined.Close,"Dismiss message",tint=palette.textSecondary,modifier=Modifier.size(18.dp))}
                     }
                 }
             }
