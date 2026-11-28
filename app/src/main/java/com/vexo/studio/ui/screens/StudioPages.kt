@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.outlined.LibraryMusic
+import androidx.compose.material.icons.outlined.FileUpload
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.filled.PlayArrow
@@ -79,7 +80,9 @@ import java.util.Locale
 @Composable
 fun ProjectsScreen(
     vm: StudioViewModel,
-    uiState: StudioUiState
+    uiState: StudioUiState,
+    onImportProject:()->Unit={},
+    onExportProject:(String,String)->Unit={_,_->}
 ) {
     val palette = LocalVexoPalette.current
     var showNewDialog by remember { mutableStateOf(false) }
@@ -112,7 +115,11 @@ fun ProjectsScreen(
             }
         }
 
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(6.dp)){
+            TextButton(onClick=onImportProject,modifier=Modifier.weight(1f)){Text("IMPORT .VIXO")}
+            TextButton(onClick={onExportProject(uiState.project.id,uiState.project.name)},modifier=Modifier.weight(1f)){Text("EXPORT CURRENT")}
+        }
+        LazyColumn(Modifier.weight(1f),verticalArrangement = Arrangement.spacedBy(8.dp)) {
             itemsIndexed(uiState.projects, key = { _, item -> item.id }) { _, proj ->
                 val isCurrent = proj.id == uiState.project.id
                 Row(
@@ -135,6 +142,9 @@ fun ProjectsScreen(
                     if (isCurrent) {
                         Text("OPEN", style = MaterialTheme.typography.labelSmall, color = palette.accent)
                         Spacer(Modifier.width(8.dp))
+                    }
+                    IconButton(onClick={onExportProject(proj.id,proj.name)},modifier=Modifier.size(32.dp)){
+                        Icon(androidx.compose.material.icons.Icons.Outlined.FileUpload,"Export project .vixo",tint=palette.textSecondary,modifier=Modifier.size(17.dp))
                     }
                     TextButton(onClick={vm.restorePreviousProject(proj.id)}){Text("RECOVER",style=MaterialTheme.typography.labelSmall)}
                     IconButton(onClick = { vm.duplicateProject(proj.id) }, modifier = Modifier.size(30.dp)) {
@@ -712,6 +722,7 @@ private fun AboutVexoPanel(){
         Text("Version "+com.vexo.studio.BuildConfig.VERSION_NAME+" · Android 7+",style=MaterialTheme.typography.labelSmall,color=p.textSecondary)
         Text("Native audio visualization studio for creating music-reactive videos, editing compositions, layers and effects, managing local audio, and exporting MP4.",style=MaterialTheme.typography.bodySmall,color=p.textPrimary)
         Text("Projects, presets, creator profile and settings are stored locally. Export resolution and frame rate depend on device encoder capabilities. Artwork and UI backdrop are separate from exported scenes.",style=MaterialTheme.typography.bodySmall,color=p.textSecondary)
+        Text("Native .vixo archives contain the project scene and linked local media. Legacy .vex and supported Avee files can still be imported.",style=MaterialTheme.typography.bodySmall,color=p.textSecondary)
         Text("Built with Kotlin, Jetpack Compose, Media3 and OpenGL ES.",style=MaterialTheme.typography.labelSmall,color=p.textSecondary)
     }
 }

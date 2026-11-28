@@ -183,7 +183,7 @@ private fun VexoRootApp(vm: StudioViewModel, settings:com.vexo.studio.model.AppS
         ActivityResultContracts.OpenDocument()
     ) { uri ->
         if (uri != null) {
-            val name = DocumentFile.fromSingleUri(context, uri)?.name ?: "project.VEX"
+            val name = DocumentFile.fromSingleUri(context, uri)?.name ?: "project.vixo"
             vm.importPresetFromUri(uri, name)
         }
     }
@@ -194,6 +194,15 @@ private fun VexoRootApp(vm: StudioViewModel, settings:com.vexo.studio.model.AppS
         if (uri != null) {
             vm.exportPresetToUri(uri)
         }
+    }
+
+    val projectImportPicker=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()){uri->
+        if(uri!=null){val name=DocumentFile.fromSingleUri(context,uri)?.name?:"project.vixo";vm.importProjectFromUri(uri,name)}
+    }
+    var exportProjectId by rememberSaveable{mutableStateOf("")}
+    val projectExportPicker=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")){uri->
+        if(uri!=null&&exportProjectId.isNotBlank())vm.exportSavedProjectToUri(exportProjectId,uri)
+        exportProjectId=""
     }
 
     val exportDestPicker = rememberLauncherForActivityResult(
@@ -324,10 +333,10 @@ private fun VexoRootApp(vm: StudioViewModel, settings:com.vexo.studio.model.AppS
                         imagePicker.launch(arrayOf("image/*", "video/*"))
                     },
                     onImportPreset = { presetImportPicker.launch(arrayOf("application/json", "application/octet-stream", "*/*")) },
-                    onExportPreset = { presetExportPicker.launch("${uiState.project.name}.VEX") },
+                    onExportPreset = { presetExportPicker.launch(com.vexo.studio.data.VixoFileName.create(uiState.project.name)) },
                     onSceneGlass={sceneGlass=it}
                 )
-                NavDestination.PROJECTS -> ProjectsScreen(vm = vm, uiState = uiState)
+                NavDestination.PROJECTS -> ProjectsScreen(vm=vm,uiState=uiState,onImportProject={projectImportPicker.launch(arrayOf("*/*"))},onExportProject={id,name->exportProjectId=id;projectExportPicker.launch(com.vexo.studio.data.VixoFileName.create(name))})
                 NavDestination.AUDIO -> AudioLibraryScreen(
                     vm = vm,
                     playback = playback,

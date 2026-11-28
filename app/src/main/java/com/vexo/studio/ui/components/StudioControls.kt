@@ -345,8 +345,8 @@ fun <T> StudioChipSelector(
                 val isSelected = opt == selected
                 Box(
                     modifier = Modifier
-                        .border(1.dp, if (isSelected) palette.accent else palette.border, palette.shape)
-                        .background(if (isSelected) palette.accent else palette.glassPanel, palette.shape)
+                        .border(1.dp, if (isSelected) palette.accent else palette.border, palette.buttonShape)
+                        .background(if (isSelected) palette.accent else palette.glassPanel, palette.buttonShape)
                         .clickable { onSelect(opt) }
                         .padding(horizontal = 10.dp, vertical = 7.dp)
                 ) {

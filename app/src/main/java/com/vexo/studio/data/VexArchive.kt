@@ -14,7 +14,7 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 
-/** Self-contained VEX archives: project.json plus referenced local media. */
+/** Self-contained VIXO / legacy VEX archives: project.json plus referenced local media. */
 object VexArchive {
     private const val MAX_BYTES = 256L * 1024 * 1024
     private const val MAX_ENTRIES = 256

@@ -1847,7 +1847,7 @@ private fun PresetsTab(
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         LayerPresetLibrary(vm)
-        Text("VEX PROJECT LIBRARY", style = MaterialTheme.typography.labelMedium, color = palette.accent)
+        Text("VIXO PRESET LIBRARY", style = MaterialTheme.typography.labelMedium, color = palette.accent)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Box(
                 modifier = Modifier
@@ -1857,7 +1857,7 @@ private fun PresetsTab(
                     .padding(vertical = 11.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text("OPEN .VEX", style = MaterialTheme.typography.labelSmall, color = palette.accentOn)
+                Text("OPEN .VIXO", style = MaterialTheme.typography.labelSmall, color = palette.accentOn)
             }
             Box(
                 modifier = Modifier
@@ -1868,7 +1868,7 @@ private fun PresetsTab(
                     .padding(vertical = 11.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text("SAVE .VEX", style = MaterialTheme.typography.labelSmall, color = palette.accent)
+                Text("SAVE .VIXO", style = MaterialTheme.typography.labelSmall, color = palette.accent)
             }
         }
 
@@ -2091,7 +2091,7 @@ private fun LayerPresetSavePanel(vm:StudioViewModel,layer:LayerNode){
     var name by remember(layer.common.id){mutableStateOf(layer.common.name)}
     val supported=com.vexo.studio.engine.scene.SceneGraph.referencesOf(layer.config).isEmpty()
     TextButton(enabled=supported,onClick={open=true}){Text("SAVE LAYER PRESET")}
-    if(!supported)Text("Composition-dependent layers can be saved in a VEX project instead.",style=MaterialTheme.typography.labelSmall)
+    if(!supported)Text("Composition-dependent layers can be saved in a VIXO project instead.",style=MaterialTheme.typography.labelSmall)
     if(open)AlertDialog(onDismissRequest={open=false},title={Text("SAVE LAYER STYLE")},text={
         Column{
             OutlinedTextField(name,{name=it.take(60)},label={Text("Preset name")},singleLine=true)

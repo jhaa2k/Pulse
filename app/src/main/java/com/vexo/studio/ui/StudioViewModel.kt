@@ -863,6 +863,36 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    /** Imports into the project library under a fresh ID, without overwriting a saved project or current draft. */
+    fun importProjectFromUri(uri:Uri,displayName:String){
+        viewModelScope.launch{
+            runCatching{
+                withContext(Dispatchers.IO){
+                    val imported=app.contentResolver.openInputStream(uri)?.use{VexArchive.read(app,it,displayName.substringBeforeLast('.'))}?:error("Cannot read project")
+                    val fresh=imported.copy(id=UUID.randomUUID().toString(),updatedAtMs=System.currentTimeMillis(),exportSettings=imported.exportSettings.copy(customOutputUri=null))
+                    synchronized(saveLock){projectRepo.saveProject(fresh,false)}
+                    fresh
+                }
+            }.onSuccess{fresh->
+                _uiState.value=_uiState.value.copy(projects=projectRepo.listProjects(),statusBanner="Imported .vixo project · "+fresh.name)
+            }.onFailure{err->_uiState.value=_uiState.value.copy(statusBanner="Project import failed: "+err.message)}
+        }
+    }
+
+    fun exportSavedProjectToUri(id:String,uri:Uri){
+        val current=_uiState.value.project
+        val active=if(current.id==id)current.copy(audioUri=playbackController.currentAudioUri()) else null
+        viewModelScope.launch{
+            runCatching{
+                withContext(Dispatchers.IO){
+                    val project=active?:synchronized(saveLock){projectRepo.loadProject(id)}?:error("Project unavailable")
+                    app.contentResolver.openOutputStream(uri,"wt")?.use{VexArchive.write(app,project,it)}?:error("Cannot write .vixo file")
+                }
+            }.onSuccess{_uiState.value=_uiState.value.copy(statusBanner="VIXO project exported")}
+            .onFailure{err->_uiState.value=_uiState.value.copy(statusBanner="Project export failed: "+err.message)}
+        }
+    }
+
     fun importPresetFromUri(uri: Uri, displayName: String) {
         viewModelScope.launch(Dispatchers.IO) {
             runCatching {
@@ -892,7 +922,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                 } ?: error("Cannot write to target URI")
             }.onSuccess {
                 withContext(Dispatchers.Main) {
-                    _uiState.value = _uiState.value.copy(statusBanner = "VEX project exported")
+                    _uiState.value = _uiState.value.copy(statusBanner = "VIXO preset exported")
                 }
             }.onFailure { err ->
                 withContext(Dispatchers.Main) {
