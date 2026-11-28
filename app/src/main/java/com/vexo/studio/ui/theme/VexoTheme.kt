@@ -36,10 +36,11 @@ data class VexoPalette(
     val radiusDp: Float = 12f,
     val controlScale: Float = 1f,
     val glassEnabled: Boolean = true,
-    val glassOpacity: Float = 0.82f
+    val glassOpacity: Float = 0.82f,
+    val wallpaperActive: Boolean = false
 ) {
     val shape get() = RoundedCornerShape(radiusDp.coerceIn(0f, 28f).dp)
-    val glassPanel get() = if (glassEnabled) androidx.compose.ui.graphics.lerp(bg,panel,glassOpacity.coerceIn(0.65f,1f)) else panel
+    val glassPanel get() = if (wallpaperActive) panel.copy(alpha=glassOpacity.coerceIn(.65f,1f)) else if (glassEnabled) androidx.compose.ui.graphics.lerp(bg,panel,glassOpacity.coerceIn(0.65f,1f)) else panel
 }
 
 val LocalVexoPalette = staticCompositionLocalOf {
@@ -109,7 +110,8 @@ fun VexoTheme(
         )
     }
 
-    val palette = basePalette.copy(radiusDp = settings.cornerRadiusDp, controlScale = settings.controlScale.coerceIn(0.85f, 1.25f), glassEnabled = settings.glassEnabled, glassOpacity = settings.glassOpacity)
+    val themed = if(settings.customAccentAllThemes) basePalette.copy(accent=customAccent,accentOn=if(customAccent.luminance()>.179f) Color.Black else Color.White) else basePalette
+    val palette = themed.copy(radiusDp = settings.cornerRadiusDp, controlScale = settings.controlScale.coerceIn(0.85f, 1.25f), glassEnabled = settings.glassEnabled, glassOpacity = settings.glassOpacity, wallpaperActive=settings.wallpaperUri.isNotBlank())
     val isLight = settings.themePreset == ThemePreset.CLEAN_LIGHT
     val colorScheme = if (isLight) {
         lightColorScheme(

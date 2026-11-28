@@ -802,7 +802,11 @@ data class AppSettings(
     val uiTextScale: Float = 1f,
     val previewFps: Int = 30,
     val previewShare: Float = 0.41f,
-    val portraitOverlay: Boolean = false
+    val portraitOverlay: Boolean = false,
+    val wallpaperUri: String = "",
+    val wallpaperBlurDp: Float = 16f,
+    val wallpaperDim: Float = .72f,
+    val customAccentAllThemes: Boolean = false
 )
 
 @Serializable

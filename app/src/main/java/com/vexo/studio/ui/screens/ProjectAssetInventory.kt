@@ -28,6 +28,14 @@ internal fun ProjectAssetInventory(vm:StudioViewModel,uiState:StudioUiState){
     val palette=LocalVexoPalette.current
     val context=LocalContext.current
     val assets=remember(uiState.project){ProjectAssets.collect(uiState.project)}
+    data class Target(val project:String,val layer:String,val role:String,val uri:String)
+    var pending by remember{mutableStateOf<Target?>(null)}
+    var remove by remember{mutableStateOf<Target?>(null)}
+    val picker=androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()){uri->
+        val target=pending;pending=null
+        if(uri!=null&&target!=null)vm.editLinkedAsset(target.project,target.layer,target.role,target.uri,uri)
+    }
+    remove?.let{target->AlertDialog(onDismissRequest={remove=null},title={Text("REMOVE ASSET LINK?")},text={Text("Detaches this layer reference only. Your original file is not deleted.")},confirmButton={TextButton(onClick={vm.editLinkedAsset(target.project,target.layer,target.role,target.uri,null);remove=null}){Text("REMOVE")}},dismissButton={TextButton(onClick={remove=null}){Text("CANCEL")}})}
     var query by remember(uiState.project.id){mutableStateOf("")}
     var refresh by remember{mutableIntStateOf(0)}
     var statuses by remember(uiState.project.id){mutableStateOf<Map<String,AssetStatus>>(emptyMap())}
@@ -74,11 +82,17 @@ internal fun ProjectAssetInventory(vm:StudioViewModel,uiState:StudioUiState){
             Text(availability+" · "+asset.uses.size+" USE(S)"+(status?.size?.let{" · "+android.text.format.Formatter.formatShortFileSize(context,it)}?:""),style=MaterialTheme.typography.labelSmall,color=if(status?.readable==false)palette.danger else palette.textSecondary)
             for(use in asset.uses){
                 if(use.layerId!=null&&use.compositionIndex!=null){
+                    val target=Target(uiState.project.id,use.layerId,use.role,asset.uri)
+                    val unlocked=uiState.project.compositions.flatMap{it.layers}.any{it.common.id==use.layerId&&!it.common.locked}
                     TextButton(onClick={vm.selectComposition(use.compositionIndex);vm.selectLayer(use.layerId);vm.selectStudioTab(StudioTab.PROPERTIES)},modifier=Modifier.fillMaxWidth()){
                         Text(use.label+" / "+use.role,modifier=Modifier.weight(1f),maxLines=2)
                         Text("OPEN",color=palette.accent)
                     }
-                }else Text(use.label+" / "+use.role,style=MaterialTheme.typography.labelSmall,color=palette.textSecondary)
+                    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.End){
+                        TextButton(enabled=unlocked,onClick={pending=target;picker.launch(when(use.role){"Font"->arrayOf("*/*");"Image","Video"->arrayOf("image/*","video/*");else->arrayOf("image/*")})}){Text("REPLACE")}
+                        TextButton(enabled=unlocked,onClick={remove=target}){Text("REMOVE",color=palette.danger)}
+                    }
+                }else TextButton(onClick={vm.navigateTo(com.vexo.studio.model.NavDestination.AUDIO)}){Text("MANAGE AUDIO QUEUE")}
             }
         }
     }

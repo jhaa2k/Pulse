@@ -299,16 +299,13 @@ fun AudioLibraryScreen(
                             .padding(10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            Icons.Default.PlayArrow,
-                            null,
-                            tint = if (current) palette.accent else palette.textSecondary,
-                            modifier = Modifier.size(18.dp)
-                        )
+                        Box(Modifier.size(38.dp).background(if(current)palette.accent else palette.panelElevated,palette.shape),contentAlignment=Alignment.Center){
+                            Icon(Icons.Default.LibraryMusic,"Audio track ${idx+1}",tint=if(current)palette.accentOn else palette.textSecondary,modifier=Modifier.size(20.dp))
+                        }
                         Spacer(Modifier.width(8.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(track.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text("${track.artist} · ${formatDuration(track.durationMs)}", style = MaterialTheme.typography.labelSmall, color = palette.textSecondary, maxLines = 1)
+                            Text("${if(current) "ACTIVE · " else "${idx+1} · "}${track.artist} · ${formatDuration(track.durationMs)}", style = MaterialTheme.typography.labelSmall, color = if(current)palette.accent else palette.textSecondary, maxLines = 1)
                         }
                         TextButton(enabled=idx>0,onClick={vm.playbackController.moveQueueItem(idx,idx-1)},contentPadding=PaddingValues(0.dp),modifier=Modifier.width(30.dp)){Text("↑")}
                         TextButton(enabled=idx<playback.queue.lastIndex,onClick={vm.playbackController.moveQueueItem(idx,idx+1)},contentPadding=PaddingValues(0.dp),modifier=Modifier.width(30.dp)){Text("↓")}
@@ -319,42 +316,6 @@ fun AudioLibraryScreen(
                 }
             }
         }
-    }
-}
-
-@UnstableApi
-@Composable
-fun TemplatesScreen(
-    vm: StudioViewModel,
-    onImportPreset: () -> Unit
-) {
-    val palette = LocalVexoPalette.current
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("STUDIO TEMPLATES", style = MaterialTheme.typography.labelMedium, color = palette.accent)
-            Box(
-                modifier = Modifier
-                    .border(1.dp, palette.accent, palette.shape)
-                    .background(palette.glassPanel, palette.shape)
-                    .clickable(onClick = onImportPreset)
-                    .padding(horizontal = 10.dp, vertical = 6.dp)
-            ) {
-                Text("OPEN .VEX", style = MaterialTheme.typography.labelSmall, color = palette.accent)
-            }
-        }
-
-        CreativePresetBrowser(vm)
-
     }
 }
 
@@ -393,7 +354,15 @@ fun ExportScreen(
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Text("OFFLINE VIDEO EXPORT (MP4 + AAC)", style = MaterialTheme.typography.labelMedium, color = palette.accent)
+        ExportPanel("OUTPUT SUMMARY"){
+            Text("MP4 VIDEO / AAC AUDIO", style=MaterialTheme.typography.labelMedium,color=palette.accent)
+            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)){
+                ExportMetric("RESOLUTION","${dimensions.first} × ${dimensions.second}",Modifier.weight(1f))
+                ExportMetric("FRAME RATE","${exp.fps} FPS",Modifier.weight(1f))
+            }
+            Text(currentChoice?.codec?:"Checking / select supported quality",style=MaterialTheme.typography.labelSmall,color=palette.textSecondary)
+        }
+        ExportPanel("VIDEO FORMAT"){
 
         StudioChipSelector("Aspect Ratio", AspectRatioPreset.entries, exp.aspectRatio, { it.label }) { ratio ->
             vm.updateExportSettings { it.copy(aspectRatio = ratio) }
@@ -416,6 +385,8 @@ fun ExportScreen(
             else Text("Saved export quality is unsupported. Select an available resolution and frame rate.",color=palette.danger,style=MaterialTheme.typography.bodySmall)
             Text("Only device-reported supported options are shown. Changing resolution may select the nearest supported FPS.",style=MaterialTheme.typography.labelSmall,color=palette.textSecondary)
         }
+        }
+        ExportPanel("ENCODING & QUALITY"){
         StudioToggleRow("Automatic video bitrate",exp.adaptiveVideoBitrate){v->vm.updateExportSettings{it.copy(adaptiveVideoBitrate=v)}}
         if(!exp.adaptiveVideoBitrate)StudioSlider(
             label = "Video Bitrate",
@@ -442,6 +413,8 @@ fun ExportScreen(
         Text("Estimated output: %.1f MB".format(estimatedBytes/1_000_000.0),style=MaterialTheme.typography.labelMedium,color=palette.accent)
         StudioChipSelector("AAC Audio Bitrate", listOf(96,128,192,256,320), exp.audioBitrateKbps, { "$it kbps" }) { v -> vm.updateExportSettings { it.copy(audioBitrateKbps=v) } }
         Text("Video + AAC · Encoder capability and temporary storage are checked before rendering.", style=MaterialTheme.typography.bodySmall, color=palette.textSecondary)
+        }
+        ExportPanel("TRIM & DURATION"){
         if (playback.durationMs > 0L) {
             StudioSlider(
                 label = "Trim Start",
@@ -465,6 +438,8 @@ fun ExportScreen(
             )
         }
 
+        }
+        ExportPanel("SAVE LOCATION"){
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Box(
                 modifier = Modifier
@@ -494,6 +469,7 @@ fun ExportScreen(
             }
         }
 
+        }
         if (exportState.isRunning) {
             Column(
                 modifier = Modifier
@@ -532,7 +508,7 @@ fun ExportScreen(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(if(canExport)palette.accent else palette.panelElevated)
+                    .background(if(canExport)palette.accent else palette.panelElevated,palette.shape)
                     .clickable(enabled=canExport) { vm.startVideoExport() }
                     .padding(vertical = 14.dp),
                 contentAlignment = Alignment.Center
@@ -582,12 +558,15 @@ fun SettingsScreen(
     ) {
         val sections = remember { mutableStateMapOf<String, Boolean>() }
         Text("Settings", style = MaterialTheme.typography.titleMedium)
+        DeveloperPanel()
+        ExpandableSectionHeader("Custom wallpaper",sections["wallpaper"]==true,{toggleAccordion(sections,"wallpaper")}){WallpaperSettings(vm,settings)}
         ExpandableSectionHeader("Local crash diagnostics",sections["crash"]==true,{toggleAccordion(sections,"crash")}){LocalCrashPanel()}
         ExpandableSectionHeader("Appearance", sections["appearance"] == true, { toggleAccordion(sections,"appearance") }) {
 
         StudioChipSelector("Theme Preset", ThemePreset.entries, settings.themePreset, { it.label }) { theme ->
             vm.updateSettings { it.copy(themePreset = theme) }
         }
+        StudioToggleRow("Apply accent to every theme",settings.customAccentAllThemes){v->vm.updateSettings{it.copy(customAccentAllThemes=v)}}
         StudioColorPickerRow("Custom Accent", settings.customAccentArgb) { col ->
             vm.updateSettings { it.copy(customAccentArgb = col) }
         }
@@ -646,5 +625,56 @@ private fun LocalCrashPanel(){
             }){Text("COPY")}
             TextButton(onClick={com.vexo.studio.data.LocalCrashReport.clear(context);report=""}){Text("CLEAR")}
         }
+    }
+}
+
+
+@Composable
+private fun ExportPanel(title:String,content:@Composable ()->Unit){
+    val p=LocalVexoPalette.current
+    Column(Modifier.fillMaxWidth().background(p.glassPanel,p.shape).border(1.dp,p.border,p.shape).padding(12.dp),verticalArrangement=Arrangement.spacedBy(6.dp)){
+        Text(title,style=MaterialTheme.typography.labelMedium,color=p.accent)
+        content()
+    }
+}
+@Composable
+private fun ExportMetric(label:String,value:String,modifier:Modifier){
+    val p=LocalVexoPalette.current
+    Column(modifier.background(p.panelElevated,p.shape).padding(10.dp)){
+        Text(label,style=MaterialTheme.typography.labelSmall,color=p.textSecondary)
+        Text(value,style=MaterialTheme.typography.titleMedium,color=p.textPrimary,maxLines=1)
+    }
+}
+@UnstableApi
+@Composable
+private fun WallpaperSettings(vm:StudioViewModel,settings:AppSettings){
+    val p=LocalVexoPalette.current
+    val picker=androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()){uri->if(uri!=null)vm.setWallpaper(uri)}
+    Text(if(settings.wallpaperUri.isBlank())"No custom wallpaper" else "Custom wallpaper active",style=MaterialTheme.typography.bodySmall,color=p.textSecondary)
+    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)){
+        TextButton(onClick={picker.launch(arrayOf("image/*"))}){Text("CHOOSE IMAGE")}
+        TextButton(enabled=settings.wallpaperUri.isNotBlank(),onClick={vm.updateSettings{it.copy(wallpaperUri="")}}){Text("REMOVE")}
+    }
+    StudioSlider("Wallpaper blur",settings.wallpaperBlurDp,0f,48f,16f,"dp",1f,onValueChange={v->vm.updateSettings{it.copy(wallpaperBlurDp=v)}})
+    StudioSlider("Wallpaper dim",settings.wallpaperDim*100f,25f,95f,72f,"%",1f,onValueChange={v->vm.updateSettings{it.copy(wallpaperDim=v/100f)}})
+    Text("UI only. Blur uses Android 12+; wallpaper never enters exported video.",style=MaterialTheme.typography.labelSmall,color=p.textSecondary)
+}
+@Composable
+private fun DeveloperPanel(){
+    val p=LocalVexoPalette.current
+    val links=androidx.compose.ui.platform.LocalUriHandler.current
+    ExportPanel("DEVELOPER"){
+        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)){
+            Box(Modifier.size(52.dp).background(p.accent,p.shape),contentAlignment=Alignment.Center){Text("J",style=MaterialTheme.typography.headlineMedium,color=p.accentOn)}
+            Column(Modifier.weight(1f)){
+                Text("jhaa2k",style=MaterialTheme.typography.titleLarge,color=p.textPrimary)
+                Text("VEXO AUDIO VISUALIZATION · v"+com.vexo.studio.BuildConfig.VERSION_NAME,style=MaterialTheme.typography.labelSmall,color=p.textSecondary)
+            }
+        }
+        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(6.dp)){
+            TextButton(onClick={links.openUri("https://github.com/jhaa2k")}){Text("PROFILE")}
+            TextButton(onClick={links.openUri("https://github.com/jhaa2k/Vexo-Audio-Visualization")}){Text("REPOSITORY")}
+        }
+        TextButton(onClick={links.openUri("https://github.com/jhaa2k/Vexo-Audio-Visualization/releases")}){Text("LATEST APP / RELEASES")}
     }
 }

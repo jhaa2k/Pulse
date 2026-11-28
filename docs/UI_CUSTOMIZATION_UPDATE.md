@@ -1,0 +1,3 @@
+# UI customization update
+
+Main branch: removed separate Templates navigation; legacy route forwards to Studio Presets. Added layer-style queue rows, export summary/format/encoding/trim/location cards, a UI-only bounded custom wallpaper with blur/dim and persistent URI settings, cross-theme accent option, developer profile/repository/releases links for jhaa2k, asset per-link replacement and removal with lock and stale-reference checks, and a redesigned playback scrubber. Audio remains managed by the queue; original media files are never deleted. Wallpaper uses Android 12+ native blur and persisted document permission; older devices show unblurred dimmed wallpaper. No Play Store or GitHub release created. Release signing remains independent of UI work.

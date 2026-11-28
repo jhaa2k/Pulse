@@ -370,9 +370,10 @@ fun CompactTransportBar(
                 if(enabled)detectHorizontalDragGestures(onDragStart={point->scrub=((point.x-5.dp.toPx())/(size.width-10.dp.toPx()).coerceAtLeast(1f)).coerceIn(0f,1f)*maxDur},onDragEnd={scrub?.let{seek(it.toLong())};scrub=null},onDragCancel={scrub=null}){change,_->change.consume();scrub=((change.position.x-5.dp.toPx())/(size.width-10.dp.toPx()).coerceAtLeast(1f)).coerceIn(0f,1f)*maxDur}
             }){
                 val pad=5.dp.toPx();val y=size.height*.5f;val end=(size.width-pad).coerceAtLeast(pad);val thumb=pad+(end-pad)*(pos/maxDur)
-                drawLine(palette.border,Offset(pad,y),Offset(end,y),2.dp.toPx())
-                drawLine(palette.accent,Offset(pad,y),Offset(thumb,y),2.dp.toPx())
-                if(enabled)drawCircle(palette.accent,4.dp.toPx(),Offset(thumb,y))
+                drawLine(palette.border,Offset(pad,y),Offset(end,y),4.dp.toPx(),cap=androidx.compose.ui.graphics.StrokeCap.Round)
+                for(i in 1..19){val x=pad+(end-pad)*i/20f;drawLine(palette.textSecondary.copy(alpha=.3f),Offset(x,y-5.dp.toPx()),Offset(x,y-3.dp.toPx()),1.dp.toPx())}
+                drawLine(palette.accent,Offset(pad,y),Offset(thumb,y),4.dp.toPx(),cap=androidx.compose.ui.graphics.StrokeCap.Round)
+                if(enabled){drawCircle(palette.accent.copy(alpha=.22f),8.dp.toPx(),Offset(thumb,y));drawCircle(palette.accent,5.dp.toPx(),Offset(thumb,y));drawCircle(palette.accentOn,2.dp.toPx(),Offset(thumb,y))}
             }
             Text(formatDuration(playback.durationMs),style=MaterialTheme.typography.labelSmall,color=palette.textSecondary)
         }
@@ -391,8 +392,8 @@ private fun StudioWorkspacePanel(
     modifier: Modifier = Modifier
 ) {
     val palette = LocalVexoPalette.current
-    Column(modifier = modifier.background(palette.panel).clipToBounds()) {
-        Box(Modifier.weight(1f).fillMaxWidth().clipToBounds().background(palette.bg)) {
+    Column(modifier = modifier.background(if(palette.wallpaperActive)palette.panel.copy(alpha=.65f) else palette.panel).clipToBounds()) {
+        Box(Modifier.weight(1f).fillMaxWidth().clipToBounds().background(if(palette.wallpaperActive)Color.Transparent else palette.bg)) {
         when (uiState.studioTab) {
             StudioTab.LAYERS -> LayersTab(vm = vm, uiState = uiState)
             StudioTab.PROPERTIES -> PropertiesTab(vm = vm, uiState = uiState, settings = settings)

@@ -94,7 +94,6 @@ import com.vexo.studio.ui.screens.EditorScreen
 import com.vexo.studio.ui.screens.ExportScreen
 import com.vexo.studio.ui.screens.ProjectsScreen
 import com.vexo.studio.ui.screens.SettingsScreen
-import com.vexo.studio.ui.screens.TemplatesScreen
 import com.vexo.studio.ui.theme.LocalVexoPalette
 import com.vexo.studio.ui.theme.VexoTheme
 
@@ -194,8 +193,14 @@ private fun VexoRootApp(vm: StudioViewModel) {
         }
     }
 
+    val wallpaper by androidx.compose.runtime.produceState<android.graphics.Bitmap?>(null,settings.wallpaperUri){
+        value=kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO){com.vexo.studio.data.UiWallpaper.decode(context,settings.wallpaperUri)}
+    }
     Box(Modifier.fillMaxSize().background(palette.bg)) {
-        if (settings.glassEnabled && uiState.navDestination != NavDestination.STUDIO) {
+        if(wallpaper!=null){
+            Image(bitmap=wallpaper!!.asImageBitmap(),contentDescription=null,contentScale=ContentScale.Crop,modifier=Modifier.fillMaxSize().blur(settings.wallpaperBlurDp.coerceIn(0f,48f).dp))
+            Box(Modifier.fillMaxSize().background(palette.bg.copy(alpha=settings.wallpaperDim.coerceIn(.25f,.95f))))
+        } else if (settings.glassEnabled && uiState.navDestination != NavDestination.STUDIO) {
             val artwork = playback.trackMeta.artwork
             if (artwork != null && Build.VERSION.SDK_INT >= 31) {
                 Image(bitmap = artwork.asImageBitmap(), contentDescription = null, contentScale = ContentScale.Crop,
@@ -206,7 +211,7 @@ private fun VexoRootApp(vm: StudioViewModel) {
             }
         }
     Scaffold(
-        containerColor = if (settings.glassEnabled && uiState.navDestination != NavDestination.STUDIO) Color.Transparent else palette.bg,
+        containerColor = if (wallpaper!=null || (settings.glassEnabled && uiState.navDestination != NavDestination.STUDIO)) Color.Transparent else palette.bg,
         contentColor = palette.textPrimary,
         topBar = {
             if (!uiState.isFullscreenPreview) {
@@ -242,7 +247,7 @@ private fun VexoRootApp(vm: StudioViewModel) {
                     Box {
                         IconButton(onClick = { showAppMenu = true },modifier=Modifier.size(36.dp)) { Icon(Icons.Default.MoreVert, "Studio menu", tint = palette.textSecondary) }
                         DropdownMenu(expanded = showAppMenu, onDismissRequest = { showAppMenu = false }) {
-                            NavDestination.entries.forEach { dest -> DropdownMenuItem(text = { Text(dest.label) }, onClick = { showAppMenu = false; vm.navigateTo(dest) }) }
+                            NavDestination.entries.filter{it!=NavDestination.TEMPLATES}.forEach { dest -> DropdownMenuItem(text = { Text(dest.label) }, onClick = { showAppMenu = false; vm.navigateTo(dest) }) }
                         }
                     }
                     IconButton(onClick = {vm.saveCurrentProject()},modifier=Modifier.size(36.dp)) {
@@ -266,7 +271,7 @@ private fun VexoRootApp(vm: StudioViewModel) {
                     com.vexo.studio.ui.screens.CompactTransportBar(playback, {vm.playbackController.togglePlayPause()}, {vm.playbackController.previous()}, {vm.playbackController.next()}, {vm.playbackController.seekTo(it)}, {audioPicker.launch(arrayOf("audio/*"))}, Modifier.fillMaxWidth().padding(horizontal=8.dp))
                 }
                 val navState=rememberLazyListState()
-                val destinations=NavDestination.entries.filter{it!=NavDestination.STUDIO}
+                val destinations=NavDestination.entries.filter{it!=NavDestination.STUDIO&&it!=NavDestination.TEMPLATES}
                 val activeIndex=if(uiState.navDestination==NavDestination.STUDIO)StudioTab.entries.indexOf(uiState.studioTab) else StudioTab.entries.size+destinations.indexOf(uiState.navDestination)
                 LaunchedEffect(activeIndex){if(activeIndex>=0&&navState.layoutInfo.visibleItemsInfo.none{it.index==activeIndex})navState.animateScrollToItem(activeIndex)}
                 Surface(modifier=Modifier.fillMaxWidth().padding(horizontal=6.dp,vertical=4.dp),shape=palette.shape,color=palette.panel,tonalElevation=2.dp,shadowElevation=3.dp){
@@ -320,10 +325,7 @@ private fun VexoRootApp(vm: StudioViewModel) {
                     playback = playback,
                     onImportAudio = { audioPicker.launch(arrayOf("audio/*")) }
                 )
-                NavDestination.TEMPLATES -> TemplatesScreen(
-                    vm = vm,
-                    onImportPreset = { presetImportPicker.launch(arrayOf("application/json", "application/octet-stream", "*/*")) }
-                )
+                NavDestination.TEMPLATES -> LaunchedEffect(Unit){vm.navigateTo(NavDestination.TEMPLATES)}
                 NavDestination.EXPORT -> ExportScreen(
                     vm = vm,
                     uiState = uiState,

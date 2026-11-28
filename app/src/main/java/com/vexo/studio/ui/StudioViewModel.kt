@@ -188,6 +188,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun navigateTo(dest: NavDestination) {
+        if(dest==NavDestination.TEMPLATES){_uiState.value=_uiState.value.copy(navDestination=NavDestination.STUDIO,studioTab=StudioTab.PRESETS,isFullscreenPreview=false);return}
         _uiState.value = _uiState.value.copy(navDestination = dest,isFullscreenPreview = dest == NavDestination.STUDIO && _uiState.value.isFullscreenPreview)
     }
 
@@ -1016,6 +1017,25 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
 
     fun cancelVideoExport() {
         ExportService.cancelExport(app)
+    }
+
+    fun setWallpaper(uri:Uri){
+        runCatching{app.contentResolver.takePersistableUriPermission(uri,android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)}
+        viewModelScope.launch{
+            val valid=withContext(Dispatchers.IO){com.vexo.studio.data.UiWallpaper.decode(app,uri.toString())!=null}
+            if(valid)settingsRepo.update{it.copy(wallpaperUri=uri.toString())}
+            else _uiState.value=_uiState.value.copy(statusBanner="Wallpaper image could not be opened")
+        }
+    }
+
+    fun editLinkedAsset(projectId:String,layerId:String,role:String,oldUri:String,newUri:Uri?){
+        val p=_uiState.value.project
+        if(p.id!=projectId)return
+        val layer=p.compositions.flatMap{it.layers}.firstOrNull{it.common.id==layerId&&!it.common.locked}?:return
+        if(newUri!=null)runCatching{app.contentResolver.takePersistableUriPermission(newUri,android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)}
+        val video=newUri!=null&&app.contentResolver.getType(newUri)?.startsWith("video/")==true
+        val next=com.vexo.studio.data.ProjectAssets.editLayerAsset(layer,role,oldUri,newUri?.toString(),video)
+        if(next!=layer)updateLayer(layerId){next}
     }
 
     fun updateSettings(transform: (AppSettings) -> AppSettings) {

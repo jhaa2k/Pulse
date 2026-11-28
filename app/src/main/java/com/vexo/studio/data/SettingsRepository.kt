@@ -35,6 +35,10 @@ class SettingsRepository(private val context: Context) {
         val PREVIEWFPS = intPreferencesKey("previewFps")
         val PREVIEWSHARE = floatPreferencesKey("previewShare")
         val PORTRAITOVERLAY = booleanPreferencesKey("portraitOverlay")
+        val WALLPAPER = stringPreferencesKey("wallpaperUri")
+        val WALLBLUR = floatPreferencesKey("wallpaperBlurDp")
+        val WALLDIM = floatPreferencesKey("wallpaperDim")
+        val ALLACCENT = booleanPreferencesKey("customAccentAllThemes")
     }
 
     val settingsFlow: Flow<AppSettings> = context.vexoDataStore.data.map { prefs ->
@@ -63,7 +67,11 @@ class SettingsRepository(private val context: Context) {
                 uiTextScale = prefs[Keys.UITEXTSCALE] ?: 1f,
                 previewFps = prefs[Keys.PREVIEWFPS] ?: 30,
                 previewShare = prefs[Keys.PREVIEWSHARE] ?: 0.41f,
-                portraitOverlay = prefs[Keys.PORTRAITOVERLAY] ?: false
+                portraitOverlay = prefs[Keys.PORTRAITOVERLAY] ?: false,
+                wallpaperUri = prefs[Keys.WALLPAPER] ?: "",
+                wallpaperBlurDp = prefs[Keys.WALLBLUR] ?: 16f,
+                wallpaperDim = prefs[Keys.WALLDIM] ?: .72f,
+                customAccentAllThemes = prefs[Keys.ALLACCENT] ?: false
         )
     }
 
@@ -89,7 +97,11 @@ class SettingsRepository(private val context: Context) {
                 uiTextScale = prefs[Keys.UITEXTSCALE] ?: 1f,
                 previewFps = prefs[Keys.PREVIEWFPS] ?: 30,
                 previewShare = prefs[Keys.PREVIEWSHARE] ?: 0.41f,
-                portraitOverlay = prefs[Keys.PORTRAITOVERLAY] ?: false
+                portraitOverlay = prefs[Keys.PORTRAITOVERLAY] ?: false,
+                wallpaperUri = prefs[Keys.WALLPAPER] ?: "",
+                wallpaperBlurDp = prefs[Keys.WALLBLUR] ?: 16f,
+                wallpaperDim = prefs[Keys.WALLDIM] ?: .72f,
+                customAccentAllThemes = prefs[Keys.ALLACCENT] ?: false
             )
             val next = transform(current)
             prefs[Keys.THEME_PRESET] = next.themePreset.name
@@ -110,6 +122,10 @@ class SettingsRepository(private val context: Context) {
             prefs[Keys.PREVIEWFPS] = next.previewFps
             prefs[Keys.PREVIEWSHARE] = next.previewShare
             prefs[Keys.PORTRAITOVERLAY] = next.portraitOverlay
+            prefs[Keys.WALLPAPER] = next.wallpaperUri
+            prefs[Keys.WALLBLUR] = next.wallpaperBlurDp
+            prefs[Keys.WALLDIM] = next.wallpaperDim
+            prefs[Keys.ALLACCENT] = next.customAccentAllThemes
         }
     }
 }
