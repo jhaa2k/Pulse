@@ -18,7 +18,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.vexo.studio.data.UiWallpaper
+import com.vexo.studio.data.CreatorProfilePhoto
+import androidx.media3.common.util.UnstableApi
 import com.vexo.studio.model.AppSettings
 import com.vexo.studio.ui.StudioViewModel
 import com.vexo.studio.ui.theme.LocalVexoPalette
@@ -26,12 +27,13 @@ import com.vexo.studio.ui.components.StudioChipSelector
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+@UnstableApi
 @Composable
 internal fun UserProfilePanel(vm:StudioViewModel,settings:AppSettings){
     val p=LocalVexoPalette.current
     val context=LocalContext.current
     val photo by produceState<android.graphics.Bitmap?>(null,settings.profilePhotoUri){
-        value=withContext(Dispatchers.IO){UiWallpaper.decode(context,settings.profilePhotoUri)}
+        value=withContext(Dispatchers.IO){CreatorProfilePhoto.decode(context,settings.profilePhotoUri)}
     }
     val picker=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()){uri->uri?.let(vm::setProfilePhoto)}
     var editing by rememberSaveable{mutableStateOf(false)}
@@ -52,7 +54,7 @@ internal fun UserProfilePanel(vm:StudioViewModel,settings:AppSettings){
         Row(horizontalArrangement=Arrangement.spacedBy(4.dp)){
             TextButton(onClick={editing=true}){Text(if(settings.profileName.isBlank())"CREATE PROFILE" else "EDIT PROFILE")}
             TextButton(onClick={picker.launch(arrayOf("image/*"))}){Text("PHOTO")}
-            if(settings.profilePhotoUri.isNotBlank())TextButton(onClick={vm.updateSettings{it.copy(profilePhotoUri="")}}){Text("REMOVE")}
+            if(settings.profilePhotoUri.isNotBlank())TextButton(onClick=vm::removeProfilePhoto){Text("REMOVE")}
         }
         Text("Local profile only · no account or upload required",style=MaterialTheme.typography.labelSmall,color=p.textSecondary)
     }

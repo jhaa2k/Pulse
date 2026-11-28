@@ -337,7 +337,11 @@ fun ExportScreen(
     val palette = LocalVexoPalette.current
     val exp = uiState.project.exportSettings
     var filename by androidx.compose.runtime.saveable.rememberSaveable(uiState.project.id){mutableStateOf(exp.outputFileName.ifBlank{com.vexo.studio.export.ExportFileName.defaultName()})}
+    var autoName by androidx.compose.runtime.saveable.rememberSaveable(uiState.project.id){mutableStateOf(exp.outputFileName.isBlank())}
     val safeFilename=com.vexo.studio.export.ExportFileName.normalize(filename)
+    androidx.compose.runtime.LaunchedEffect(exportState.publishedUri){
+        if(exportState.publishedUri!=null&&autoName)filename=com.vexo.studio.export.ExportFileName.defaultName()
+    }
     val trackDurMs = playback.durationMs.coerceAtLeast(1000L)
     // Recompute only when encoder-relevant settings change, off the UI thread.
     val capabilityState=remember(exp.aspectRatio,exp.adaptiveVideoBitrate,exp.videoBitrateMbps,exp.useHevcIfSupported){
@@ -448,9 +452,9 @@ fun ExportScreen(
 
         }
         ExportPanel("SAVE LOCATION"){
-        OutlinedTextField(value=filename,onValueChange={filename=it.take(180)},enabled=!exportState.isRunning&&exp.customOutputUri==null,singleLine=true,label={Text("VIDEO FILE NAME")},modifier=Modifier.fillMaxWidth())
+        OutlinedTextField(value=filename,onValueChange={filename=it.take(180);autoName=false},enabled=!exportState.isRunning&&exp.customOutputUri==null,singleLine=true,label={Text("VIDEO FILE NAME")},modifier=Modifier.fillMaxWidth())
         Text(if(exp.customOutputUri==null)"SAVE AS: $safeFilename" else "The selected document name is used. Reset location to edit.",style=MaterialTheme.typography.labelSmall,color=palette.textSecondary)
-        TextButton(enabled=!exportState.isRunning&&exp.customOutputUri==null,onClick={filename=com.vexo.studio.export.ExportFileName.defaultName()}){Text("AUTO DATE / TIME NAME")}
+        TextButton(enabled=!exportState.isRunning&&exp.customOutputUri==null,onClick={filename=com.vexo.studio.export.ExportFileName.defaultName();autoName=true}){Text("AUTO DATE / TIME NAME")}
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Box(
                 modifier = Modifier

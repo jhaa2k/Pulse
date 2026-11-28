@@ -1021,6 +1021,8 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
                 trackMeta = playbackState.value.trackMeta
             )
         )
+        // A SAF document is a single-use output destination, not a reusable folder.
+        if(exp.customOutputUri!=null)updateExportSettings{it.copy(customOutputUri=null)}
     }
 
     fun cancelVideoExport() {
@@ -1030,9 +1032,20 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     fun setProfilePhoto(uri:Uri){
         runCatching{app.contentResolver.takePersistableUriPermission(uri,android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)}
         viewModelScope.launch {
-            val valid=withContext(Dispatchers.IO){com.vexo.studio.data.UiWallpaper.decode(app,uri.toString())!=null}
-            if(valid)settingsRepo.update{it.copy(profilePhotoUri=uri.toString())}
-            else _uiState.value=_uiState.value.copy(statusBanner="Profile image could not be opened")
+            val saved=withContext(Dispatchers.IO){com.vexo.studio.data.CreatorProfilePhoto.save(app,uri)}
+            if(saved!=null){
+                var previous=""
+                settingsRepo.update{previous=it.profilePhotoUri;it.copy(profilePhotoUri=saved)}
+                withContext(Dispatchers.IO){com.vexo.studio.data.CreatorProfilePhoto.remove(app,previous)}
+            } else _uiState.value=_uiState.value.copy(statusBanner="Profile image could not be opened")
+        }
+    }
+
+    fun removeProfilePhoto(){
+        viewModelScope.launch{
+            var previous=""
+            settingsRepo.update{previous=it.profilePhotoUri;it.copy(profilePhotoUri="")}
+            withContext(Dispatchers.IO){com.vexo.studio.data.CreatorProfilePhoto.remove(app,previous)}
         }
     }
 
