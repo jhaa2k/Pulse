@@ -2,7 +2,7 @@ name: Android release packaging
 
 on:
   push:
-    branches: ["engine/**", "fix/**"]
+    branches: [main, "engine/**", "fix/**"]
     paths:
       - "app/**"
       - "tools/studio-fonts.txt"
@@ -40,6 +40,7 @@ jobs:
           ALIAS_PRESENT: ${{ secrets.VEXO_RELEASE_KEY_ALIAS != '' }}
           KEY_PASSWORD_PRESENT: ${{ secrets.VEXO_RELEASE_KEY_PASSWORD != '' }}
           EVENT: ${{ github.event_name }}
+          BRANCH: ${{ github.ref_name }}
           REQUEST_SIGNED: ${{ inputs.signed }}
         shell: bash
         run: |
@@ -50,7 +51,7 @@ jobs:
           fi
           if [ "$KEYSTORE_PRESENT" = true ] && [ "$STORE_PASSWORD_PRESENT" = true ] && [ "$ALIAS_PRESENT" = true ] && [ "$KEY_PASSWORD_PRESENT" = true ]; then
             echo "signed=true" >> "$GITHUB_OUTPUT"
-          elif [ "$EVENT" = workflow_dispatch ] || [ "$KEYSTORE_PRESENT" = true ] || [ "$STORE_PASSWORD_PRESENT" = true ] || [ "$ALIAS_PRESENT" = true ] || [ "$KEY_PASSWORD_PRESENT" = true ]; then
+          elif [ "$BRANCH" = main ] || [ "$EVENT" = workflow_dispatch ] || [ "$KEYSTORE_PRESENT" = true ] || [ "$STORE_PASSWORD_PRESENT" = true ] || [ "$ALIAS_PRESENT" = true ] || [ "$KEY_PASSWORD_PRESENT" = true ]; then
             echo "::error::Production signing requires all four VEXO_RELEASE secrets. No substitute key will be generated."
             exit 1
           else

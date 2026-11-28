@@ -1,18 +1,27 @@
-name: Generate Key
+name: Signing configuration check
 on:
   workflow_dispatch:
+
+permissions:
+  contents: read
+
 jobs:
-  key:
+  check:
     runs-on: ubuntu-latest
     steps:
-      - name: Create Key
+      - name: Verify secret presence without revealing values
+        env:
+          KEYSTORE_PRESENT: ${{ secrets.VEXO_RELEASE_KEYSTORE_BASE64 != '' }}
+          STORE_PASSWORD_PRESENT: ${{ secrets.VEXO_RELEASE_STORE_PASSWORD != '' }}
+          ALIAS_PRESENT: ${{ secrets.VEXO_RELEASE_KEY_ALIAS != '' }}
+          KEY_PASSWORD_PRESENT: ${{ secrets.VEXO_RELEASE_KEY_PASSWORD != '' }}
+        shell: bash
         run: |
-          keytool -genkey -v -keystore release.jks -keyalg RSA -keysize 2048 -validity 10000 -alias vexo-key -storepass vexo1234 -keypass vexo1234 -dname "CN=Vexo, OU=App, O=Dev, L=City, S=State, C=IN"
-          base64 -w 0 release.jks > key_base64.txt
-      - name: Download Key
-        uses: actions/upload-artifact@v4
-        with:
-          name: vexo-signing-key
-          path: |
-            release.jks
-            key_base64.txt
+          set -euo pipefail
+          missing=0
+          if [ "$KEYSTORE_PRESENT" != true ]; then echo "::error::Missing VEXO_RELEASE_KEYSTORE_BASE64"; missing=1; fi
+          if [ "$STORE_PASSWORD_PRESENT" != true ]; then echo "::error::Missing VEXO_RELEASE_STORE_PASSWORD"; missing=1; fi
+          if [ "$ALIAS_PRESENT" != true ]; then echo "::error::Missing VEXO_RELEASE_KEY_ALIAS"; missing=1; fi
+          if [ "$KEY_PASSWORD_PRESENT" != true ]; then echo "::error::Missing VEXO_RELEASE_KEY_PASSWORD"; missing=1; fi
+          if [ "$missing" -ne 0 ]; then exit 1; fi
+          echo "All signing secrets are present. Run Android release packaging on main with signed enabled."
