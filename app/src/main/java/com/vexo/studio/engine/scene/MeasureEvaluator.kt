@@ -1,41 +1,20 @@
 package com.vexo.studio.engine.scene
 
 import com.vexo.studio.engine.audio.AudioProviderSnapshot
-import com.vexo.studio.model.InterpolationType
 import com.vexo.studio.model.KeyframeTrack
 import com.vexo.studio.model.MeasureConfig
 import com.vexo.studio.model.MeasureWhat
-import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
 
-data class EvaluatedPair(val x: Float, val y: Float)
+data class EvaluatedPair(val x: Float, val y: Float) {
+    fun mean(): Float = ((x.toDouble() + y.toDouble()) * 0.5).toFloat().takeIf { it.isFinite() } ?: 0f
+}
 
 object KeyframeEvaluator {
-    fun evaluate(track: KeyframeTrack?, timeMs: Long, defaultValue: Float): Float {
-        if (track == null || track.keyframes.isEmpty()) return defaultValue
-        val sorted = track.keyframes.sortedBy { it.timeMs }
-        if (timeMs <= sorted.first().timeMs) return sorted.first().value
-        if (timeMs >= sorted.last().timeMs) return sorted.last().value
-
-        for (i in 0 until sorted.lastIndex) {
-            val a = sorted[i]
-            val b = sorted[i + 1]
-            if (timeMs in a.timeMs..b.timeMs) {
-                val span = (b.timeMs - a.timeMs).coerceAtLeast(1L)
-                val t = ((timeMs - a.timeMs).toFloat() / span.toFloat()).coerceIn(0f, 1f)
-                return when (a.interpolation) {
-                    InterpolationType.HOLD -> a.value
-                    InterpolationType.LINEAR -> a.value + (b.value - a.value) * t
-                    InterpolationType.EASE_IN_OUT -> {
-                        val eased = t * t * (3f - 2f * t)
-                        a.value + (b.value - a.value) * eased
-                    }
-                }
-            }
-        }
-        return sorted.last().value
-    }
+    /** Callers without a compiled index may supply unordered imported tracks. */
+    fun evaluate(track: KeyframeTrack?, timeMs: Long, defaultValue: Float): Float =
+        PreparedKeyframeTrack.create(track).evaluate(timeMs,defaultValue)
 }
 
 /**
@@ -54,45 +33,50 @@ object MeasureEvaluator {
     ): EvaluatedPair {
         if (measure.measureWhat == MeasureWhat.NOTHING) return EvaluatedPair(0f, 0f)
 
-        val beat = snapshot?.beat ?: 0f
-        val beatPulse = snapshot?.beatPulse ?: 0f
-        val bass = snapshot?.bass ?: 0f
-        val mid = snapshot?.mid ?: 0f
-        val treble = snapshot?.treble ?: 0f
-        val rms = snapshot?.rms ?: 0f
-        val peak = snapshot?.peak ?: 0f
-
-        val shakePhase = totalTimeSec * 17.3f + measure.seed * 0.137f
-        val shakeX = sin(shakePhase) * 0.6f + cos(shakePhase * 1.73f) * 0.4f
-        val shakeY = cos(shakePhase * 1.19f) * 0.6f + sin(shakePhase * 2.11f) * 0.4f
-
+        val threshold = measure.triggerThreshold.takeIf{it.isFinite()}?.coerceIn(0f,0.999f)?:0f
+        fun gate(value: Float): Float = if (!value.isFinite()) 0f
+            else if (threshold == 0f) value else ((value - threshold) / (1f - threshold)).coerceIn(0f, 1f)
+        if(measure.legacyParameterSemantics){
+            LegacyMeasureMath.evaluate(measure,totalTimeSec,gate(snapshot?.beat?:0f))?.let{return it}
+        }
+        // Evaluate only the signal selected by the measure. Ordinary beat, band,
+        // and timeline controls need no trigonometry.
+        fun same(value: Float) = value to value
+        fun shake(gain: Float, rotation: Boolean = false): Pair<Float, Float> {
+            if (gain == 0f) return same(0f)
+            val phase = totalTimeSec * 17.3f + measure.seed * 0.137f
+            val x = sin(phase) * 0.6f + cos(phase * 1.73f) * 0.4f
+            if (rotation) return same(x * gain)
+            val y = cos(phase * 1.19f) * 0.6f + sin(phase * 2.11f) * 0.4f
+            return (x * gain) to (y * gain)
+        }
         val (nx, ny) = when (measure.measureWhat) {
-            MeasureWhat.NOTHING -> 0f to 0f
-            MeasureWhat.BEAT -> beat to beat
-            MeasureWhat.TOTAL_TIME -> totalTimeSec to totalTimeSec
-            MeasureWhat.TOTAL_TIME_BACKWARD -> -totalTimeSec to -totalTimeSec
-            MeasureWhat.TOTAL_TIME_WHEN_PLAYING -> if (isPlaying) playingTimeSec to playingTimeSec else 0f to 0f
-            MeasureWhat.TOTAL_TIME_AND_BEAT -> (totalTimeSec + beat * 0.5f) to (totalTimeSec + beat * 0.5f)
-            MeasureWhat.TRACK_POSITION -> trackPositionNorm to trackPositionNorm
-            MeasureWhat.BEAT_RANDOM_SHAKE -> (shakeX * beat) to (shakeY * beat)
-            MeasureWhat.BEAT_CAM_SHAKE_MORE -> (shakeX * (0.25f + beat * 1.4f)) to (shakeY * (0.25f + beat * 1.4f))
-            MeasureWhat.BEAT_CAM_SHAKE_LESS -> (shakeX * beat * 0.5f) to (shakeY * beat * 0.5f)
-            MeasureWhat.BEAT_CAM_SHAKE_ROT_MORE -> (shakeX * beat * 12f) to (shakeX * beat * 12f)
-            MeasureWhat.BEAT_CAM_SHAKE_ROT_LESS -> (shakeX * beat * 4f) to (shakeX * beat * 4f)
-            MeasureWhat.CONSTANT_SHAKE -> shakeX to shakeY
-            MeasureWhat.CONSTANT_SHAKE_MORE -> (shakeX * 1.6f) to (shakeY * 1.6f)
-            MeasureWhat.CONSTANT_SHAKE_ROT_MORE -> (shakeX * 10f) to (shakeX * 10f)
-            MeasureWhat.CONSTANT_SHAKE_ROT_LESS -> (shakeX * 3f) to (shakeX * 3f)
-            MeasureWhat.BEAT_TRIGGER_ANIM -> beatPulse to beatPulse
-            MeasureWhat.BASS -> bass to bass
-            MeasureWhat.MID -> mid to mid
-            MeasureWhat.TREBLE -> treble to treble
-            MeasureWhat.RMS -> rms to rms
-            MeasureWhat.PEAK -> peak to peak
-            MeasureWhat.KEYFRAME -> (keyframeValue ?: 0f) to (keyframeValue ?: 0f)
+            MeasureWhat.NOTHING -> same(0f)
+            MeasureWhat.BEAT -> same(gate(snapshot?.beat ?: 0f))
+            MeasureWhat.TOTAL_TIME -> same(totalTimeSec)
+            MeasureWhat.TOTAL_TIME_BACKWARD -> same(-totalTimeSec)
+            MeasureWhat.TOTAL_TIME_WHEN_PLAYING -> same(playingTimeSec)
+            MeasureWhat.TOTAL_TIME_AND_BEAT -> same(totalTimeSec + gate(snapshot?.beat ?: 0f) * 0.5f)
+            MeasureWhat.TRACK_POSITION -> same(trackPositionNorm)
+            MeasureWhat.BEAT_RANDOM_SHAKE -> shake(gate(snapshot?.beat ?: 0f))
+            MeasureWhat.BEAT_CAM_SHAKE_MORE -> shake(gate(snapshot?.beat ?: 0f) * 1.65f)
+            MeasureWhat.BEAT_CAM_SHAKE_LESS -> shake(gate(snapshot?.beat ?: 0f) * 0.5f)
+            MeasureWhat.BEAT_CAM_SHAKE_ROT_MORE -> shake(gate(snapshot?.beat ?: 0f) * 12f, true)
+            MeasureWhat.BEAT_CAM_SHAKE_ROT_LESS -> shake(gate(snapshot?.beat ?: 0f) * 4f, true)
+            MeasureWhat.CONSTANT_SHAKE -> shake(1f)
+            MeasureWhat.CONSTANT_SHAKE_MORE -> shake(1.6f)
+            MeasureWhat.CONSTANT_SHAKE_ROT_MORE -> shake(10f, true)
+            MeasureWhat.CONSTANT_SHAKE_ROT_LESS -> shake(3f, true)
+            MeasureWhat.BEAT_TRIGGER_ANIM -> same(gate(snapshot?.beatPulse ?: 0f))
+            MeasureWhat.BASS -> same(gate(snapshot?.bass ?: 0f))
+            MeasureWhat.MID -> same(gate(snapshot?.mid ?: 0f))
+            MeasureWhat.TREBLE -> same(gate(snapshot?.treble ?: 0f))
+            MeasureWhat.RMS -> same(gate(snapshot?.rms ?: 0f))
+            MeasureWhat.PEAK -> same(gate(snapshot?.peak ?: 0f))
+            MeasureWhat.KEYFRAME -> same(keyframeValue ?: 0f)
         }
 
-        return EvaluatedPair(nx * measure.amountA, ny * measure.amountB)
+        return EvaluatedPair((nx*measure.amountA).takeIf{it.isFinite()}?:0f,(ny*measure.amountB).takeIf{it.isFinite()}?:0f)
     }
 
     fun evaluateScalar(
@@ -113,11 +97,21 @@ object MeasureEvaluator {
             isPlaying = isPlaying,
             keyframeValue = keyframeValue
         )
-        return 0.5f * (pair.x + pair.y)
+        return scalarValue(measure,pair)
+    }
+
+    fun scalarValue(measure:MeasureConfig,pair:EvaluatedPair):Float =
+        if(measure.legacyParameterSemantics)pair.x.takeIf{it.isFinite()}?:0f else pair.mean()
+
+    fun colorProgress(measure:MeasureConfig,value:Float):Float {
+        val v=value.takeIf{it.isFinite()}?:0f
+        return if(measure.legacyParameterSemantics&&measure.measureWhat in LegacyMeasureMath.cyclicColorSources)
+            (v.toDouble()-kotlin.math.floor(v.toDouble())).toFloat()
+        else v.coerceIn(0f,1f)
     }
 
     fun blendArgb(colorFrom: Int, colorTo: Int, t: Float): Int {
-        val c = t.coerceIn(0f, 1f)
+        val c = t.takeIf{it.isFinite()}?.coerceIn(0f,1f)?:0f
         val a0 = (colorFrom ushr 24) and 0xFF
         val r0 = (colorFrom ushr 16) and 0xFF
         val g0 = (colorFrom ushr 8) and 0xFF

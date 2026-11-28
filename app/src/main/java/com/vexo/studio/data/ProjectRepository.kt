@@ -31,107 +31,131 @@ data class ProjectSummary(
 class ProjectRepository(context: Context) {
     private val projectsDir = File(context.filesDir, "vexo_projects").apply { mkdirs() }
     private val autosaveFile = File(projectsDir, "_autosave.json")
+    private val activeFile=File(projectsDir,"_active.txt")
+    private fun validId(id:String)=runCatching{UUID.fromString(id).toString()==id}.getOrDefault(false)
+    private fun projectFile(id:String):File { require(validId(id)){"Invalid project ID"};return File(projectsDir,"$id.json") }
+    private fun backup(file:File)=File(projectsDir,file.name+".previous")
     private val json = Json {
         ignoreUnknownKeys = true
         prettyPrint = true
     }
 
+    @Synchronized
     fun listProjects(): List<ProjectSummary> {
-        val files = projectsDir.listFiles { f ->
-            f.isFile && f.extension == "json" && !f.name.startsWith("_")
-        } ?: emptyArray()
-        return files.mapNotNull { file ->
-            runCatching {
-                val p = loadFromFile(file)
-                ProjectSummary(
-                    id = p.id,
-                    name = p.name,
-                    updatedAtMs = p.updatedAtMs,
-                    aspectRatio = p.canvas.aspectRatio,
-                    layerCount = p.compositions.sumOf { it.layers.size }
-                )
-            }.getOrNull()
-        }.sortedByDescending { it.updatedAtMs }
+        val ids=projectsDir.listFiles().orEmpty().mapNotNull{f->
+            val id=f.name.removeSuffix(".previous").removeSuffix(".bak").removeSuffix(".json")
+            id.takeIf{validId(it)}
+        }.distinct()
+        return ids.mapNotNull{id->
+            loadProject(id)?.let{p->ProjectSummary(p.id,p.name,p.updatedAtMs,p.canvas.aspectRatio,p.compositions.sumOf{it.layers.size})}
+        }.sortedByDescending{it.updatedAtMs}
     }
 
-    fun loadProject(id: String): VexoProject? {
-        val file = File(projectsDir, "$id.json")
-        if (!file.exists()) return null
-        return runCatching { loadFromFile(file) }.getOrNull()
+    @Synchronized
+    fun loadProject(id:String):VexoProject? {
+        if(!validId(id))return null
+        val file=projectFile(id)
+        return listOf(file,backup(file)).firstNotNullOfOrNull{candidate->readValid(candidate)?.takeIf{it.id==id}}
     }
 
-    fun recoverAutosaveOrDefault(): VexoProject {
-        if (autosaveFile.exists()) {
-            val recovered = runCatching { loadFromFile(autosaveFile) }.getOrNull()
-            if (recovered != null) return recovered
+    @Synchronized
+    fun recoverAutosaveOrDefault():VexoProject {
+        val active=runCatching{android.util.AtomicFile(activeFile).readFully().toString(Charsets.UTF_8).trim()}.getOrNull()
+        val activeDraft=readValid(autosaveFile)?.takeIf{it.id==active}
+        if(activeDraft!=null)return activeDraft
+        val saved=active?.let(::loadProject)
+        if(saved!=null){
+            val draft=readValid(autosaveFile)?.takeIf{it.id==saved.id}
+            return if(draft!=null&&draft.updatedAtMs>saved.updatedAtMs)draft else saved
         }
-        val existing = listProjects().firstOrNull()?.let { loadProject(it.id) }
-        if (existing != null) return existing
-        val starter = VexoTemplates.monochromeStudio()
-        saveProject(starter)
-        return starter
+        // Old installations have no active marker. Only restore a draft for a surviving project.
+        val recovered=readValid(autosaveFile)?.takeIf{validId(it.id)&&loadProject(it.id)!=null}
+        if(recovered!=null)return recovered
+        val existing=listProjects().firstOrNull()?.let{loadProject(it.id)}
+        if(existing!=null)return existing
+        return VexoTemplates.monochromeStudio().also{autosave(it)}
     }
 
-    fun saveProject(project: VexoProject) {
-        val updated = project.copy(updatedAtMs = System.currentTimeMillis())
-        val payload = encodeEnvelope(updated)
-        atomicWrite(File(projectsDir, "${updated.id}.json"), payload)
-        atomicWrite(autosaveFile, payload)
+    @Synchronized
+    fun saveProject(project:VexoProject,markActive:Boolean=true){
+        val updated=project.copy(updatedAtMs=System.currentTimeMillis())
+        val file=projectFile(updated.id)
+        val payload=encodeEnvelope(updated)
+        require(payload.toByteArray(Charsets.UTF_8).size<=NativeVexCodec.MAX_JSON_BYTES){"Project exceeds save limit"}
+        // Retain the last known-good version before replacing the primary.
+        readValid(file)?.takeIf{it.id==updated.id}?.let{previous->atomicWrite(backup(file),encodeEnvelope(previous))}
+        atomicWrite(file,payload)
+        if(markActive){
+            atomicWrite(activeFile,updated.id)
+            atomicWrite(autosaveFile,payload)
+        }
     }
 
-    fun autosave(project: VexoProject) {
-        val updated = project.copy(updatedAtMs = System.currentTimeMillis())
-        atomicWrite(autosaveFile, encodeEnvelope(updated))
+    @Synchronized
+    fun markActive(id:String){
+        if(validId(id))atomicWrite(activeFile,id)
     }
 
-    fun duplicateProject(id: String): VexoProject? {
-        val src = loadProject(id) ?: return null
-        val copy = src.copy(
-            id = UUID.randomUUID().toString(),
-            name = "${src.name} (Copy)",
-            updatedAtMs = System.currentTimeMillis()
-        )
-        saveProject(copy)
+    @Synchronized
+    fun autosave(project:VexoProject){
+        val data=encodeEnvelope(project.copy(updatedAtMs=System.currentTimeMillis()))
+        require(data.toByteArray(Charsets.UTF_8).size<=NativeVexCodec.MAX_JSON_BYTES){"Draft exceeds save limit"}
+        atomicWrite(autosaveFile,data)
+        markActive(project.id)
+    }
+
+    @Synchronized
+    fun duplicateProject(id:String):VexoProject?{
+        val src=loadProject(id)?:return null
+        val copy=src.copy(id=UUID.randomUUID().toString(),name=src.name+" (Copy)",updatedAtMs=System.currentTimeMillis())
+        saveProject(copy,false)
         return copy
     }
 
-    fun deleteProject(id: String) {
-        File(projectsDir, "$id.json").delete()
+    @Synchronized
+    fun restorePrevious(id:String):VexoProject?{
+        if(!validId(id))return null
+        val previous=readValid(backup(projectFile(id)))?.takeIf{it.id==id}?:return null
+        // Create a separate recovered project; current version is never overwritten.
+        val recovered=previous.copy(id=UUID.randomUUID().toString(),name=previous.name+" (Recovered)",updatedAtMs=System.currentTimeMillis())
+        saveProject(recovered,false)
+        return recovered
     }
 
-    private fun atomicWrite(target: File, content: String) {
-        val tmp = File(projectsDir, "${target.name}.tmp")
-        tmp.writeText(content, Charsets.UTF_8)
-        if (!tmp.renameTo(target)) {
-            target.writeText(content, Charsets.UTF_8)
-            tmp.delete()
+    @Synchronized
+    fun deleteProject(id:String){
+        if(!validId(id))return
+        val f=projectFile(id)
+        android.util.AtomicFile(f).delete()
+        android.util.AtomicFile(backup(f)).delete()
+        if(readValid(autosaveFile)?.id==id)android.util.AtomicFile(autosaveFile).delete()
+        val active=runCatching{android.util.AtomicFile(activeFile).readFully().toString(Charsets.UTF_8)}.getOrNull()
+        if(active==id)android.util.AtomicFile(activeFile).delete()
+    }
+
+    private fun readValid(file:File):VexoProject?=runCatching{
+        val data=android.util.AtomicFile(file).openRead().use{input->
+            require(file.length()<=NativeVexCodec.MAX_JSON_BYTES){"Project too large"}
+            input.readBytes()
         }
+        require(data.size<=NativeVexCodec.MAX_JSON_BYTES)
+        loadText(data.toString(Charsets.UTF_8))
+    }.getOrNull()
+
+    private fun atomicWrite(target:File,content:String){
+        val atomic=android.util.AtomicFile(target)
+        val stream=atomic.startWrite()
+        try{stream.write(content.toByteArray(Charsets.UTF_8));atomic.finishWrite(stream)}
+        catch(e:Exception){atomic.failWrite(stream);throw e}
     }
 
-    private fun encodeEnvelope(project: VexoProject): String {
-        val aveePayload = AveeJsonCodec.exportProjectAsAveeJson(project)
-        val env = buildJsonObject {
-            put("id", project.id)
-            put("name", project.name)
-            put("schemaVersion", project.schemaVersion)
-            put("updatedAtMs", project.updatedAtMs)
-            put("audioUri", project.audioUri ?: "")
-            put("aspectRatio", project.canvas.aspectRatio.name)
-            put("backgroundColorArgb", project.canvas.backgroundColorArgb)
-            put("showSafeAreaGuides", project.canvas.showSafeAreaGuides)
-            put("exportResolution", project.exportSettings.resolution.name)
-            put("exportFps", project.exportSettings.fps)
-            put("exportBitrateMbps", project.exportSettings.videoBitrateMbps)
-            put("exportTrimStartMs", project.exportSettings.trimStartMs)
-            put("exportTrimEndMs", project.exportSettings.trimEndMs)
-            put("sceneJson", aveePayload)
-        }
-        return json.encodeToString(JsonObject.serializer(), env)
-    }
+    private fun encodeEnvelope(project: VexoProject): String = NativeVexCodec.encode(project)
 
-    private fun loadFromFile(file: File): VexoProject {
-        val text = file.readText(Charsets.UTF_8)
+    private fun loadText(text:String):VexoProject {
+        if (NativeVexCodec.isNative(text)) return NativeVexCodec.decode(text)
         val env = json.parseToJsonElement(text) as JsonObject
+        require(env["format"]==null){"Unrecognized project envelope"}
+        require(env["sceneJson"]!=null || env["compositions"]!=null || env["elements"]!=null){"Invalid legacy project"}
         val sceneJson = (env["sceneJson"] as? JsonPrimitive)?.content ?: text
         val base = AveeJsonCodec.importFromText(
             sceneJson,

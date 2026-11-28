@@ -1,0 +1,3 @@
+# Phase 57 — particle emission and projected trails
+
+Integrate fractional emission credits at the current rate so earlier elapsed time is not reinterpreted when audio changes the rate. Trail direction follows actual projected displacement, including depth and audio-driven speed changes, and trail stretch scales with short-axis-normalized screen velocity. Zero motion retains the original round sprite. Reuse the particle UV array. Four CPU regression tests cover rate changes, timestep subdivision, trail sizing, and speed reversal. Existing particle force fields, emitters, scale controls and blending remain intact. This intentionally changes trail appearance and emission timing; device rendering and exact Avee parity are not verified. Main remains unchanged.

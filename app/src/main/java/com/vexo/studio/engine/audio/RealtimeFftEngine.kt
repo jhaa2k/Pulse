@@ -1,6 +1,7 @@
 package com.vexo.studio.engine.audio
 
 import com.vexo.studio.model.AudioProviderConfig
+import com.vexo.studio.model.ChannelMode
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -30,6 +31,8 @@ class RealtimeFftEngine(
     private val scope = CoroutineScope(SupervisorJob() + dispatcher)
     private val engines = ConcurrentHashMap<Int, AudioProviderEngine>()
     private val reusableSampleWindow = FloatArray(8192)
+    private val leftWindow=FloatArray(8192)
+    private val rightWindow=FloatArray(8192)
 
     private val _snapshotsFlow = MutableStateFlow<Map<Int, AudioProviderSnapshot>>(emptyMap())
     val snapshotsFlow: StateFlow<Map<Int, AudioProviderSnapshot>> = _snapshotsFlow.asStateFlow()
@@ -80,24 +83,26 @@ class RealtimeFftEngine(
             AudioProviderEngine.sanitizeFftSize(it.fftSize)
         } ?: 1024
         val windowLen = maxFftSize.coerceIn(256, reusableSampleWindow.size)
-        val hasFreshSamples = ringBuffer.readLatestWindow(
-            dest = reusableSampleWindow,
-            expectedGeneration = gen,
-            sampleCount = windowLen
-        )
+        val sampleEnd=ringBuffer.readStereoWindowEnd(
+            reusableSampleWindow.takeIf{providers.any{it.channelMode==ChannelMode.MIX}},
+            leftWindow.takeIf{providers.any{it.channelMode==ChannelMode.LEFT}},
+            rightWindow.takeIf{providers.any{it.channelMode==ChannelMode.RIGHT}},
+            gen,windowLen)
+        val hasFreshSamples=sampleEnd>=0L
 
         val out = HashMap<Int, AudioProviderSnapshot>(providers.size)
         for (prov in providers) {
             val engine = engines.getOrPut(prov.index) { AudioProviderEngine(prov) }
             engine.updateConfig(prov)
             out[prov.index] = engine.process(
-                samples = if (hasFreshSamples) reusableSampleWindow else null,
+                samples = if (hasFreshSamples) when(prov.channelMode){ChannelMode.LEFT->leftWindow;ChannelMode.RIGHT->rightWindow;ChannelMode.MIX->reusableSampleWindow} else null,
                 sampleRate = ringBuffer.sampleRate,
                 deltaMs = deltaMs,
                 streamGeneration = gen,
                 isPlaying = isPlaying,
                 freezeOnPause = freezeOnPause,
-                sampleLength = if (hasFreshSamples) windowLen else 0
+                sampleLength = if (hasFreshSamples) windowLen else 0,
+                sampleEndFrame=sampleEnd
             )
         }
 

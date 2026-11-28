@@ -6,7 +6,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 
 /**
- * Lock-free bounded single-producer single-consumer (SPSC) PCM ring buffer.
+ * Bounded PCM ring buffer with coherent stereo windows and synchronized format resets.
  * Supports pass-through PCM capture without blocking playback and a race-safe
  * stream generation protocol for seek, pause, track switches, and format resets.
  */
@@ -14,6 +14,9 @@ class PcmRingBuffer(capacitySamples: Int = 65536) {
     val capacity: Int = nextPowerOfTwo(capacitySamples.coerceAtLeast(1024))
     private val mask: Int = capacity - 1
     private val ring = FloatArray(capacity)
+    private val mixedRing = FloatArray(capacity)
+    private val leftRing = FloatArray(capacity)
+    private val rightRing = FloatArray(capacity)
 
     private val writeIndex = AtomicLong(0L)
     private val generation = AtomicInteger(1)
@@ -41,6 +44,7 @@ class PcmRingBuffer(capacitySamples: Int = 65536) {
 
     fun totalDroppedSamples(): Long = droppedSamples.get()
 
+    @Synchronized
     fun resetGeneration(newSampleRate: Int = sampleRate, newChannelCount: Int = channelCount): Int {
         val nextGen = generation.incrementAndGet()
         sampleRate = newSampleRate.coerceIn(8000, 192000)
@@ -48,7 +52,7 @@ class PcmRingBuffer(capacitySamples: Int = 65536) {
         writeIndex.set(0L)
         lastReadIndex = 0L
         latestMediaTimestampUs = 0L
-        ring.fill(0f)
+        ring.fill(0f); mixedRing.fill(0f); leftRing.fill(0f); rightRing.fill(0f)
         return nextGen
     }
 
@@ -57,6 +61,7 @@ class PcmRingBuffer(capacitySamples: Int = 65536) {
      * Supports 16-bit PCM and 32-bit float PCM interleaved frames, preserving original bytes
      * while downmixing safely and sanitizing non-finite values.
      */
+    @Synchronized
     fun writePcm16(
         buffer: ByteBuffer,
         channels: Int,
@@ -79,28 +84,19 @@ class PcmRingBuffer(capacitySamples: Int = 65536) {
         }
 
         for (f in 0 until frames) {
-            val sample = when (channelSelect) {
-                1 -> dup.getShort(dup.position() + (f * channels) * 2) / 32768f
-                2 -> {
-                    val ch = if (channels > 1) 1 else 0
-                    dup.getShort(dup.position() + (f * channels + ch) * 2) / 32768f
-                }
-                else -> {
-                    var sum = 0f
-                    for (c in 0 until channels) {
-                        sum += dup.getShort(dup.position() + (f * channels + c) * 2) / 32768f
-                    }
-                    sum / channels
-                }
-            }
-            val safe = if (sample.isFinite()) sample.coerceIn(-1f, 1f) else 0f
-            ring[(pos and mask.toLong()).toInt()] = safe
+            val base=dup.position()+f*channels*2
+            val left=dup.getShort(base)/32768f
+            val right=dup.getShort(base+(if(channels>1)2 else 0))/32768f
+            var sum=0f
+            for(c in 0 until channels)sum+=dup.getShort(base+c*2)/32768f
+            store(pos,left,right,sum/channels,channelSelect)
             pos++
         }
         latestMediaTimestampUs = mediaTimestampUs
         writeIndex.lazySet(pos)
     }
 
+    @Synchronized
     fun writePcmFloat(
         buffer: ByteBuffer,
         channels: Int,
@@ -124,35 +120,26 @@ class PcmRingBuffer(capacitySamples: Int = 65536) {
 
         val basePos = dup.position()
         for (f in 0 until frames) {
-            val sample = when (channelSelect) {
-                1 -> dup.getFloat(basePos + (f * channels) * 4)
-                2 -> {
-                    val ch = if (channels > 1) 1 else 0
-                    dup.getFloat(basePos + (f * channels + ch) * 4)
-                }
-                else -> {
-                    var sum = 0f
-                    for (c in 0 until channels) {
-                        sum += dup.getFloat(basePos + (f * channels + c) * 4)
-                    }
-                    sum / channels
-                }
-            }
-            val safe = if (sample.isFinite()) sample.coerceIn(-1f, 1f) else 0f
-            ring[(pos and mask.toLong()).toInt()] = safe
+            val base=basePos+f*channels*4
+            val left=clean(dup.getFloat(base))
+            val right=clean(dup.getFloat(base+(if(channels>1)4 else 0)))
+            var sum=0f
+            for(c in 0 until channels)sum+=clean(dup.getFloat(base+c*4))
+            store(pos,left,right,sum/channels,channelSelect)
             pos++
         }
         latestMediaTimestampUs = mediaTimestampUs
         writeIndex.lazySet(pos)
     }
 
+    @Synchronized
     fun writeFloatSamples(
         samples: FloatArray,
         sampleRateHz: Int = sampleRate,
         channels: Int = 1,
         mediaTimestampUs: Long = 0L
     ) {
-        if (samples.isEmpty()) return
+        if (samples.isEmpty() || channels<=0) return
         if (sampleRateHz != sampleRate || channels != channelCount) {
             resetGeneration(sampleRateHz, channels)
         }
@@ -164,7 +151,7 @@ class PcmRingBuffer(capacitySamples: Int = 65536) {
                 val s = samples[f * channels + c]
                 sum += if (s.isFinite()) s else 0f
             }
-            ring[(pos and mask.toLong()).toInt()] = (sum / channels).coerceIn(-1f, 1f)
+            store(pos, samples[f*channels],samples[f*channels+if(channels>1)1 else 0],sum/channels,0)
             pos++
         }
         latestMediaTimestampUs = mediaTimestampUs
@@ -175,6 +162,7 @@ class PcmRingBuffer(capacitySamples: Int = 65536) {
      * Reads the latest [sampleCount] mono samples into [dest] if generation matches and enough samples exist.
      * Detects ring wraparound drops cleanly without blocking.
      */
+    @Synchronized
     fun readLatestWindow(
         dest: FloatArray,
         expectedGeneration: Int,
@@ -203,6 +191,36 @@ class PcmRingBuffer(capacitySamples: Int = 65536) {
         }
         lastReadIndex = currentWrite
         return generation.get() == expectedGeneration
+    }
+
+    private fun clean(value:Float)=if(value.isFinite())value.coerceIn(-1f,1f) else 0f
+
+    private fun store(pos:Long,left:Float,right:Float,mix:Float,select:Int){
+        val i=(pos and mask.toLong()).toInt()
+        leftRing[i]=clean(left);rightRing[i]=clean(right);mixedRing[i]=clean(mix)
+        ring[i]=when(select){1->leftRing[i];2->rightRing[i];else->mixedRing[i]}
+    }
+
+    /** All requested channels share the same ending sample and generation. */
+    @Synchronized
+    fun readStereoWindows(mix:FloatArray?,left:FloatArray?,right:FloatArray?,expectedGeneration:Int,count:Int):Boolean=readStereoWindowEnd(mix,left,right,expectedGeneration,count)>=0L
+
+    @Synchronized
+    fun readStereoWindowEnd(mix:FloatArray?,left:FloatArray?,right:FloatArray?,expectedGeneration:Int,count:Int):Long{
+        if(generation.get()!=expectedGeneration)return -1L
+        val end=writeIndex.get()
+        if(end<=0L)return -1L
+        val take=minOf(end,capacity.toLong(),count.toLong()).toInt().coerceAtLeast(0)
+        fun copy(src:FloatArray,dst:FloatArray?){
+            if(dst==null)return
+            require(count in 0..dst.size)
+            val pad=count-take
+            dst.fill(0f,0,pad)
+            for(i in 0 until take)dst[pad+i]=src[((end-take+i) and mask.toLong()).toInt()]
+        }
+        copy(mixedRing,mix);copy(leftRing,left);copy(rightRing,right)
+        lastReadIndex=end
+        return end
     }
 
     private fun nextPowerOfTwo(n: Int): Int {

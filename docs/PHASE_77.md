@@ -1,0 +1,3 @@
+# Phase 77 — legacy shape-dependent spectrum width
+
+Phase 76 CI passed (46097082455). Import and re-encode independent width flags from Segment1/Segment2 (primary root fallback); preserve null as old native behavior. Add AUTO/PATH/FIXED selectors. Explicit PATH uses local path slot spacing, including polygon edge derivative; FIXED uses reference short canvas dimension / sample count. Connected lines retain explicit fixed-height thickness precedence. Creative mesh and gallery honor the flags; gallery also respects secondary direction. Three JVM tests. Width interpretation is approximate, not confirmed Avee source behavior; polygon normals and pixel comparison still pending. No original Visualizer 36 archive. Main unchanged.

@@ -1,0 +1,3 @@
+# Phase 54 — selective audio measure evaluation
+
+Evaluate only the requested audio signal, avoid shake trigonometry for non-shake measures and zero-gain shake, and skip Y-axis calculations for rotation-only shake. Preserve the existing threshold, motion curves, per-axis amounts and preview/export shared evaluation; floating-point multiplication order can cause tiny rounding differences. Use overflow-safe scalar averaging in the evaluator and renderer. Four regression tests cover timeline/keyframe, missing audio, reference shake and numerical safety. No device FPS or exact Avee parity claim. Main remains unchanged.

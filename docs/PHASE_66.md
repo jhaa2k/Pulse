@@ -1,0 +1,3 @@
+# Phase 66 — RGB channel coverage and effect persistence
+
+Phase 65 CI passed (run 46019432971), including repaired Phase 64 fixture. RGB split now preserves independent imported effect/content blend modes and each channel's alpha, with premultiplied coverage math. Existing native projects with null effectBlendMode retain their previous blend routing. Export records clean-content flags, rotation/zoom motion options, and native mirror repeat count. Motion history is bypassed when blur gain is zero, with a weighted source fallback if the optional shader is unavailable. Three regression tests added, including shader source contract (not GPU execution). No changes to fundamental mirror folding geometry or exact Avee motion timing; no new device validation. Main unchanged.

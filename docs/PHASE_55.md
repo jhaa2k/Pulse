@@ -1,0 +1,3 @@
+# Phase 55 — progressive blur reconstruction
+
+Balanced/high Gaussian blur progressively reconstructs large-radius downsampled images using a normalized premultiplied RGBA tent filter. Reuses existing reduction FBOs in reverse size order, respecting output size budget; fast mode and radial modes skip reconstruction. Radial zoom/spin use 25 symmetric weighted samples rather than 13; zero-radius Gaussian passes bypass redundant sampling. Motion shader requests high precision when supported and bypasses repeated samples at zero motion, retaining temporal accumulation. Three CPU plan tests added. Increased GPU sampling cost is possible for broad blur and radial effects; no device GPU benchmark, screenshot comparison, or Avee equivalence claim. Main remains untouched.

@@ -30,8 +30,12 @@ class ParticleSimulator(maxPool: Int = 3000) {
     private val life = FloatArray(capacity)
     private val sizeRand = FloatArray(capacity)
     private val phase = FloatArray(capacity)
+    private val sineFreqOffset = FloatArray(capacity)
+    private val sineMagOffset = FloatArray(capacity)
 
-    private var spawnAccumulator = 0f
+    private val emission=ParticleEmissionClock()
+    private val burstGate=ParticleBurstGate()
+    private var stepAccumulator=0.0
     private var rng = Random(42)
     private var lastSeed = 42
 
@@ -43,10 +47,14 @@ class ParticleSimulator(maxPool: Int = 3000) {
     val outSize = FloatArray(capacity)
     val outAlpha = FloatArray(capacity)
     val outProgress = FloatArray(capacity)
+    val outVx = FloatArray(capacity)
+    val outVy = FloatArray(capacity)
 
     fun reset(seed: Int) {
         active.fill(false)
-        spawnAccumulator = 0f
+        emission.reset()
+        burstGate.reset()
+        stepAccumulator=0.0
         activeCount = 0
         lastSeed = seed
         rng = Random(seed)
@@ -58,38 +66,57 @@ class ParticleSimulator(maxPool: Int = 3000) {
         deltaSec: Float,
         totalTimeSec: Float,
         playingTimeSec: Float,
-        isPlaying: Boolean
+        isPlaying: Boolean,
+        burstSnapshot: AudioProviderSnapshot? = snapshot,
+        trackPositionNorm: Float = 0f,
+        speedOverride:Float?=null
     ) {
-        if (cfg.seed != lastSeed) {
-            reset(cfg.seed)
+        if (cfg.seed != lastSeed) reset(cfg.seed)
+        val dt=deltaSec.takeIf{it.isFinite()}?.coerceIn(0f,.1f)?:0f
+        stepAccumulator+=dt.toDouble()
+        val fixed=1.0/120.0
+        val steps=((stepAccumulator+1e-8)/fixed).toInt().coerceAtMost(12)
+        for(i in 0 until steps){
+            integrate(cfg,snapshot,fixed.toFloat(),totalTimeSec-(steps-1-i)*fixed.toFloat(),playingTimeSec,isPlaying,burstSnapshot,trackPositionNorm,speedOverride)
         }
+        stepAccumulator=(stepAccumulator-steps*fixed).coerceIn(0.0,fixed)
+    }
 
-        val cappedDt = deltaSec.coerceIn(0.001f, 0.05f)
+    private fun integrate(
+        cfg:LayerConfig.Particles,snapshot:AudioProviderSnapshot?,cappedDt:Float,
+        totalTimeSec:Float,playingTimeSec:Float,isPlaying:Boolean,
+        burstSnapshot:AudioProviderSnapshot?,trackPositionNorm:Float,speedOverride:Float?
+    ){
         val limit = cfg.countLimit.coerceIn(1, capacity)
-        val speedFactor = 1f + MeasureEvaluator.evaluateScalar(
+        val speedFactor = (1f + (speedOverride ?: MeasureEvaluator.evaluateScalar(
             measure = cfg.measureOverallSpeed,
             snapshot = snapshot,
             totalTimeSec = totalTimeSec,
             playingTimeSec = playingTimeSec,
-            trackPositionNorm = 0f,
+            trackPositionNorm = trackPositionNorm,
             isPlaying = isPlaying
-        ) * 2.5f
+        )) * 2.5f).coerceIn(-20f,20f)
 
-        val spawnInterval = cfg.spawnTimeSec.coerceIn(0.004f, 0.25f)
-        spawnAccumulator += cappedDt
-
-        var spawnsRemaining = (spawnAccumulator / spawnInterval).toInt().coerceAtMost(24)
-        spawnAccumulator -= spawnsRemaining * spawnInterval
+        val energy=ParticleBurstGate.signal(cfg.burstSource,burstSnapshot)
+        val rate=1f+cfg.reactiveEmission.coerceIn(0f,5f)*energy
+        val spawnInterval = (cfg.spawnTimeSec.coerceIn(0.004f, 0.25f)/rate).coerceAtLeast(.001f)
+        var spawnsRemaining = emission.advance(cappedDt,spawnInterval)
+        var burstRemaining=if(burstGate.update(energy,cfg.burstThreshold,cfg.burstCooldownMs,cappedDt,isPlaying))cfg.burstCount.coerceIn(0,256)else 0
+        for(i in limit until capacity)active[i]=false
 
         val angleRad = Math.toRadians(cfg.vectorAngleDeg.toDouble()).toFloat()
         val fovScale = 1f / tan(Math.toRadians((cfg.perspectiveFov.coerceIn(20f, 150f) * 0.5).toDouble())).toFloat()
-        val depth = cfg.perspectiveDepth.coerceIn(100f, 2000f)
+        val depth = cfg.perspectiveDepth.coerceIn(0f, 2000f)
 
+        val damping=kotlin.math.exp(-cfg.drag.coerceIn(0f,10f)*cappedDt)
+        val centerForce=cfg.centerForce.coerceIn(-3f,3f)
+        val turbulence=cfg.turbulence.coerceIn(0f,3f)
         var currentCount = 0
         for (i in 0 until limit) {
-            if (!active[i] && spawnsRemaining > 0) {
-                spawnParticle(i, cfg, angleRad)
-                spawnsRemaining--
+            if (!active[i] && (burstRemaining>0||spawnsRemaining>0)) {
+                val burst=burstRemaining>0
+                spawnParticle(i,cfg,angleRad,if(burst)cfg.burstSpeedMultiplier.coerceIn(0f,5f)else 1f)
+                if(burst)burstRemaining-- else spawnsRemaining--
             }
             if (!active[i]) continue
 
@@ -110,24 +137,33 @@ class ParticleSimulator(maxPool: Int = 3000) {
                 ay += (dx / dist) * 0.45f - dy * 0.12f
             }
 
-            vx[i] += ax * cappedDt
-            vy[i] += ay * cappedDt
+            ax+=(cfg.emitterX-x[i])*centerForce
+            ay+=(cfg.emitterY-y[i])*centerForce
+            if(turbulence>0f){
+                ax+=sin(age[i]*7f+phase[i]+y[i]*9f)*turbulence*.3f
+                ay+=cos(age[i]*5f+phase[i]+x[i]*8f)*turbulence*.3f
+            }
+            vx[i] = (vx[i]+ax*cappedDt)*damping
+            vy[i] = (vy[i]+ay*cappedDt)*damping
 
-            val sineOffset = if (cfg.sideSineWaveMag != 0f) {
-                sin(age[i] * cfg.sideSineWaveFreq + phase[i]) * cfg.sideSineWaveMag * 0.01f * cappedDt
+            val frequency=cfg.sideSineWaveFreq+sineFreqOffset[i]
+            val magnitude=cfg.sideSineWaveMag+sineMagOffset[i]
+            val sineOffset = if (magnitude.isFinite()&&frequency.isFinite()&&magnitude!=0f) {
+                sin(age[i] * frequency + phase[i]) * magnitude * 0.01f * cappedDt
             } else 0f
 
+            val oldX=x[i];val oldY=y[i];val oldZ=z[i]
             x[i] += vx[i] * cappedDt * speedFactor + sineOffset
             y[i] += vy[i] * cappedDt * speedFactor
             z[i] += vz[i] * cappedDt * speedFactor
 
             val p = (age[i] / life[i]).coerceIn(0f, 1f)
             val zCoord = (depth + z[i]).coerceAtLeast(10f)
-            if (zCoord < cfg.nearCameraFadeOutDistance) {
-                continue
-            }
+            val near=cfg.nearCameraFadeOutDistance.coerceAtLeast(0f)
+            val nearAlpha=if(depth>0f&&near>0f)((zCoord-near*.5f)/(near*.5f)).coerceIn(0f,1f)else 1f
+            if(nearAlpha<=0f)continue
 
-            val persp = (depth / zCoord) * fovScale * 0.55f
+            val persp = if(depth<=0f)1f else (depth / zCoord) * fovScale * 0.55f
             val sx = 0.5f + (x[i] - 0.5f) * persp
             val sy = 0.5f + (y[i] - 0.5f) * persp
 
@@ -138,25 +174,31 @@ class ParticleSimulator(maxPool: Int = 3000) {
                 else -> 1f
             }.coerceIn(0f, 1f)
 
-            val sz = (cfg.startSize + (cfg.endSize + sizeRand[i] - cfg.startSize) * p) *
-                cfg.particleScale * persp * 0.012f
+            val size = if(p<fadeTime) cfg.startSize+(cfg.fadeInSize-cfg.startSize)*(p/fadeTime) else cfg.fadeInSize+(cfg.endSize+sizeRand[i]-cfg.fadeInSize)*((p-fadeTime)/(1f-fadeTime))
+            val sz = size * cfg.particleScale * persp * 0.012f
 
             outX[currentCount] = sx
             outY[currentCount] = sy
-            outSize[currentCount] = sz.coerceIn(0.002f, 0.25f)
-            outAlpha[currentCount] = alphaEnv
+            outSize[currentCount] = sz.coerceIn(0f, 0.25f)
+            outAlpha[currentCount] = alphaEnv*nearAlpha
             outProgress[currentCount] = p
+            // Actual screen-space velocity includes audio speed, depth and side-wave motion.
+            val oldPersp=if(depth<=0f)1f else (depth/(depth+oldZ).coerceAtLeast(10f))*fovScale*.55f
+            outVx[currentCount]=(sx-(.5f+(oldX-.5f)*oldPersp))/cappedDt
+            outVy[currentCount]=(sy-(.5f+(oldY-.5f)*oldPersp))/cappedDt
             currentCount++
         }
         activeCount = currentCount
     }
 
-    private fun spawnParticle(i: Int, cfg: LayerConfig.Particles, angleRad: Float) {
+    private fun spawnParticle(i: Int, cfg: LayerConfig.Particles, angleRad: Float, speedMultiplier:Float) {
         active[i] = true
         age[i] = 0f
         life[i] = (cfg.lifetimeSec * (0.7f + rng.nextFloat() * 0.6f)).coerceIn(0.2f, 15f)
         sizeRand[i] = rng.nextFloat() * cfg.endSizeRandom
         phase[i] = rng.nextFloat() * (2f * PI.toFloat())
+        sineFreqOffset[i]=if(cfg.sideSineWaveFreqRandom.isFinite()&&cfg.sideSineWaveFreqRandom!=0f)(rng.nextFloat()-.5f)*cfg.sideSineWaveFreqRandom else 0f
+        sineMagOffset[i]=if(cfg.sideSineWaveMagRandom.isFinite()&&cfg.sideSineWaveMagRandom!=0f)(rng.nextFloat()-.5f)*cfg.sideSineWaveMagRandom else 0f
 
         when (cfg.spawnArea) {
             SpawnAreaType.HORIZONTAL_LINE -> {
@@ -168,17 +210,21 @@ class ParticleSimulator(maxPool: Int = 3000) {
                 y[i] = rng.nextFloat()
             }
         }
+        if(cfg.emitter!=com.vexo.studio.model.ParticleEmitter.LEGACY){
+            val pos=CreativeGeometry.emitter(cfg.emitter,rng.nextFloat(),rng.nextFloat(),cfg.emitterX,cfg.emitterY,cfg.emitterWidth,cfg.emitterHeight)
+            x[i]=pos.x;y[i]=pos.y
+        }
         z[i] = (rng.nextFloat() - 0.5f) * 350f
 
         val dir = if (cfg.useRandomVectorInstead) {
             rng.nextFloat() * 2f * PI.toFloat()
         } else if (cfg.vectorRelativeToCenter) {
-            kotlin.math.atan2(y[i] - 0.5f, x[i] - 0.5f)
+            kotlin.math.atan2(y[i] - cfg.emitterY, x[i] - cfg.emitterX)
         } else {
-            angleRad + (rng.nextFloat() - 0.5f) * 0.65f
+            angleRad + (rng.nextFloat() - 0.5f) * cfg.directionSpread.coerceIn(0f,360f)*PI.toFloat()/180f
         }
 
-        val spd = (cfg.speed + (rng.nextFloat() - 0.5f) * cfg.speedRandom) * 0.0018f
+        val spd = (cfg.speed + (rng.nextFloat() - 0.5f) * cfg.speedRandom) * 0.0018f * speedMultiplier
         vx[i] = cos(dir) * spd
         vy[i] = sin(dir) * spd
         vz[i] = (rng.nextFloat() - 0.5f) * spd * 140f * cfg.vectorAngleZ

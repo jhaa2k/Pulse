@@ -4,7 +4,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -27,19 +27,40 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
+import com.vexo.studio.ui.theme.StudioText as Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import kotlin.math.atan2
+import kotlin.math.sqrt
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -74,18 +95,19 @@ fun StudioSlider(
     onCommit: () -> Unit = {}
 ) {
     val palette = LocalVexoPalette.current
+    val currentChange by rememberUpdatedState(onValueChange)
+    val currentCommit by rememberUpdatedState(onCommit)
     var trackWidthPx by remember { mutableStateOf(1f) }
     var showNumericDialog by remember { mutableStateOf(false) }
     var showHelpDialog by remember { mutableStateOf(false) }
 
     val range = (max - min).coerceAtLeast(0.0001f)
-    val clamped = value.coerceIn(min, max)
+    val clamped = SliderValuePolicy.safe(value,min,max,defaultValue)
     val norm = ((clamped - min) / range).coerceIn(0f, 1f)
     val defaultNorm = ((defaultValue.coerceIn(min, max) - min) / range).coerceIn(0f, 1f)
 
     fun quantize(raw: Float): Float {
-        val stepped = if (step > 0f) ((raw / step).roundToInt() * step) else raw
-        return stepped.coerceIn(min, max)
+        return SliderValuePolicy.quantize(raw,min,max,step,defaultValue)
     }
 
     Column(
@@ -104,8 +126,8 @@ fun StudioSlider(
                     .weight(1f)
                     .pointerInput(defaultValue) {
                         detectTapGestures(onDoubleTap = {
-                            onValueChange(defaultValue)
-                            onCommit()
+                            currentChange(defaultValue)
+                            currentCommit()
                         })
                     }
             ) {
@@ -132,12 +154,12 @@ fun StudioSlider(
             val formatted = if (step >= 1f) {
                 "${clamped.roundToInt()}${if (units.isNotEmpty()) " $units" else ""}"
             } else {
-                "${"%.2f".format(clamped)}${if (units.isNotEmpty()) " $units" else ""}"
+                "${if (step < 0.01f) "%.3f".format(clamped) else "%.2f".format(clamped)}${if (units.isNotEmpty()) " $units" else ""}"
             }
             Box(
                 modifier = Modifier
-                    .border(1.dp, palette.border)
-                    .background(palette.panel)
+                    .border(1.dp, palette.border, palette.shape)
+                    .background(palette.glassPanel, palette.shape)
                     .clickable { showNumericDialog = true }
                     .padding(horizontal = 8.dp, vertical = 3.dp)
             ) {
@@ -154,34 +176,39 @@ fun StudioSlider(
         Canvas(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(26.dp)
+                .height((32f * palette.controlScale).dp)
+                .semantics{
+                    contentDescription=label
+                    progressBarRangeInfo=ProgressBarRangeInfo(clamped,min..max)
+                    setProgress{v->currentChange(quantize(v));currentCommit();true}
+                }
                 .onSizeChanged { trackWidthPx = it.width.toFloat().coerceAtLeast(1f) }
-                .pointerInput(min, max, step, defaultValue) {
+                .pointerInput(min, max, step, defaultValue, palette.controlScale) {
                     detectTapGestures(
                         onDoubleTap = {
-                            onValueChange(defaultValue)
-                            onCommit()
+                            currentChange(defaultValue)
+                            currentCommit()
                         },
                         onTap = { offset ->
-                            val ratio = (offset.x / trackWidthPx).coerceIn(0f, 1f)
-                            onValueChange(quantize(min + ratio * range))
-                            onCommit()
+                            val ratio = ((offset.x - (7f * palette.controlScale).dp.toPx()) / (trackWidthPx - (14f * palette.controlScale).dp.toPx()).coerceAtLeast(1f)).coerceIn(0f, 1f)
+                            currentChange(quantize(min + ratio * range))
+                            currentCommit()
                         }
                     )
                 }
-                .pointerInput(min, max, step) {
-                    detectDragGestures(
-                        onDragEnd = { onCommit() },
-                        onDragCancel = { onCommit() }
+                .pointerInput(min, max, step, palette.controlScale) {
+                    detectHorizontalDragGestures(
+                        onDragEnd = { currentCommit() },
+                        onDragCancel = { currentCommit() }
                     ) { change, _ ->
                         change.consume()
-                        val ratio = (change.position.x / trackWidthPx).coerceIn(0f, 1f)
-                        onValueChange(quantize(min + ratio * range))
+                        val ratio = ((change.position.x - (7f * palette.controlScale).dp.toPx()) / (trackWidthPx - (14f * palette.controlScale).dp.toPx()).coerceAtLeast(1f)).coerceIn(0f, 1f)
+                        currentChange(quantize(min + ratio * range))
                     }
                 }
         ) {
             val midY = size.height * 0.5f
-            val pad = 7.dp.toPx()
+            val pad = (7f * palette.controlScale).dp.toPx()
             val usable = (size.width - pad * 2f).coerceAtLeast(1f)
 
             // Base thin track
@@ -205,10 +232,11 @@ fun StudioSlider(
             )
             // Sharp rectangular studio handle
             val thumbX = pad + usable * norm
-            val thumbW = 10.dp.toPx()
-            val thumbH = 16.dp.toPx()
-            drawRect(
+            val thumbW = (14f * palette.controlScale).dp.toPx()
+            val thumbH = (18f * palette.controlScale).dp.toPx()
+            drawRoundRect(
                 color = palette.accent,
+                cornerRadius = CornerRadius(palette.radiusDp.coerceIn(0f, 7f).dp.toPx()),
                 topLeft = Offset(thumbX - thumbW * 0.5f, midY - thumbH * 0.5f),
                 size = Size(thumbW, thumbH)
             )
@@ -216,7 +244,8 @@ fun StudioSlider(
     }
 
     if (showNumericDialog) {
-        var input by remember { mutableStateOf(if (step >= 1f) clamped.roundToInt().toString() else "%.3f".format(clamped)) }
+        var input by remember { mutableStateOf(if (step >= 1f) clamped.roundToInt().toString() else String.format(java.util.Locale.ROOT,"%.3f",clamped)) }
+        val parsed=SliderValuePolicy.parse(input)
         AlertDialog(
             onDismissRequest = { showNumericDialog = false },
             title = { Text(label.uppercase(), style = MaterialTheme.typography.titleMedium) },
@@ -231,18 +260,14 @@ fun StudioSlider(
                         value = input,
                         onValueChange = { input = it },
                         singleLine = true,
+                        isError = parsed==null,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
                     )
                 }
             },
             confirmButton = {
-                TextButton(onClick = {
-                    val parsed = input.toFloatOrNull()
-                    if (parsed != null) {
-                        onValueChange(parsed.coerceIn(min, max))
-                        onCommit()
-                    }
-                    showNumericDialog = false
+                TextButton(enabled=parsed!=null,onClick = {
+                    parsed?.let{onValueChange(quantize(it));onCommit();showNumericDialog=false}
                 }) { Text("APPLY") }
             },
             dismissButton = {
@@ -347,8 +372,8 @@ fun <T> StudioChipSelector(
                 val isSelected = opt == selected
                 Box(
                     modifier = Modifier
-                        .border(1.dp, if (isSelected) palette.accent else palette.border)
-                        .background(if (isSelected) palette.accent else palette.panel)
+                        .border(1.dp, if (isSelected) palette.accent else palette.border, palette.shape)
+                        .background(if (isSelected) palette.accent else palette.glassPanel, palette.shape)
                         .clickable { onSelect(opt) }
                         .padding(horizontal = 10.dp, vertical = 7.dp)
                 ) {
@@ -366,48 +391,82 @@ fun <T> StudioChipSelector(
 }
 
 @Composable
-fun StudioColorPickerRow(
-    label: String,
-    argb: Int,
-    onColorChange: (Int) -> Unit
-) {
-    val palette = LocalVexoPalette.current
-    val presets = listOf(
-        0xFFFFFFFF.toInt(),
-        0xFFC6F36A.toInt(),
-        0xFF38BDF8.toInt(),
-        0xFFF59E0B.toInt(),
-        0xFFEF4444.toInt(),
-        0xFFA855F7.toInt(),
-        0xFF10B981.toInt(),
-        0xFF000000.toInt()
-    )
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(
-            text = label.uppercase(),
-            style = MaterialTheme.typography.labelSmall,
-            color = palette.textSecondary
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            presets.forEach { col ->
-                val active = col == argb
-                Box(
-                    modifier = Modifier
-                        .size(22.dp)
-                        .background(Color(col))
-                        .border(
-                            width = if (active) 2.dp else 1.dp,
-                            color = if (active) palette.accent else palette.border
-                        )
-                        .clickable { onColorChange(col) }
-                )
+fun StudioColorPickerRow(label:String,argb:Int,onColorChange:(Int)->Unit){
+    val palette=LocalVexoPalette.current
+    var open by remember{mutableStateOf(false)}
+    Row(Modifier.fillMaxWidth().clip(palette.shape).clickable{open=true}.padding(vertical=6.dp,horizontal=2.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)){
+        Text(label,style=MaterialTheme.typography.labelSmall,color=palette.textSecondary,modifier=Modifier.weight(1f))
+        Text("#%08X".format(argb),style=MaterialTheme.typography.labelSmall,color=palette.textPrimary)
+        ColorSwatch(argb,Modifier.size(32.dp))
+    }
+    if(open)StudioColorWheelDialog(label,argb,{onColorChange(it);open=false},{open=false})
+}
+
+@Composable
+private fun ColorSwatch(argb:Int,modifier:Modifier=Modifier){
+    val p=LocalVexoPalette.current
+    Canvas(modifier.clip(RoundedCornerShape(8.dp)).border(1.dp,p.border,RoundedCornerShape(8.dp))){
+        val cell=6.dp.toPx()
+        for(y in 0..(size.height/cell).toInt())for(x in 0..(size.width/cell).toInt())drawRect(if((x+y)%2==0)Color(0xFFCCCCCC) else Color(0xFF777777),Offset(x*cell,y*cell),Size(cell,cell))
+        drawRect(Color(argb))
+    }
+}
+
+@Composable
+private fun StudioColorWheelDialog(label:String,argb:Int,onApply:(Int)->Unit,onCancel:()->Unit){
+    val p=LocalVexoPalette.current
+    val initial=remember(argb){FloatArray(3).also{android.graphics.Color.colorToHSV(argb,it)}}
+    var hue by remember(argb){mutableStateOf(initial[0])}
+    var saturation by remember(argb){mutableStateOf(initial[1])}
+    var value by remember(argb){mutableStateOf(initial[2])}
+    var alpha by remember(argb){mutableStateOf(((argb ushr 24)and 255)/255f)}
+    var hex by remember(argb){mutableStateOf("%08X".format(argb))}
+    val draft=android.graphics.Color.HSVToColor((alpha*255).roundToInt(),floatArrayOf(hue,saturation,value))
+    fun sync(){hex="%08X".format(android.graphics.Color.HSVToColor((alpha*255).roundToInt(),floatArrayOf(hue,saturation,value)))}
+    fun select(color:Int){val hsv=FloatArray(3);android.graphics.Color.colorToHSV(color,hsv);hue=hsv[0];saturation=hsv[1];value=hsv[2];alpha=((color ushr 24)and 255)/255f;sync()}
+    val raw=hex.trim().removePrefix("#")
+    val parsed=raw.toLongOrNull(16)?.takeIf{raw.length==6||raw.length==8}?.let{if(raw.length==6)(it or 0xFF000000L).toInt()else it.toInt()}
+    val presets=listOf(0xFFFFFFFF.toInt(),0xFFC5F84A.toInt(),0xFF38BDF8.toInt(),0xFFF59E0B.toInt(),0xFFEF4444.toInt(),0xFFA855F7.toInt(),0xFF10B981.toInt(),0xFF000000.toInt(),0)
+    val choose by rememberUpdatedState<(Offset,Float,Float)->Unit>({position,w,h->
+        val dx=position.x-w*.5f;val dy=position.y-h*.5f;val radius=minOf(w,h)*.5f
+        hue=((atan2(dy,dx)*180f/PI.toFloat())+360f)%360f
+        saturation=(sqrt(dx*dx+dy*dy)/radius.coerceAtLeast(1f)).coerceIn(0f,1f)
+        sync()
+    })
+    AlertDialog(onDismissRequest=onCancel,title={Text(label)},text={
+        Column(Modifier.fillMaxWidth().heightIn(max=490.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(8.dp),horizontalAlignment=Alignment.CenterHorizontally){
+            val rainbow=listOf(Color.Red,Color.Yellow,Color.Green,Color.Cyan,Color.Blue,Color.Magenta,Color.Red)
+            Canvas(Modifier.size(216.dp).pointerInput(Unit){detectTapGestures{choose(it,size.width.toFloat(),size.height.toFloat())}}.pointerInput(Unit){
+                detectDragGestures(onDragStart={choose(it,size.width.toFloat(),size.height.toFloat())}){change,_->choose(change.position,size.width.toFloat(),size.height.toFloat());change.consume()}
+            }){
+                val radius=size.minDimension*.5f
+                drawCircle(Brush.sweepGradient(rainbow,center),radius,center)
+                drawCircle(Brush.radialGradient(listOf(Color.White,Color.Transparent),center,radius),radius,center)
+                if(value<1f)drawCircle(Color.Black.copy(alpha=1f-value),radius,center)
+                val radians=hue*PI.toFloat()/180f
+                val mark=center+Offset(cos(radians),sin(radians))*radius*saturation
+                drawCircle(Color.Black,8.dp.toPx(),mark,style=Stroke(3.dp.toPx()))
+                drawCircle(Color.White,8.dp.toPx(),mark,style=Stroke(1.5.dp.toPx()))
+            }
+            StudioSlider("Hue",hue,0f,359.9f,0f,"°",1f,onValueChange={hue=it;sync()})
+            StudioSlider("Saturation",saturation,0f,1f,1f,"",.01f,onValueChange={saturation=it;sync()})
+            StudioSlider("Brightness",value,0f,1f,1f,"",.01f,onValueChange={value=it;sync()})
+            StudioSlider("Opacity",alpha,0f,1f,1f,"",.01f,onValueChange={alpha=it;sync()})
+            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp),verticalAlignment=Alignment.CenterVertically){
+                Column(Modifier.weight(1f)){Text("Original",style=MaterialTheme.typography.labelSmall);ColorSwatch(argb,Modifier.fillMaxWidth().height(32.dp))}
+                Column(Modifier.weight(1f)){Text("New",style=MaterialTheme.typography.labelSmall);ColorSwatch(draft,Modifier.fillMaxWidth().height(32.dp))}
+            }
+            OutlinedTextField(hex,{input->
+                hex=input.take(9)
+                val clean=hex.trim().removePrefix("#")
+                clean.toLongOrNull(16)?.takeIf{clean.length==6||clean.length==8}?.let{num->
+                    val col=if(clean.length==6)(num or 0xFF000000L).toInt()else num.toInt()
+                    val hsv=FloatArray(3);android.graphics.Color.colorToHSV(col,hsv);hue=hsv[0];saturation=hsv[1];value=hsv[2];alpha=((col ushr 24)and 255)/255f
+                }
+            },label={Text("HEX · RRGGBB / AARRGGBB")},singleLine=true,isError=parsed==null,modifier=Modifier.fillMaxWidth())
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(5.dp)){
+                presets.forEach{col->ColorSwatch(col,Modifier.size(29.dp).clickable{select(col)})}
             }
         }
-    }
+    },confirmButton={TextButton(enabled=parsed!=null,onClick={parsed?.let(onApply)}){Text("APPLY")}},dismissButton={TextButton(onClick=onCancel){Text("CANCEL")}})
 }

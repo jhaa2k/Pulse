@@ -16,97 +16,91 @@ data class ResolvedSceneGraph(
  * self-references and cycles.
  */
 object SceneGraph {
+    fun referencesOf(cfg:LayerConfig):Set<Int>{
+        val result=linkedSetOf<Int>()
+        fun mask(value:String){if(value.startsWith("composition:"))value.substringAfter(':').toIntOrNull()?.let{result.add(it)}}
+        when(cfg){
+            is LayerConfig.Image->{if(cfg.sourceType==com.vexo.studio.model.ImageSourceType.COMPOSITION)result.add(cfg.sourceCompositionIndex);mask(cfg.maskImage)}
+            is LayerConfig.BlurEffect->{result.add(cfg.sourceCompositionIndex);mask(cfg.maskImage)}
+            is LayerConfig.MotionBlurEffect->result.add(cfg.targetCompositionIndex)
+            is LayerConfig.MirrorEffect->result.add(cfg.targetCompositionIndex)
+            is LayerConfig.RgbSplitEffect->result.add(cfg.targetCompositionIndex)
+            else->Unit
+        }
+        return result
+    }
+
     fun dependenciesOf(comp: CompositionNode): Set<Int> {
-        val deps = linkedSetOf<Int>()
-        for (layer in comp.layers) {
-            if (!layer.common.visible) continue
-            when (val cfg = layer.config) {
-                is LayerConfig.Image -> {
-                    if (cfg.sourceType == com.vexo.studio.model.ImageSourceType.COMPOSITION &&
-                        cfg.sourceCompositionIndex != comp.index
-                    ) {
-                        deps.add(cfg.sourceCompositionIndex)
-                    }
-                }
-                is LayerConfig.BlurEffect -> {
-                    if (cfg.sourceCompositionIndex != comp.index) {
-                        deps.add(cfg.sourceCompositionIndex)
-                    }
-                }
-                is LayerConfig.MotionBlurEffect -> {
-                    if (cfg.targetCompositionIndex != comp.index) {
-                        deps.add(cfg.targetCompositionIndex)
-                    }
-                }
-                is LayerConfig.MirrorEffect -> {
-                    if (cfg.targetCompositionIndex != comp.index) {
-                        deps.add(cfg.targetCompositionIndex)
-                    }
-                }
-                is LayerConfig.RgbSplitEffect -> {
-                    if (cfg.targetCompositionIndex != comp.index) {
-                        deps.add(cfg.targetCompositionIndex)
-                    }
-                }
-                else -> Unit
-            }
-        }
-        return deps
+        return comp.layers.filter{it.common.visible}.flatMap{referencesOf(it.config)}.filter{it!=comp.index}.toSet()
     }
 
-    fun hasSelfReference(comp: CompositionNode): Boolean {
-        return comp.layers.any { layer ->
-            when (val cfg = layer.config) {
-                is LayerConfig.Image -> cfg.sourceType == com.vexo.studio.model.ImageSourceType.COMPOSITION &&
-                    cfg.sourceCompositionIndex == comp.index
-                is LayerConfig.BlurEffect -> cfg.sourceCompositionIndex == comp.index
-                is LayerConfig.MotionBlurEffect -> cfg.targetCompositionIndex == comp.index
-                is LayerConfig.MirrorEffect -> cfg.targetCompositionIndex == comp.index
-                is LayerConfig.RgbSplitEffect -> cfg.targetCompositionIndex == comp.index
-                else -> false
+    fun hasSelfReference(comp:CompositionNode):Boolean =
+        comp.layers.any{it.common.visible && comp.index in referencesOf(it.config)}
+
+    /** Only the dependency closure of the displayed composition needs rendering. */
+    fun reachable(project:VexoProject,root:Int):Set<Int> =
+        resolveOutput(project,root).order.mapTo(linkedSetOf()){it.index}
+
+    /** Resolve only the selected output. Unrelated draft cycles cannot affect it. */
+    fun resolveOutput(project:VexoProject,root:Int):ResolvedSceneGraph =
+        resolveRoots(project,listOf(root))
+
+    data class MissingReference(val compositionIndex:Int,val layerName:String,val targetIndex:Int)
+    /** Inspect only active dependencies for the requested output, not unused draft compositions. */
+    fun missingReferences(project:VexoProject,root:Int=0):List<MissingReference>{
+        val available=project.compositions.map{it.index}.toSet()
+        val active=reachable(project,root)
+        return project.compositions.filter{it.index in active}.flatMap{comp->
+            comp.layers.filter{it.common.visible}.flatMap{layer->
+                referencesOf(layer.config).filter{it !in available}.map{MissingReference(comp.index,layer.common.name,it)}
             }
         }
     }
 
-    fun resolve(project: VexoProject): ResolvedSceneGraph {
-        val byIndex = project.compositions.associateBy { it.index }
-        val state = mutableMapOf<Int, Int>() // 0=unvisited, 1=visiting, 2=visited
-        val result = mutableListOf<CompositionNode>()
-        var cycleDetected = false
-        var cycleMsg: String? = null
+    fun resolve(project: VexoProject): ResolvedSceneGraph =
+        resolveRoots(project,listOf(0)+project.compositions.map{it.index})
 
-        fun dfs(idx: Int) {
-            val st = state[idx] ?: 0
-            if (st == 2) return
-            if (st == 1) {
-                cycleDetected = true
-                cycleMsg = "Cycle detected involving composition:$idx"
-                return
-            }
-            val node = byIndex[idx] ?: return
-            if (hasSelfReference(node)) {
-                cycleDetected = true
-                cycleMsg = "Composition $idx references itself"
-            }
-            state[idx] = 1
-            for (dep in dependenciesOf(node)) {
-                if (byIndex.containsKey(dep)) {
-                    dfs(dep)
+    private data class Visit(val node:CompositionNode,val edges:Iterator<Int>)
+
+    private fun resolveRoots(project:VexoProject,roots:List<Int>):ResolvedSceneGraph {
+        val byIndex=project.compositions.associateBy{it.index}
+        val state=mutableMapOf<Int,Int>()
+        val order=mutableListOf<CompositionNode>()
+        val stack=ArrayDeque<Visit>()
+        var cycleMsg:String?=null
+
+        fun enter(node:CompositionNode){
+            state[node.index]=1
+            // Retain self edges so the same cycle detection handles every reference.
+            val edges=node.layers.asSequence().filter{it.common.visible}
+                .flatMap{referencesOf(it.config).asSequence()}.distinct().iterator()
+            stack.addLast(Visit(node,edges))
+        }
+
+        for(root in roots){
+            val node=byIndex[root]?:continue
+            if(state[root]!=null)continue
+            enter(node)
+            while(stack.isNotEmpty()){
+                val top=stack.last()
+                if(!top.edges.hasNext()){
+                    state[top.node.index]=2
+                    order.add(top.node)
+                    stack.removeLast()
+                    continue
+                }
+                val dep=top.edges.next()
+                val target=byIndex[dep]?:continue
+                when(state[dep]){
+                    1->if(cycleMsg==null){
+                        cycleMsg=if(dep==top.node.index)"Composition $dep references itself"
+                            else "Cycle detected involving composition:$dep"
+                    }
+                    2->Unit
+                    else->enter(target)
                 }
             }
-            state[idx] = 2
-            result.add(node)
         }
-
-        // Start from Final Composition (0) if present, then any remaining compositions
-        if (byIndex.containsKey(0)) {
-            dfs(0)
-        }
-        for (comp in project.compositions) {
-            if ((state[comp.index] ?: 0) == 0) {
-                dfs(comp.index)
-            }
-        }
-        return ResolvedSceneGraph(result, cycleDetected, cycleMsg)
+        return ResolvedSceneGraph(order,cycleMsg!=null,cycleMsg)
     }
 }

@@ -21,3 +21,10 @@ captures/
 .externalNativeBuild/
 .cxx/
 public/
+
+# Private signing material
+*.jks
+*.keystore
+*.keystore.base64
+keystore.properties
+release-signing.properties

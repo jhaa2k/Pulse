@@ -1,0 +1,78 @@
+{
+  "format": "VEXO_PROJECT",
+  "version": 1,
+  "project": {
+    "name": "Retro Synthwave",
+    "canvas": {
+      "aspectRatio": "RATIO_16_9",
+      "backgroundColorArgb": -16777216
+    },
+    "audioProviders": [
+      {
+        "index": 1,
+        "fftSize": 2048,
+        "sampleOutCount": 96,
+        "lowerHz": 30,
+        "higherHz": 16000
+      }
+    ],
+    "compositions": [
+      {
+        "index": 0,
+        "name": "Final Composition",
+        "layers": [
+          {
+            "type": "IMAGE",
+            "common": {
+              "name": "Album Backdrop",
+              "opacity": 0.45
+            },
+            "config": {
+              "layerKind": "com.vexo.studio.model.LayerConfig.Image",
+              "sourceType": "ALBUM_ART",
+              "keepAspectRatioAndCropToFit": true,
+              "blurEnabled": true,
+              "blurRadius": 12
+            }
+          },
+          {
+            "type": "BARS",
+            "common": {
+              "name": "Spectrum",
+              "measureScale": {
+                "measureWhat": "BASS",
+                "amountA": 0.08,
+                "amountB": 0.08,
+                "triggerThreshold": 0.15
+              }
+            },
+            "config": {
+              "layerKind": "com.vexo.studio.model.LayerConfig.Bars",
+              "shapePath": "HORIZONTAL_LINE",
+              "segment1": "LINE",
+              "barCount": 96,
+              "barSpacing": 0.15,
+              "roundness": 1,
+              "colorFromArgb": -65281,
+              "colorToArgb": -16711681,
+              "mirror": true,
+              "heightScale": 2
+            }
+          },
+          {
+            "type": "TEXT",
+            "common": {
+              "name": "Track title",
+              "posY": 0.86
+            },
+            "config": {
+              "layerKind": "com.vexo.studio.model.LayerConfig.Text",
+              "text": "{title} · {artist}",
+              "fontSize": 32
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

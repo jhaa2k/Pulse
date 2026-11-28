@@ -1,0 +1,3 @@
+# Phase 76 — original preset variety
+
+Phase 75 CI passed (46096558380). Retain the existing 64 names and distinct spectrum recipes; expand eight layouts into sixteen via alternate multi-layer arrangements, introduce procedural backgrounds (rings, grid, starfield, checker, plasma), vary title motion and artwork placement, and tune audio provider attack/release/hz per layout. Add color-independent spectrum signature regression tests, validate all scene references and native roundtrips. These are native original presets, not copied Avee designs. Structural diversity does not prove perceptual or visual quality; live GPU contact sheets and device listening comparisons remain pending. Gallery thumbnail still omits effects/artwork. Main unchanged.
