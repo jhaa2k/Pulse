@@ -204,7 +204,7 @@ private fun VexoRootApp(vm: StudioViewModel, settings:com.vexo.studio.model.AppS
         if(wallpaper!=null){
             com.vexo.studio.ui.components.BlurredBackdrop(wallpaper!!,settings.wallpaperBlurDp,Modifier.fillMaxSize())
             Box(Modifier.fillMaxSize().background(palette.bg.copy(alpha=settings.wallpaperDim.coerceIn(.25f,.95f))))
-        } else if (settings.glassEnabled && uiState.navDestination != NavDestination.STUDIO) {
+        } else if (settings.glassEnabled) {
             val artwork = playback.trackMeta.artwork
             if (artwork != null) {
                 com.vexo.studio.ui.components.BlurredBackdrop(artwork,settings.backdropBlurDp,Modifier.fillMaxSize())
@@ -214,7 +214,7 @@ private fun VexoRootApp(vm: StudioViewModel, settings:com.vexo.studio.model.AppS
             }
         }
     Scaffold(
-        containerColor = if (wallpaper!=null || (settings.glassEnabled && uiState.navDestination != NavDestination.STUDIO)) Color.Transparent else palette.bg,
+        containerColor = if (wallpaper!=null || (settings.glassEnabled)) Color.Transparent else palette.bg,
         contentColor = palette.textPrimary,
         topBar = {
             if (!uiState.isFullscreenPreview) {

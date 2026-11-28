@@ -121,8 +121,9 @@ fun VexoPreviewSurface(
             if(glView.holder.surface.isValid){
                 val captured=copyGlassFrame(glView,w,h)
                 if(captured!=null){
-                    val blurred=withContext(Dispatchers.Default){BackdropBlur.apply(captured,glassBlurDp.coerceIn(0f,48f)*density*scale,480)}
-                    callback?.invoke(blurred)
+                    val blurred=withContext(Dispatchers.Default){runCatching{BackdropBlur.apply(captured,glassBlurDp.coerceIn(0f,48f)*density*scale,480)}.getOrNull()}
+                    if(blurred!==captured)captured.recycle()
+                    if(blurred!=null)callback?.invoke(blurred)
                 }
             }
             delay(300)

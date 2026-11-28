@@ -30,13 +30,18 @@ internal object BackdropBlur {
         val readable=if(android.os.Build.VERSION.SDK_INT>=26&&resized.config==Bitmap.Config.HARDWARE)resized.copy(Bitmap.Config.ARGB_8888,false)?:return source else resized
         val pixels=IntArray(w*h)
         readable.getPixels(pixels,0,w,0,0,w,h)
-        val tmp=IntArray(pixels.size)
         val radius=(radiusPx*scale*.58f).roundToInt().coerceIn(1,64)
-        repeat(3){
-            pass(pixels,tmp,w,h,radius,false)
-            pass(tmp,pixels,w,h,radius,true)
-        }
+        blurPixels(pixels,w,h,radius)
         return Bitmap.createBitmap(pixels,w,h,Bitmap.Config.ARGB_8888)
+    }
+    internal fun blurPixels(pixels:IntArray,w:Int,h:Int,radius:Int){
+        require(w>0&&h>0&&pixels.size==w*h)
+        if(radius<=0)return
+        val tmp=IntArray(pixels.size)
+        repeat(3){
+            pass(pixels,tmp,w,h,radius.coerceAtMost(64),false)
+            pass(tmp,pixels,w,h,radius.coerceAtMost(64),true)
+        }
     }
     private fun pass(src:IntArray,dst:IntArray,w:Int,h:Int,r:Int,vertical:Boolean){
         val lines=if(vertical)w else h
@@ -71,7 +76,7 @@ internal fun BlurredBackdrop(source:Bitmap,radiusDp:Float,modifier:Modifier=Modi
         val fit=maxOf(displayW/source.width,displayH/source.height).coerceAtLeast(.001f)
         val radius=radiusDp.coerceIn(0f,48f)*density.density/fit
         val result by produceState<Bitmap?>(null,source,radius){
-            value=withContext(Dispatchers.Default){BackdropBlur.apply(source,radius)}
+            value=withContext(Dispatchers.Default){runCatching{BackdropBlur.apply(source,radius)}.getOrDefault(source)}
         }
         Image((if(radius<=0f)source else result?:source).asImageBitmap(),null,Modifier.fillMaxSize(),contentScale=ContentScale.Crop)
     }
