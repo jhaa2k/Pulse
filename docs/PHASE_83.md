@@ -18,3 +18,7 @@ Run Android release packaging on engine/native-studio-v3 with signed enabled. Re
 ## Release gates
 
 See RELEASE_READINESS.md. Physical device tests, exact Avee visual comparison, long exports, memory measurements, release signing credentials and privacy/licensing review remain unresolved. R8 stays disabled intentionally. A candidate build is not a production release.
+
+## Signing follow-up
+
+The release packaging workflow now automatically uses all four existing production signing secrets on a release-configuration push. No secrets means unsigned validation only; partial configuration or an explicit signed request without credentials fails clearly. Manual dispatch defaults to signed. The latest high-quality export fix passed Android CI (46106727275) and its debug-signed APK is available as an artifact. No new keystore is generated, and nothing is published automatically.

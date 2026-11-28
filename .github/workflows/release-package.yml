@@ -11,7 +11,7 @@ on:
       signed:
         description: "Use configured production signing secrets (does not publish)"
         type: boolean
-        default: false
+        default: true
 
 permissions:
   contents: read
@@ -29,11 +29,36 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Prepare wrapper
         run: chmod +x gradlew
+      - name: Determine signing mode
+        id: signing
+        env:
+          KEYSTORE_PRESENT: ${{ secrets.VEXO_RELEASE_KEYSTORE_BASE64 != '' }}
+          STORE_PASSWORD_PRESENT: ${{ secrets.VEXO_RELEASE_STORE_PASSWORD != '' }}
+          ALIAS_PRESENT: ${{ secrets.VEXO_RELEASE_KEY_ALIAS != '' }}
+          KEY_PASSWORD_PRESENT: ${{ secrets.VEXO_RELEASE_KEY_PASSWORD != '' }}
+          EVENT: ${{ github.event_name }}
+          REQUEST_SIGNED: ${{ inputs.signed }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = workflow_dispatch ] && [ "$REQUEST_SIGNED" != true ]; then
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$KEYSTORE_PRESENT" = true ] && [ "$STORE_PASSWORD_PRESENT" = true ] && [ "$ALIAS_PRESENT" = true ] && [ "$KEY_PASSWORD_PRESENT" = true ]; then
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+          elif [ "$EVENT" = workflow_dispatch ] || [ "$KEYSTORE_PRESENT" = true ] || [ "$STORE_PASSWORD_PRESENT" = true ] || [ "$ALIAS_PRESENT" = true ] || [ "$KEY_PASSWORD_PRESENT" = true ]; then
+            echo "::error::Production signing requires all four VEXO_RELEASE secrets. No substitute key will be generated."
+            exit 1
+          else
+            echo "::warning::No production signing secrets configured. Building unsigned validation packages only."
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Build unsigned release candidate
-        if: ${{ !inputs.signed }}
+        if: steps.signing.outputs.signed == 'false'
         run: bash .github/scripts/gradle-ci.sh testDebugUnitTest lintRelease assembleRelease bundleRelease
       - name: Build signed release candidate
-        if: ${{ inputs.signed }}
+        if: steps.signing.outputs.signed == 'true'
         env:
           KEYSTORE_BASE64: ${{ secrets.VEXO_RELEASE_KEYSTORE_BASE64 }}
           VEXO_RELEASE_STORE_PASSWORD: ${{ secrets.VEXO_RELEASE_STORE_PASSWORD }}
@@ -54,7 +79,7 @@ jobs:
           bash .github/scripts/gradle-ci.sh testDebugUnitTest lintRelease assembleRelease bundleRelease
       - name: Collect packages and verify signatures
         env:
-          SIGNED: ${{ inputs.signed }}
+          SIGNED: ${{ steps.signing.outputs.signed }}
         shell: bash
         run: |
           set -euo pipefail
@@ -85,7 +110,7 @@ jobs:
       - name: Upload candidate packages
         uses: actions/upload-artifact@v4
         with:
-          name: vexo-release-candidate-${{ inputs.signed && 'signed' || 'unsigned' }}
+          name: vexo-release-candidate-${{ steps.signing.outputs.signed == 'true' && 'signed' || 'unsigned' }}
           path: release-output/
           if-no-files-found: error
       - name: Upload release validation reports
