@@ -1,0 +1,3 @@
+# Phase 80 — compact editor usability
+
+Phase 79 CI passed (46098806903). Keep existing 41% preview share (of weighted workspace excluding transport in portrait), Poppins, lime theme, color wheel, single-open accordion. Increase bottom navigation item min height 58→64 dp, width 70→76 dp, icon 21→23 dp; respect theme corner radius. Highlight selected composition index and expanded section. Slider 32 dp track interaction and 14×18 dp handle; expose accessibility progress actions; validate finite numeric input, locale-safe decimal entry, consistent min-relative quantization and endpoint access. Three JVM tests. No screenshot/device accessibility measurement or complete redesign; actual preview share depends on layout. Main unchanged.

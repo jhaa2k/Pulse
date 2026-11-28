@@ -56,6 +56,11 @@ import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -97,13 +102,12 @@ fun StudioSlider(
     var showHelpDialog by remember { mutableStateOf(false) }
 
     val range = (max - min).coerceAtLeast(0.0001f)
-    val clamped = value.coerceIn(min, max)
+    val clamped = SliderValuePolicy.safe(value,min,max,defaultValue)
     val norm = ((clamped - min) / range).coerceIn(0f, 1f)
     val defaultNorm = ((defaultValue.coerceIn(min, max) - min) / range).coerceIn(0f, 1f)
 
     fun quantize(raw: Float): Float {
-        val stepped = if (step > 0f) ((raw / step).roundToInt() * step) else raw
-        return stepped.coerceIn(min, max)
+        return SliderValuePolicy.quantize(raw,min,max,step,defaultValue)
     }
 
     Column(
@@ -172,7 +176,12 @@ fun StudioSlider(
         Canvas(
             modifier = Modifier
                 .fillMaxWidth()
-                .height((28f * palette.controlScale).dp)
+                .height((32f * palette.controlScale).dp)
+                .semantics{
+                    contentDescription=label
+                    progressBarRangeInfo=ProgressBarRangeInfo(clamped,min..max)
+                    setProgress{v->currentChange(quantize(v));currentCommit();true}
+                }
                 .onSizeChanged { trackWidthPx = it.width.toFloat().coerceAtLeast(1f) }
                 .pointerInput(min, max, step, defaultValue, palette.controlScale) {
                     detectTapGestures(
@@ -223,8 +232,8 @@ fun StudioSlider(
             )
             // Sharp rectangular studio handle
             val thumbX = pad + usable * norm
-            val thumbW = (12f * palette.controlScale).dp.toPx()
-            val thumbH = (16f * palette.controlScale).dp.toPx()
+            val thumbW = (14f * palette.controlScale).dp.toPx()
+            val thumbH = (18f * palette.controlScale).dp.toPx()
             drawRoundRect(
                 color = palette.accent,
                 cornerRadius = CornerRadius(palette.radiusDp.coerceIn(0f, 7f).dp.toPx()),
@@ -235,7 +244,8 @@ fun StudioSlider(
     }
 
     if (showNumericDialog) {
-        var input by remember { mutableStateOf(if (step >= 1f) clamped.roundToInt().toString() else "%.3f".format(clamped)) }
+        var input by remember { mutableStateOf(if (step >= 1f) clamped.roundToInt().toString() else String.format(java.util.Locale.ROOT,"%.3f",clamped)) }
+        val parsed=SliderValuePolicy.parse(input)
         AlertDialog(
             onDismissRequest = { showNumericDialog = false },
             title = { Text(label.uppercase(), style = MaterialTheme.typography.titleMedium) },
@@ -250,18 +260,14 @@ fun StudioSlider(
                         value = input,
                         onValueChange = { input = it },
                         singleLine = true,
+                        isError = parsed==null,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
                     )
                 }
             },
             confirmButton = {
-                TextButton(onClick = {
-                    val parsed = input.toFloatOrNull()
-                    if (parsed != null) {
-                        onValueChange(parsed.coerceIn(min, max))
-                        onCommit()
-                    }
-                    showNumericDialog = false
+                TextButton(enabled=parsed!=null,onClick = {
+                    parsed?.let{onValueChange(quantize(it));onCommit();showNumericDialog=false}
                 }) { Text("APPLY") }
             },
             dismissButton = {

@@ -147,7 +147,7 @@ fun EditorScreen(
     val palette = LocalVexoPalette.current
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE || configuration.screenWidthDp >= 720
-    val previewShare = settings.previewShare.coerceIn(0.30f, 0.65f)
+    val previewShare = settings.previewShare.takeIf{it.isFinite()}?.coerceIn(0.30f, 0.65f)?:.41f
 
     if (uiState.isFullscreenPreview) {
         val aspect=uiState.project.canvas.aspectRatio
@@ -319,7 +319,11 @@ private fun PreviewBlock(
                     Text(ratio.label,style=MaterialTheme.typography.labelSmall,color=if(active)palette.accentOn else palette.textSecondary,modifier=Modifier.background(if(active)palette.accent else Color.Transparent).clickable{vm.setAspectRatio(ratio)}.padding(horizontal=8.dp,vertical=7.dp))
                 }
             }
-            Text(if(uiState.previewSelectedComposition&&uiState.selectedCompositionIndex!=0)"VIEW: SELECTED" else "VIEW: FINAL",style=MaterialTheme.typography.labelSmall,color=if(uiState.previewSelectedComposition)palette.accent else palette.textSecondary,modifier=Modifier.clickable(enabled=uiState.selectedCompositionIndex!=0){vm.toggleCompositionPreview()}.padding(horizontal=10.dp,vertical=8.dp))
+            val selectedPreview=uiState.previewSelectedComposition&&uiState.selectedCompositionIndex!=0
+            Text(if(selectedPreview)"VIEW: C${uiState.selectedCompositionIndex}" else "VIEW: FINAL",style=MaterialTheme.typography.labelSmall,color=if(selectedPreview)palette.accentOn else palette.textSecondary,modifier=Modifier
+                .background(if(selectedPreview)palette.accent else palette.panelElevated,palette.shape)
+                .semantics{androidx.compose.ui.semantics.SemanticsProperties.ContentDescription.let{this[it]=listOf(if(selectedPreview)"Previewing selected composition ${uiState.selectedCompositionIndex}, switch to final" else "Previewing final composition")}}
+                .clickable(enabled=uiState.selectedCompositionIndex!=0){vm.toggleCompositionPreview()}.padding(horizontal=10.dp,vertical=8.dp))
             IconButton(onClick=vm::toggleSafeAreaGuides,modifier=Modifier.size(32.dp)){Icon(Icons.Default.GridOn,"Safe area",tint=if(uiState.project.canvas.showSafeAreaGuides)palette.accent else palette.textSecondary,modifier=Modifier.size(16.dp))}
             IconButton(onClick=vm::resetPreviewCamera,modifier=Modifier.size(32.dp)){Icon(Icons.Default.CropFree,"Reset zoom",tint=palette.textSecondary,modifier=Modifier.size(16.dp))}
             IconButton(onClick=vm::toggleFullscreenPreview,modifier=Modifier.size(32.dp)){Icon(Icons.Default.Fullscreen,"Fullscreen",tint=palette.textPrimary,modifier=Modifier.size(18.dp))}
@@ -1734,14 +1738,16 @@ internal fun ExpandableSectionHeader(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .border(1.dp, palette.border, palette.shape)
+            .border(1.dp, if(opened)palette.accent.copy(alpha=.45f) else palette.border, palette.shape)
             .background(palette.glassPanel, palette.shape)
+            .clip(palette.shape)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .background(if(opened)palette.panelElevated else Color.Transparent)
                 .clickable(onClick = onToggle)
-                .padding(horizontal = 10.dp, vertical = 8.dp),
+                .padding(horizontal = 10.dp, vertical = 9.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {

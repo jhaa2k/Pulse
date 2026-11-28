@@ -269,7 +269,7 @@ private fun VexoRootApp(vm: StudioViewModel) {
                 val destinations=NavDestination.entries.filter{it!=NavDestination.STUDIO}
                 val activeIndex=if(uiState.navDestination==NavDestination.STUDIO)StudioTab.entries.indexOf(uiState.studioTab) else StudioTab.entries.size+destinations.indexOf(uiState.navDestination)
                 LaunchedEffect(activeIndex){if(activeIndex>=0&&navState.layoutInfo.visibleItemsInfo.none{it.index==activeIndex})navState.animateScrollToItem(activeIndex)}
-                Surface(modifier=Modifier.fillMaxWidth().padding(horizontal=6.dp,vertical=4.dp),shape=RoundedCornerShape(18.dp),color=palette.panel,tonalElevation=2.dp,shadowElevation=3.dp){
+                Surface(modifier=Modifier.fillMaxWidth().padding(horizontal=6.dp,vertical=4.dp),shape=palette.shape,color=palette.panel,tonalElevation=2.dp,shadowElevation=3.dp){
                     LazyRow(state=navState,modifier=Modifier.fillMaxWidth().padding(horizontal=4.dp,vertical=3.dp),
                         horizontalArrangement=Arrangement.spacedBy(2.dp),verticalAlignment=Alignment.CenterVertically){
                         items(StudioTab.entries.size){i->
@@ -399,9 +399,9 @@ private fun VexoRootApp(vm: StudioViewModel) {
 @Composable
 private fun StudioNavItem(label:String,glyph:ImageVector,active:Boolean,onClick:()->Unit){
     val p=LocalVexoPalette.current
-    Column(Modifier.widthIn(min=70.dp).heightIn(min=58.dp).clip(RoundedCornerShape(14.dp)).semantics{selected=active}.clickable(onClick=onClick).padding(horizontal=7.dp,vertical=5.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(3.dp)){
-        Box(Modifier.widthIn(min=44.dp).height(29.dp).background(if(active)p.accent else Color.Transparent,RoundedCornerShape(12.dp)),contentAlignment=Alignment.Center){
-            Icon(glyph,label,tint=if(active)p.accentOn else p.textSecondary,modifier=Modifier.size(21.dp))
+    Column(Modifier.widthIn(min=76.dp).heightIn(min=64.dp).clip(p.shape).semantics{selected=active}.clickable(onClick=onClick).padding(horizontal=8.dp,vertical=5.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(3.dp)){
+        Box(Modifier.widthIn(min=48.dp).height(32.dp).background(if(active)p.accent else Color.Transparent,p.shape),contentAlignment=Alignment.Center){
+            Icon(glyph,label,tint=if(active)p.accentOn else p.textSecondary,modifier=Modifier.size(23.dp))
         }
         Text(label,style=MaterialTheme.typography.labelSmall,fontWeight=if(active)FontWeight.SemiBold else FontWeight.Medium,color=if(active)p.accent else p.textSecondary,maxLines=1)
     }
