@@ -21,7 +21,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.outlined.LibraryMusic
+import androidx.compose.material.icons.outlined.FileUpload
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.filled.PlayArrow
@@ -75,7 +80,9 @@ import java.util.Locale
 @Composable
 fun ProjectsScreen(
     vm: StudioViewModel,
-    uiState: StudioUiState
+    uiState: StudioUiState,
+    onImportProject:()->Unit={},
+    onExportProject:(String,String)->Unit={_,_->}
 ) {
     val palette = LocalVexoPalette.current
     var showNewDialog by remember { mutableStateOf(false) }
@@ -108,7 +115,11 @@ fun ProjectsScreen(
             }
         }
 
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(6.dp)){
+            TextButton(onClick=onImportProject,modifier=Modifier.weight(1f)){Text("IMPORT .VIXO")}
+            TextButton(onClick={onExportProject(uiState.project.id,uiState.project.name)},modifier=Modifier.weight(1f)){Text("EXPORT CURRENT")}
+        }
+        LazyColumn(Modifier.weight(1f),verticalArrangement = Arrangement.spacedBy(8.dp)) {
             itemsIndexed(uiState.projects, key = { _, item -> item.id }) { _, proj ->
                 val isCurrent = proj.id == uiState.project.id
                 Row(
@@ -131,6 +142,9 @@ fun ProjectsScreen(
                     if (isCurrent) {
                         Text("OPEN", style = MaterialTheme.typography.labelSmall, color = palette.accent)
                         Spacer(Modifier.width(8.dp))
+                    }
+                    IconButton(onClick={onExportProject(proj.id,proj.name)},modifier=Modifier.size(32.dp)){
+                        Icon(androidx.compose.material.icons.Icons.Outlined.FileUpload,"Export project .vixo",tint=palette.textSecondary,modifier=Modifier.size(17.dp))
                     }
                     TextButton(onClick={vm.restorePreviousProject(proj.id)}){Text("RECOVER",style=MaterialTheme.typography.labelSmall)}
                     IconButton(onClick = { vm.duplicateProject(proj.id) }, modifier = Modifier.size(30.dp)) {
@@ -288,28 +302,29 @@ fun AudioLibraryScreen(
                 Text("No audio tracks imported yet. Tap IMPORT AUDIO to load MP3, WAV, FLAC, AAC, or OGG files.", style = MaterialTheme.typography.bodyMedium, color = palette.textSecondary)
             }
         } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            LazyColumn(Modifier.weight(1f).fillMaxWidth(),verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 itemsIndexed(playback.queue, key = { _, t -> t.id }) { idx, track ->
                     val current = idx == playback.currentIndex
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .clip(palette.shape)
+                            .background(if(current)palette.glassElevated else palette.glassPanel,palette.shape)
                             .border(1.dp, if (current) palette.accent else palette.border, palette.shape)
-                            .background(palette.glassPanel, palette.shape)
                             .clickable { vm.playbackController.playIndex(idx) }
-                            .padding(10.dp),
+                            .padding(horizontal=8.dp,vertical=6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Box(Modifier.size(38.dp).background(if(current)palette.accent else palette.panelElevated,palette.shape),contentAlignment=Alignment.Center){
-                            Icon(Icons.Outlined.LibraryMusic,"Audio track ${idx+1}",tint=if(current)palette.accentOn else palette.textSecondary,modifier=Modifier.size(20.dp))
+                        IconButton(onClick={if(current)vm.playbackController.togglePlayPause() else vm.playbackController.playIndex(idx)},modifier=Modifier.size(40.dp)){
+                            Icon(if(current&&playback.isPlaying)Icons.Default.Pause else Icons.Default.PlayArrow,if(current&&playback.isPlaying)"Pause track" else "Play track",tint=if(current)palette.accent else palette.textSecondary,modifier=Modifier.size(18.dp))
                         }
-                        Spacer(Modifier.width(8.dp))
+                        Spacer(Modifier.width(6.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(track.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text("${if(current) "ACTIVE · " else "${idx+1} · "}${track.artist} · ${formatDuration(track.durationMs)}", style = MaterialTheme.typography.labelSmall, color = if(current)palette.accent else palette.textSecondary, maxLines = 1)
                         }
-                        TextButton(enabled=idx>0,onClick={vm.playbackController.moveQueueItem(idx,idx-1)},contentPadding=PaddingValues(0.dp),modifier=Modifier.width(30.dp)){Text("↑")}
-                        TextButton(enabled=idx<playback.queue.lastIndex,onClick={vm.playbackController.moveQueueItem(idx,idx+1)},contentPadding=PaddingValues(0.dp),modifier=Modifier.width(30.dp)){Text("↓")}
+                        IconButton(enabled=idx>0,onClick={vm.playbackController.moveQueueItem(idx,idx-1)},modifier=Modifier.size(36.dp)){Icon(Icons.Default.ArrowUpward,"Move track up",tint=if(idx>0)palette.textPrimary else palette.border,modifier=Modifier.size(18.dp))}
+                        IconButton(enabled=idx<playback.queue.lastIndex,onClick={vm.playbackController.moveQueueItem(idx,idx+1)},modifier=Modifier.size(36.dp)){Icon(Icons.Default.ArrowDownward,"Move track down",tint=if(idx<playback.queue.lastIndex)palette.textPrimary else palette.border,modifier=Modifier.size(18.dp))}
                         IconButton(onClick = { vm.playbackController.removeFromQueue(idx) }, modifier = Modifier.size(28.dp)) {
                             Icon(Icons.Outlined.Delete, "Remove", tint = palette.danger, modifier = Modifier.size(15.dp))
                         }
@@ -327,10 +342,16 @@ fun ExportScreen(
     uiState: StudioUiState,
     playback: PlaybackUiState,
     exportState: ExportProgress,
-    onPickExportUri: () -> Unit
+    onPickExportUri: (String) -> Unit
 ) {
     val palette = LocalVexoPalette.current
     val exp = uiState.project.exportSettings
+    var filename by androidx.compose.runtime.saveable.rememberSaveable(uiState.project.id){mutableStateOf(exp.outputFileName.ifBlank{com.vexo.studio.export.ExportFileName.defaultName()})}
+    var autoName by androidx.compose.runtime.saveable.rememberSaveable(uiState.project.id){mutableStateOf(exp.outputFileName.isBlank())}
+    val safeFilename=com.vexo.studio.export.ExportFileName.normalize(filename)
+    androidx.compose.runtime.LaunchedEffect(exportState.publishedUri){
+        if(exportState.publishedUri!=null&&autoName)filename=com.vexo.studio.export.ExportFileName.defaultName()
+    }
     val trackDurMs = playback.durationMs.coerceAtLeast(1000L)
     // Recompute only when encoder-relevant settings change, off the UI thread.
     val capabilityState=remember(exp.aspectRatio,exp.adaptiveVideoBitrate,exp.videoBitrateMbps,exp.useHevcIfSupported){
@@ -441,13 +462,16 @@ fun ExportScreen(
 
         }
         ExportPanel("SAVE LOCATION"){
+        OutlinedTextField(value=filename,onValueChange={filename=it.take(180);autoName=false},enabled=!exportState.isRunning&&exp.customOutputUri==null,singleLine=true,label={Text("VIDEO FILE NAME")},modifier=Modifier.fillMaxWidth())
+        Text(if(exp.customOutputUri==null)"SAVE AS: $safeFilename" else "The selected document name is used. Reset location to edit.",style=MaterialTheme.typography.labelSmall,color=palette.textSecondary)
+        TextButton(enabled=!exportState.isRunning&&exp.customOutputUri==null,onClick={filename=com.vexo.studio.export.ExportFileName.defaultName();autoName=true}){Text("AUTO DATE / TIME NAME")}
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .border(1.dp, palette.border, palette.shape)
                     .background(palette.glassPanel, palette.shape)
-                    .clickable(onClick = onPickExportUri)
+                    .clickable(enabled=!exportState.isRunning){onPickExportUri(safeFilename)}
                     .padding(vertical = 10.dp),
                 contentAlignment = Alignment.Center
             ) {
@@ -510,7 +534,7 @@ fun ExportScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(if(canExport)palette.accent else palette.panelElevated,palette.shape)
-                    .clickable(enabled=canExport) { vm.startVideoExport() }
+                    .clickable(enabled=canExport) { vm.startVideoExport(safeFilename) }
                     .padding(vertical = 14.dp),
                 contentAlignment = Alignment.Center
             ) {
@@ -559,7 +583,7 @@ fun SettingsScreen(
     ) {
         val sections = remember { mutableStateMapOf<String, Boolean>() }
         Text("Settings", style = MaterialTheme.typography.titleMedium)
-        DeveloperPanel()
+        UserProfilePanel(vm,settings)
         ExpandableSectionHeader("Custom wallpaper",sections["wallpaper"]==true,{toggleAccordion(sections,"wallpaper")}){WallpaperSettings(vm,settings)}
         ExpandableSectionHeader("Local crash diagnostics",sections["crash"]==true,{toggleAccordion(sections,"crash")}){LocalCrashPanel()}
         ExpandableSectionHeader("Appearance", sections["appearance"] == true, { toggleAccordion(sections,"appearance") }) {
@@ -573,11 +597,19 @@ fun SettingsScreen(
         }
         StudioToggleRow("Glass interface", settings.glassEnabled) { value -> vm.updateSettings { it.copy(glassEnabled = value) } }
         if (settings.glassEnabled) {
-            StudioSlider("Panel opacity", settings.glassOpacity * 100f, 65f, 100f, 82f, "%", 1f, onValueChange = { value -> vm.updateSettings { it.copy(glassOpacity = value / 100f) } })
+            StudioSlider("Panel opacity", settings.glassOpacity * 100f, 30f, 100f, 62f, "%", 1f, onValueChange = { value -> vm.updateSettings { it.copy(glassOpacity = value / 100f) } })
             StudioSlider("Artwork backdrop blur", settings.backdropBlurDp, 0f, 48f, 24f, "dp", 1f, onValueChange = { value -> vm.updateSettings { it.copy(backdropBlurDp = value) } })
-            Text("Artwork blur uses Android 12+; older devices use a lightweight gradient.", style = MaterialTheme.typography.bodySmall, color = palette.textSecondary)
+            Text("Blur uses wallpaper, album art or sampled preview frames. Lower panel opacity to reveal the glass.", style = MaterialTheme.typography.bodySmall, color = palette.textSecondary)
         }
-        StudioSlider("Corner radius", settings.cornerRadiusDp, 0f, 28f, 12f, "dp", 1f, onValueChange = { value -> vm.updateSettings { it.copy(cornerRadiusDp = value) } })
+        StudioToggleRow("Separate corner controls",settings.separateCornerRadii){v->vm.updateSettings{it.copy(separateCornerRadii=v)}}
+        if(!settings.separateCornerRadii)StudioSlider("Global corner radius", settings.cornerRadiusDp, 0f, 28f, 12f, "dp", 1f, onValueChange = { value -> vm.updateSettings { it.copy(cornerRadiusDp = value) } })
+        else{
+            StudioSlider("Cards & lists",settings.cardRadiusDp,0f,40f,12f,"dp",1f,onValueChange={v->vm.updateSettings{it.copy(cardRadiusDp=v)}})
+            StudioSlider("Buttons & chips",settings.buttonRadiusDp,0f,40f,12f,"dp",1f,onValueChange={v->vm.updateSettings{it.copy(buttonRadiusDp=v)}})
+            StudioSlider("Dialogs",settings.dialogRadiusDp,0f,40f,20f,"dp",1f,onValueChange={v->vm.updateSettings{it.copy(dialogRadiusDp=v)}})
+            StudioSlider("Navigation",settings.navigationRadiusDp,0f,40f,32f,"dp",1f,onValueChange={v->vm.updateSettings{it.copy(navigationRadiusDp=v)}})
+            StudioSlider("Music player",settings.playerRadiusDp,0f,40f,16f,"dp",1f,onValueChange={v->vm.updateSettings{it.copy(playerRadiusDp=v)}})
+        }
         StudioSlider("Slider control size", settings.controlScale, 0.85f, 1.25f, 1f, "x", 0.05f, onValueChange = { value -> vm.updateSettings { it.copy(controlScale = value) } })
         StudioSlider("Interface text size", settings.uiTextScale, 0.9f, 1.25f, 1f, "x", 0.05f, onValueChange = { value -> vm.updateSettings { it.copy(uiTextScale = value) } })
 
@@ -591,7 +623,7 @@ fun SettingsScreen(
         StudioToggleRow("Live preview diagnostics",settings.showPreviewDiagnostics){v->vm.updateSettings{it.copy(showPreviewDiagnostics=v)}}
         Text("Reports measured render callbacks, CPU submission time and estimated texture/FBO allocation. Not total GPU memory or GPU execution time.",style=MaterialTheme.typography.labelSmall)
         Text("Lower preview resolution reduces GPU load. MP4 export resolution stays unchanged.",style=MaterialTheme.typography.labelSmall)
-        TextButton(onClick = { vm.updateSettings { current -> current.copy(themePreset = ThemePreset.LIME_STUDIO, customAccentArgb = 0xFFC5F84A.toInt(), glassEnabled = true, glassOpacity = 0.82f, backdropBlurDp = 24f, cornerRadiusDp = 12f, controlScale = 1f, uiTextScale = 1f, previewFps = 30, previewScale=1f, adaptivePreview=false, showPreviewDiagnostics=false, previewShare = 0.41f, portraitOverlay = false) } }) { Text("RESET INTERFACE SETTINGS") }
+        TextButton(onClick = { vm.updateSettings { current -> current.copy(themePreset = ThemePreset.LIME_STUDIO, customAccentArgb = 0xFFC5F84A.toInt(), glassEnabled = true, glassOpacity = 0.62f, backdropBlurDp = 36f, cornerRadiusDp = 12f, separateCornerRadii=false, cardRadiusDp=12f, buttonRadiusDp=12f, dialogRadiusDp=20f, navigationRadiusDp=32f, playerRadiusDp=16f, controlScale = 1f, uiTextScale = 1f, previewFps = 30, previewScale=1f, adaptivePreview=false, showPreviewDiagnostics=false, previewShare = 0.41f, portraitOverlay = false) } }) { Text("RESET INTERFACE SETTINGS") }
 
         }
         ExpandableSectionHeader("Audio analysis", sections["audio"] == true, { toggleAccordion(sections,"audio") }) {
@@ -608,6 +640,8 @@ fun SettingsScreen(
             vm.updateSettings { it.copy(showPropertyHelpHints = show) }
         }
         }
+        ExpandableSectionHeader("About Vexo",sections["about"]==true,{toggleAccordion(sections,"about")}){AboutVexoPanel()}
+        DeveloperPanel()
     }
 }
 
@@ -658,7 +692,7 @@ private fun WallpaperSettings(vm:StudioViewModel,settings:AppSettings){
     }
     StudioSlider("Wallpaper blur",settings.wallpaperBlurDp,0f,48f,16f,"dp",1f,onValueChange={v->vm.updateSettings{it.copy(wallpaperBlurDp=v)}})
     StudioSlider("Wallpaper dim",settings.wallpaperDim*100f,25f,95f,72f,"%",1f,onValueChange={v->vm.updateSettings{it.copy(wallpaperDim=v/100f)}})
-    Text("UI only. Blur uses Android 12+; wallpaper never enters exported video.",style=MaterialTheme.typography.labelSmall,color=p.textSecondary)
+    Text("UI only. With glass enabled, backdrop blur is also applied to wallpaper. Never enters exported video.",style=MaterialTheme.typography.labelSmall,color=p.textSecondary)
 }
 @Composable
 private fun DeveloperPanel(){
@@ -677,5 +711,18 @@ private fun DeveloperPanel(){
             TextButton(onClick={links.openUri("https://github.com/jhaa2k/Vexo-Audio-Visualization")}){Text("REPOSITORY")}
         }
         TextButton(onClick={links.openUri("https://github.com/jhaa2k/Vexo-Audio-Visualization/releases")}){Text("LATEST APP / RELEASES")}
+    }
+}
+
+@Composable
+private fun AboutVexoPanel(){
+    val p=LocalVexoPalette.current
+    Column(Modifier.fillMaxWidth().padding(8.dp),verticalArrangement=Arrangement.spacedBy(6.dp)){
+        Text("VEXO AUDIO VISUALIZATION",style=MaterialTheme.typography.titleMedium,color=p.accent)
+        Text("Version "+com.vexo.studio.BuildConfig.VERSION_NAME+" · Android 7+",style=MaterialTheme.typography.labelSmall,color=p.textSecondary)
+        Text("Native audio visualization studio for creating music-reactive videos, editing compositions, layers and effects, managing local audio, and exporting MP4.",style=MaterialTheme.typography.bodySmall,color=p.textPrimary)
+        Text("Projects, presets, creator profile and settings are stored locally. Export resolution and frame rate depend on device encoder capabilities. Artwork and UI backdrop are separate from exported scenes.",style=MaterialTheme.typography.bodySmall,color=p.textSecondary)
+        Text("Native .vixo archives contain the project scene and linked local media. Legacy .vex and supported Avee files can still be imported.",style=MaterialTheme.typography.bodySmall,color=p.textSecondary)
+        Text("Built with Kotlin, Jetpack Compose, Media3 and OpenGL ES.",style=MaterialTheme.typography.labelSmall,color=p.textSecondary)
     }
 }

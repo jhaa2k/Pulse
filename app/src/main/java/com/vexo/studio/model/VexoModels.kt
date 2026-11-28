@@ -749,7 +749,8 @@ data class ExportSettings(
     val offscreenSmoothEdges: Boolean = true,
     val highResolutionTextures: Boolean = true,
     val customOutputUri: String? = null,
-    val adaptiveVideoBitrate:Boolean=false
+    val adaptiveVideoBitrate:Boolean=false,
+    val outputFileName: String = ""
 )
 
 @Serializable
@@ -800,6 +801,12 @@ data class AppSettings(
     val glassOpacity: Float = 0.82f,
     val backdropBlurDp: Float = 24f,
     val cornerRadiusDp: Float = 12f,
+    val separateCornerRadii: Boolean = false,
+    val cardRadiusDp: Float = 12f,
+    val buttonRadiusDp: Float = 12f,
+    val dialogRadiusDp: Float = 20f,
+    val navigationRadiusDp: Float = 32f,
+    val playerRadiusDp: Float = 16f,
     val controlScale: Float = 1f,
     val uiTextScale: Float = 1f,
     val previewFps: Int = 30,
@@ -808,7 +815,11 @@ data class AppSettings(
     val wallpaperUri: String = "",
     val wallpaperBlurDp: Float = 16f,
     val wallpaperDim: Float = .72f,
-    val customAccentAllThemes: Boolean = false
+    val customAccentAllThemes: Boolean = false,
+    val profileName: String = "",
+    val profileGender: String = "",
+    val profileBio: String = "",
+    val profilePhotoUri: String = ""
 )
 
 @Serializable

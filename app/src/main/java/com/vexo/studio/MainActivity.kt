@@ -9,6 +9,10 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.Image
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.asImageBitmap
@@ -104,6 +108,9 @@ class MainActivity : ComponentActivity() {
         // The launch drawable must not remain behind SurfaceView holes in task snapshots.
         window.setBackgroundDrawableResource(android.R.color.black)
         window.decorView.setBackgroundColor(android.graphics.Color.BLACK)
+        window.setFormat(android.graphics.PixelFormat.OPAQUE)
+        @Suppress("DEPRECATION")
+        setTaskDescription(android.app.ActivityManager.TaskDescription("Vexo",null,android.graphics.Color.BLACK))
         setContent {
             val vm: StudioViewModel = viewModel()
             val loaded by vm.loadedSettings.collectAsState()
@@ -176,7 +183,7 @@ private fun VexoRootApp(vm: StudioViewModel, settings:com.vexo.studio.model.AppS
         ActivityResultContracts.OpenDocument()
     ) { uri ->
         if (uri != null) {
-            val name = DocumentFile.fromSingleUri(context, uri)?.name ?: "project.VEX"
+            val name = DocumentFile.fromSingleUri(context, uri)?.name ?: "project.vixo"
             vm.importPresetFromUri(uri, name)
         }
     }
@@ -189,10 +196,20 @@ private fun VexoRootApp(vm: StudioViewModel, settings:com.vexo.studio.model.AppS
         }
     }
 
+    val projectImportPicker=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()){uri->
+        if(uri!=null){val name=DocumentFile.fromSingleUri(context,uri)?.name?:"project.vixo";vm.importProjectFromUri(uri,name)}
+    }
+    var exportProjectId by rememberSaveable{mutableStateOf("")}
+    val projectExportPicker=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")){uri->
+        if(uri!=null&&exportProjectId.isNotBlank())vm.exportSavedProjectToUri(exportProjectId,uri)
+        exportProjectId=""
+    }
+
     val exportDestPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("video/mp4")
     ) { uri ->
         if (uri != null) {
+            runCatching{context.contentResolver.takePersistableUriPermission(uri,android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION)}
             vm.updateExportSettings { it.copy(customOutputUri = uri.toString()) }
         }
     }
@@ -200,29 +217,32 @@ private fun VexoRootApp(vm: StudioViewModel, settings:com.vexo.studio.model.AppS
     val wallpaper by androidx.compose.runtime.produceState<android.graphics.Bitmap?>(null,settings.wallpaperUri){
         value=kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO){com.vexo.studio.data.UiWallpaper.decode(context,settings.wallpaperUri)}
     }
+    var sceneGlass by remember(uiState.project.id){mutableStateOf<android.graphics.Bitmap?>(null)}
     Box(Modifier.fillMaxSize().background(palette.bg)) {
         if(wallpaper!=null){
-            Image(bitmap=wallpaper!!.asImageBitmap(),contentDescription=null,contentScale=ContentScale.Crop,modifier=Modifier.fillMaxSize().blur(settings.wallpaperBlurDp.coerceIn(0f,48f).dp))
+            com.vexo.studio.ui.components.BlurredBackdrop(wallpaper!!,if(settings.glassEnabled)maxOf(settings.wallpaperBlurDp,settings.backdropBlurDp) else settings.wallpaperBlurDp,Modifier.fillMaxSize())
             Box(Modifier.fillMaxSize().background(palette.bg.copy(alpha=settings.wallpaperDim.coerceIn(.25f,.95f))))
-        } else if (settings.glassEnabled && uiState.navDestination != NavDestination.STUDIO) {
+        } else if (settings.glassEnabled) {
             val artwork = playback.trackMeta.artwork
-            if (artwork != null && Build.VERSION.SDK_INT >= 31) {
-                Image(bitmap = artwork.asImageBitmap(), contentDescription = null, contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize().blur(settings.backdropBlurDp.coerceIn(0f, 48f).dp))
-                Box(Modifier.fillMaxSize().background(palette.bg.copy(alpha = 0.68f)))
+            if (artwork != null) {
+                com.vexo.studio.ui.components.BlurredBackdrop(artwork,settings.backdropBlurDp,Modifier.fillMaxSize())
+                Box(Modifier.fillMaxSize().background(palette.bg.copy(alpha = 0.36f)))
+            } else if(sceneGlass!=null){
+                Image(bitmap=sceneGlass!!.asImageBitmap(),contentDescription=null,contentScale=ContentScale.Crop,modifier=Modifier.fillMaxSize())
+                Box(Modifier.fillMaxSize().background(palette.bg.copy(alpha=.36f)))
             } else {
                 Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(palette.panelElevated, palette.bg))))
             }
         }
     Scaffold(
-        containerColor = if (wallpaper!=null || (settings.glassEnabled && uiState.navDestination != NavDestination.STUDIO)) Color.Transparent else palette.bg,
+        containerColor = if (wallpaper!=null || (settings.glassEnabled)) Color.Transparent else palette.bg,
         contentColor = palette.textPrimary,
         topBar = {
             if (!uiState.isFullscreenPreview) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(palette.panel)
+                        .background(palette.glassPanel)
                         .statusBarsPadding()
                         .padding(horizontal = 8.dp, vertical = 2.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -274,29 +294,21 @@ private fun VexoRootApp(vm: StudioViewModel, settings:com.vexo.studio.model.AppS
                 if (uiState.navDestination!=NavDestination.STUDIO && playback.queue.isNotEmpty()) {
                     com.vexo.studio.ui.screens.CompactTransportBar(playback, {vm.playbackController.togglePlayPause()}, {vm.playbackController.previous()}, {vm.playbackController.next()}, {vm.playbackController.seekTo(it)}, {audioPicker.launch(arrayOf("audio/*"))}, Modifier.fillMaxWidth().padding(horizontal=8.dp))
                 }
-                val navState=rememberLazyListState()
-                val destinations=NavDestination.entries.filter{it!=NavDestination.STUDIO&&it!=NavDestination.TEMPLATES}
-                val activeIndex=if(uiState.navDestination==NavDestination.STUDIO)StudioTab.entries.indexOf(uiState.studioTab) else StudioTab.entries.size+destinations.indexOf(uiState.navDestination)
-                LaunchedEffect(activeIndex){if(activeIndex>=0&&navState.layoutInfo.visibleItemsInfo.none{it.index==activeIndex})navState.animateScrollToItem(activeIndex)}
-                Surface(modifier=Modifier.fillMaxWidth().padding(horizontal=6.dp,vertical=4.dp),shape=palette.shape,color=palette.panel,tonalElevation=2.dp,shadowElevation=3.dp){
-                    LazyRow(state=navState,modifier=Modifier.fillMaxWidth().padding(horizontal=4.dp,vertical=3.dp),
-                        horizontalArrangement=Arrangement.spacedBy(2.dp),verticalAlignment=Alignment.CenterVertically){
-                        items(StudioTab.entries.size){i->
-                            val tab=StudioTab.entries[i]
-                            val glyph=when(tab){StudioTab.LAYERS->Icons.Outlined.Layers;StudioTab.PROPERTIES->Icons.Outlined.Tune;StudioTab.ASSETS->Icons.Outlined.Image;StudioTab.PRESETS->Icons.Outlined.Dashboard}
-                            StudioNavItem(tab.label,glyph,uiState.navDestination==NavDestination.STUDIO&&uiState.studioTab==tab){vm.navigateTo(NavDestination.STUDIO);vm.selectStudioTab(tab)}
-                        }
-                        items(destinations.size){i->
-                            val dest=destinations[i]
+                val destinations=listOf(NavDestination.STUDIO,NavDestination.PROJECTS,NavDestination.AUDIO,NavDestination.EXPORT,NavDestination.SETTINGS)
+                Surface(modifier=Modifier.fillMaxWidth().padding(horizontal=12.dp,vertical=4.dp),shape=palette.navShape,color=palette.glassPanel,tonalElevation=0.dp,shadowElevation=0.dp,border=androidx.compose.foundation.BorderStroke(1.dp,palette.border)){
+                    Row(Modifier.fillMaxWidth().padding(4.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(2.dp)){
+                        destinations.forEach{dest->
                             val glyph=when(dest){
-                                NavDestination.STUDIO->Icons.Outlined.Tune
+                                NavDestination.STUDIO->Icons.Outlined.Dashboard
                                 NavDestination.PROJECTS->Icons.Outlined.FolderOpen
                                 NavDestination.AUDIO->Icons.Outlined.LibraryMusic
                                 NavDestination.TEMPLATES->Icons.Outlined.Dashboard
                                 NavDestination.EXPORT->Icons.Outlined.FileUpload
                                 NavDestination.SETTINGS->Icons.Outlined.Settings
                             }
-                            StudioNavItem(dest.label,glyph,uiState.navDestination==dest){vm.navigateTo(dest)}
+                            Box(Modifier.weight(1f),contentAlignment=Alignment.Center){
+                                StudioNavItem(dest.label,glyph,uiState.navDestination==dest){vm.navigateTo(dest)}
+                            }
                         }
                     }
                 }
@@ -321,9 +333,10 @@ private fun VexoRootApp(vm: StudioViewModel, settings:com.vexo.studio.model.AppS
                         imagePicker.launch(arrayOf("image/*", "video/*"))
                     },
                     onImportPreset = { presetImportPicker.launch(arrayOf("application/json", "application/octet-stream", "*/*")) },
-                    onExportPreset = { presetExportPicker.launch("${uiState.project.name}.VEX") }
+                    onExportPreset = { presetExportPicker.launch(com.vexo.studio.data.VixoFileName.create(uiState.project.name)) },
+                    onSceneGlass={sceneGlass=it}
                 )
-                NavDestination.PROJECTS -> ProjectsScreen(vm = vm, uiState = uiState)
+                NavDestination.PROJECTS -> ProjectsScreen(vm=vm,uiState=uiState,onImportProject={projectImportPicker.launch(arrayOf("*/*"))},onExportProject={id,name->exportProjectId=id;projectExportPicker.launch(com.vexo.studio.data.VixoFileName.create(name))})
                 NavDestination.AUDIO -> AudioLibraryScreen(
                     vm = vm,
                     playback = playback,
@@ -335,7 +348,7 @@ private fun VexoRootApp(vm: StudioViewModel, settings:com.vexo.studio.model.AppS
                     uiState = uiState,
                     playback = playback,
                     exportState = exportState,
-                    onPickExportUri = { exportDestPicker.launch("${uiState.project.name}.mp4") }
+                    onPickExportUri = { filename -> exportDestPicker.launch(filename) }
                 )
                 NavDestination.SETTINGS -> SettingsScreen(vm = vm, settings = settings)
             }
@@ -357,16 +370,15 @@ private fun VexoRootApp(vm: StudioViewModel, settings:com.vexo.studio.model.AppS
 
     }
 
-    uiState.pendingPreset?.let{tpl->AlertDialog(onDismissRequest={vm.resolvePresetSwitch(false,false)},title={Text("UNSAVED EDITS")},text={Text("Apply "+tpl.name+"? Save the current edits first, or discard them. Music and canvas ratio will stay unchanged.")},confirmButton={TextButton(onClick={vm.resolvePresetSwitch(true,false)}){Text("SAVE & APPLY")}},dismissButton={Row{TextButton(onClick={vm.resolvePresetSwitch(false,true)}){Text("DISCARD & APPLY")};TextButton(onClick={vm.resolvePresetSwitch(false,false)}){Text("CANCEL")}}})}
+    uiState.pendingPreset?.let{tpl->
+        UnsavedSwitchDialog("Apply "+tpl.name+"? Save your edits first, or discard them. Music and canvas ratio stay unchanged.","APPLY",{vm.resolvePresetSwitch(true,false)},{vm.resolvePresetSwitch(false,true)},{vm.resolvePresetSwitch(false,false)})
+    }
     uiState.pendingProjectSwitch?.let{target->
         val action=when(target){
             is com.vexo.studio.ui.ProjectSwitch.Open->"OPEN PROJECT"
             is com.vexo.studio.ui.ProjectSwitch.Create->"CREATE PROJECT"
         }
-        AlertDialog(onDismissRequest={vm.resolveProjectSwitch(false,false)},title={Text("UNSAVED EDITS")},
-            text={Text("Save the current project before switching, discard unsaved changes, or cancel to continue editing.")},
-            confirmButton={TextButton(onClick={vm.resolveProjectSwitch(true,false)}){Text("SAVE & "+action)}},
-            dismissButton={Column{TextButton(onClick={vm.resolveProjectSwitch(false,true)}){Text("DISCARD & "+action)};TextButton(onClick={vm.resolveProjectSwitch(false,false)}){Text("CANCEL")}}})
+        UnsavedSwitchDialog("Save the current project before switching, discard unsaved changes, or cancel to continue editing.",action,{vm.resolveProjectSwitch(true,false)},{vm.resolveProjectSwitch(false,true)},{vm.resolveProjectSwitch(false,false)})
     }
     pendingImage?.let { uri ->
         val targetMatches = uiState.project.id == pendingImageProject &&
@@ -415,10 +427,24 @@ private fun VexoRootApp(vm: StudioViewModel, settings:com.vexo.studio.model.AppS
 @Composable
 private fun StudioNavItem(label:String,glyph:ImageVector,active:Boolean,onClick:()->Unit){
     val p=LocalVexoPalette.current
-    Column(Modifier.widthIn(min=76.dp).heightIn(min=64.dp).clip(p.shape).semantics{selected=active}.clickable(onClick=onClick).padding(horizontal=8.dp,vertical=5.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(3.dp)){
-        Box(Modifier.widthIn(min=48.dp).height(32.dp).background(if(active)p.accent else Color.Transparent,p.shape),contentAlignment=Alignment.Center){
-            Icon(glyph,label,tint=if(active)p.accentOn else p.textSecondary,modifier=Modifier.size(23.dp))
+    val fill by animateColorAsState(if(active)p.accent else Color.Transparent,label="nav selection")
+    Box(Modifier.fillMaxWidth().height(48.dp).clip(p.navShape).background(fill,p.navShape).semantics{selected=active;contentDescription=label}.clickable(onClick=onClick),contentAlignment=Alignment.Center){
+        Icon(glyph,null,tint=if(active)p.accentOn else p.textSecondary,modifier=Modifier.size(23.dp))
+    }
+}
+
+@Composable
+private fun UnsavedSwitchDialog(message:String,action:String,onSave:()->Unit,onDiscard:()->Unit,onCancel:()->Unit){
+    val p=LocalVexoPalette.current
+    androidx.compose.ui.window.Dialog(onDismissRequest=onCancel){
+        Surface(shape=p.dialogShape,color=p.panelElevated,modifier=Modifier.fillMaxWidth()){
+            Column(Modifier.fillMaxWidth().heightIn(max=460.dp).verticalScroll(rememberScrollState()).padding(18.dp),verticalArrangement=Arrangement.spacedBy(10.dp)){
+                Text("UNSAVED EDITS",style=MaterialTheme.typography.titleLarge,color=p.textPrimary)
+                Text(message,style=MaterialTheme.typography.bodyMedium,color=p.textSecondary)
+                androidx.compose.material3.Button(onClick=onSave,modifier=Modifier.fillMaxWidth(),shape=p.buttonShape){Text("SAVE & "+action)}
+                androidx.compose.material3.OutlinedButton(onClick=onDiscard,modifier=Modifier.fillMaxWidth(),shape=p.buttonShape){Text("DISCARD & "+action,color=p.danger)}
+                TextButton(onClick=onCancel,modifier=Modifier.fillMaxWidth()){Text("CANCEL")}
+            }
         }
-        Text(label,style=MaterialTheme.typography.labelSmall,fontWeight=if(active)FontWeight.SemiBold else FontWeight.Medium,color=if(active)p.accent else p.textSecondary,maxLines=1)
     }
 }

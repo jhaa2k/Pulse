@@ -6,6 +6,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.setProgress
@@ -124,6 +125,7 @@ import com.vexo.studio.model.WindowType
 import com.vexo.studio.playback.PlaybackUiState
 import com.vexo.studio.ui.StudioUiState
 import com.vexo.studio.ui.StudioViewModel
+import com.vexo.studio.ui.components.drawStudioTrack
 import com.vexo.studio.ui.components.RegisteredSlider
 import com.vexo.studio.ui.components.StudioChipSelector
 import com.vexo.studio.ui.components.StudioColorPickerRow
@@ -142,7 +144,8 @@ fun EditorScreen(
     onPickAudio: () -> Unit,
     onPickImage: () -> Unit,
     onImportPreset: () -> Unit,
-    onExportPreset: () -> Unit
+    onExportPreset: () -> Unit,
+    onSceneGlass:((android.graphics.Bitmap?)->Unit)?=null
 ) {
     val palette = LocalVexoPalette.current
     val configuration = LocalConfiguration.current
@@ -150,59 +153,36 @@ fun EditorScreen(
     val previewShare = settings.previewShare.takeIf{it.isFinite()}?.coerceIn(0.30f, 0.65f)?:.41f
 
     if (uiState.isFullscreenPreview) {
-        val aspect=uiState.project.canvas.aspectRatio
-        var landscapePreview by rememberSaveable(aspect){mutableStateOf(aspect.widthRatio>aspect.heightRatio)}
+        var landscapePreview by rememberSaveable { mutableStateOf(false) }
+        var glassFrame by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
         FullscreenPreviewOrientation(landscapePreview,vm::toggleFullscreenPreview)
-        Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-            VexoPreviewSurface(
-                aspectRatio = uiState.project.canvas.aspectRatio,
-                sceneSnapshot = sceneSnapshot.collectAsState().value,
-                onTransformGesture = vm::updatePreviewTransform,
-                modifier = Modifier.fillMaxSize(),
-                fillBounds = false,
-                targetFps = settings.previewFps,
-                renderScale = settings.previewScale,
-                showDiagnostics = settings.showPreviewDiagnostics,
-                adaptiveQuality = settings.adaptivePreview,
-                continuousRendering = playback.isPlaying || settings.pauseBehavior != PauseBehavior.FREEZE
-            )
-            Row(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(6.dp)
-                    .background(palette.panel.copy(alpha = 0.85f))
-                    .border(1.dp, palette.border, palette.shape),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = vm::resetPreviewCamera) {
-                    Icon(Icons.Outlined.CropFree, "Reset camera", tint = palette.textPrimary)
-                }
-                IconButton(onClick = vm::toggleSafeAreaGuides) {
-                    Icon(
-                        Icons.Outlined.GridOn,
-                        "Safe area",
-                        tint = if (uiState.project.canvas.showSafeAreaGuides) palette.accent else palette.textSecondary
-                    )
-                }
-                IconButton(onClick = {landscapePreview=!landscapePreview}) {
-                    Icon(Icons.Outlined.Refresh, "Rotate fullscreen", tint = palette.textPrimary)
-                }
-                IconButton(onClick = vm::toggleFullscreenPreview) {
-                    Icon(Icons.Outlined.FullscreenExit, "Exit fullscreen", tint = palette.accent)
+        Column(Modifier.fillMaxSize().background(Color.Black),verticalArrangement=Arrangement.spacedBy(4.dp)) {
+            com.vexo.studio.ui.components.SceneGlass(glassFrame,Modifier.fillMaxWidth().height(56.dp).zIndex(2f).padding(horizontal=6.dp,vertical=4.dp)) {
+                Row(Modifier.fillMaxWidth().height(48.dp),verticalAlignment=Alignment.CenterVertically) {
+                    Text(uiState.project.canvas.aspectRatio.label,modifier=Modifier.weight(1f).padding(start=8.dp),style=MaterialTheme.typography.labelMedium,color=palette.textPrimary,maxLines=1)
+                    IconButton(onClick=vm::resetPreviewCamera){Icon(Icons.Outlined.CropFree,"Reset camera",tint=palette.textPrimary)}
+                    IconButton(onClick=vm::toggleSafeAreaGuides){Icon(Icons.Outlined.GridOn,"Safe area",tint=if(uiState.project.canvas.showSafeAreaGuides)palette.accent else palette.textSecondary)}
+                    IconButton(onClick={landscapePreview=!landscapePreview}){Icon(Icons.Outlined.Refresh,"Rotate fullscreen manually",tint=palette.textPrimary)}
+                    IconButton(onClick=vm::toggleFullscreenPreview){Icon(Icons.Outlined.FullscreenExit,"Exit fullscreen",tint=palette.accent)}
                 }
             }
-            CompactTransportBar(
-                playback = playback,
-                onTogglePlay = { vm.playbackController.togglePlayPause() },
-                onPrev = { vm.playbackController.previous() },
-                onNext = { vm.playbackController.next() },
-                onSeek = { vm.playbackController.seekTo(it) },
-                onPickAudio = onPickAudio,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .background(palette.bg.copy(alpha = 0.86f))
+            VexoPreviewSurface(
+                aspectRatio=uiState.project.canvas.aspectRatio,
+                sceneSnapshot=sceneSnapshot.collectAsState().value,
+                onTransformGesture=vm::updatePreviewTransform,
+                modifier=Modifier.weight(1f).fillMaxWidth(),
+                fillBounds=false,
+                targetFps=settings.previewFps,
+                renderScale=settings.previewScale,
+                showDiagnostics=settings.showPreviewDiagnostics,
+                adaptiveQuality=settings.adaptivePreview,
+                continuousRendering=playback.isPlaying||settings.pauseBehavior!=PauseBehavior.FREEZE,
+                glassBlurDp=if(settings.glassEnabled)settings.backdropBlurDp else null,
+                onGlassFrame={glassFrame=it;onSceneGlass?.invoke(it)}
             )
+            com.vexo.studio.ui.components.SceneGlass(glassFrame,Modifier.fillMaxWidth().padding(horizontal=6.dp,vertical=4.dp)) {
+                CompactTransportBar(playback,{vm.playbackController.togglePlayPause()},{vm.playbackController.previous()},{vm.playbackController.next()},{vm.playbackController.seekTo(it)},onPickAudio,Modifier.fillMaxWidth(),glassBacked=true)
+            }
         }
         return
     }
@@ -219,6 +199,7 @@ fun EditorScreen(
                 showDiagnostics = settings.showPreviewDiagnostics,
                 adaptiveQuality = settings.adaptivePreview,
                     continuousRendering = playback.isPlaying || settings.pauseBehavior != PauseBehavior.FREEZE,
+                    glassBlurDp=if(settings.glassEnabled)settings.backdropBlurDp else null,onGlassFrame=onSceneGlass,
                     modifier = Modifier.weight(1f).fillMaxWidth()
                 )
                 CompactTransportBar(
@@ -248,17 +229,20 @@ fun EditorScreen(
             )
         }
     } else if (settings.portraitOverlay && uiState.project.canvas.aspectRatio.heightRatio > uiState.project.canvas.aspectRatio.widthRatio) {
+        var glassFrame by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
         Box(Modifier.fillMaxSize()) {
             PreviewBlock(vm, uiState, sceneSnapshot, settings.previewFps,
                 playback.isPlaying || settings.pauseBehavior != PauseBehavior.FREEZE,
-                modifier = Modifier.fillMaxSize(),renderScale=settings.previewScale,showDiagnostics=settings.showPreviewDiagnostics,adaptiveQuality=settings.adaptivePreview)
-            Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().fillMaxHeight(1f - previewShare).background(palette.panel).clipToBounds()) {
-                CompactTransportBar(playback, { vm.playbackController.togglePlayPause() }, { vm.playbackController.previous() }, { vm.playbackController.next() }, { vm.playbackController.seekTo(it) }, onPickAudio, Modifier.fillMaxWidth())
-                StudioWorkspacePanel(vm, uiState, settings, onPickImage, onImportPreset, onExportPreset, Modifier.weight(1f).fillMaxWidth())
+                modifier = Modifier.fillMaxSize(),renderScale=settings.previewScale,showDiagnostics=settings.showPreviewDiagnostics,adaptiveQuality=settings.adaptivePreview,glassBlurDp=if(settings.glassEnabled)settings.backdropBlurDp else null,onGlassFrame={glassFrame=it;onSceneGlass?.invoke(it)})
+            com.vexo.studio.ui.components.SceneGlass(glassFrame,Modifier.align(Alignment.BottomCenter).fillMaxWidth().fillMaxHeight(1f - previewShare).padding(horizontal=4.dp)) {
+            Column(Modifier.fillMaxSize().clipToBounds()) {
+                CompactTransportBar(playback, { vm.playbackController.togglePlayPause() }, { vm.playbackController.previous() }, { vm.playbackController.next() }, { vm.playbackController.seekTo(it) }, onPickAudio, Modifier.fillMaxWidth(),glassBacked=true)
+                StudioWorkspacePanel(vm, uiState, settings, onPickImage, onImportPreset, onExportPreset, Modifier.weight(1f).fillMaxWidth(),glassBacked=true)
+            }
             }
         }
     } else {
-        Column(modifier = Modifier.fillMaxSize().background(palette.bg).clipToBounds()) {
+        Column(modifier = Modifier.fillMaxSize().clipToBounds()) {
             PreviewBlock(
                 vm = vm,
                 uiState = uiState,
@@ -268,6 +252,7 @@ fun EditorScreen(
                 showDiagnostics = settings.showPreviewDiagnostics,
                 adaptiveQuality = settings.adaptivePreview,
                 continuousRendering = playback.isPlaying || settings.pauseBehavior != PauseBehavior.FREEZE,
+                glassBlurDp=if(settings.glassEnabled)settings.backdropBlurDp else null,onGlassFrame=onSceneGlass,
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(previewShare)
@@ -306,11 +291,13 @@ private fun PreviewBlock(
     modifier: Modifier = Modifier,
     renderScale: Float = 1f,
     showDiagnostics:Boolean=false,
-    adaptiveQuality:Boolean=false
+    adaptiveQuality:Boolean=false,
+    glassBlurDp:Float?=null,
+    onGlassFrame:((android.graphics.Bitmap?)->Unit)?=null
 ) {
     val palette = LocalVexoPalette.current
-    Column(modifier=modifier.background(palette.panel).clipToBounds()){
-        Row(Modifier.fillMaxWidth().background(palette.panel).horizontalScroll(rememberScrollState()).padding(horizontal=4.dp),verticalAlignment=Alignment.CenterVertically){
+    Column(modifier=modifier.clipToBounds()){
+        Row(Modifier.fillMaxWidth().background(palette.glassPanel).horizontalScroll(rememberScrollState()).padding(horizontal=4.dp),verticalAlignment=Alignment.CenterVertically){
             IconButton(onClick=vm::undo,enabled=uiState.canUndo,modifier=Modifier.size(32.dp)){Icon(Icons.Outlined.Undo,"Undo",modifier=Modifier.size(17.dp),tint=if(uiState.canUndo)palette.textPrimary else palette.border)}
             IconButton(onClick=vm::redo,enabled=uiState.canRedo,modifier=Modifier.size(32.dp)){Icon(Icons.Outlined.Redo,"Redo",modifier=Modifier.size(17.dp),tint=if(uiState.canRedo)palette.textPrimary else palette.border)}
             Row(verticalAlignment=Alignment.CenterVertically){
@@ -328,7 +315,7 @@ private fun PreviewBlock(
             IconButton(onClick=vm::resetPreviewCamera,modifier=Modifier.size(32.dp)){Icon(Icons.Outlined.CropFree,"Reset zoom",tint=palette.textSecondary,modifier=Modifier.size(16.dp))}
             IconButton(onClick=vm::toggleFullscreenPreview,modifier=Modifier.size(32.dp)){Icon(Icons.Outlined.Fullscreen,"Fullscreen",tint=palette.textPrimary,modifier=Modifier.size(18.dp))}
         }
-        VexoPreviewSurface(aspectRatio=uiState.project.canvas.aspectRatio,sceneSnapshot=sceneSnapshot.collectAsState().value,onTransformGesture=vm::updatePreviewTransform,modifier=Modifier.weight(1f).fillMaxWidth().clipToBounds(),targetFps=targetFps,continuousRendering=continuousRendering,renderScale=renderScale,showDiagnostics=showDiagnostics,adaptiveQuality=adaptiveQuality)
+        VexoPreviewSurface(aspectRatio=uiState.project.canvas.aspectRatio,sceneSnapshot=sceneSnapshot.collectAsState().value,onTransformGesture=vm::updatePreviewTransform,modifier=Modifier.weight(1f).fillMaxWidth().clipToBounds(),targetFps=targetFps,continuousRendering=continuousRendering,renderScale=renderScale,showDiagnostics=showDiagnostics,adaptiveQuality=adaptiveQuality,glassBlurDp=glassBlurDp,onGlassFrame=onGlassFrame)
     }
 }
 
@@ -340,7 +327,8 @@ fun CompactTransportBar(
     onNext: () -> Unit,
     onSeek: (Long) -> Unit,
     onPickAudio: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    glassBacked:Boolean=false
 ) {
     val palette=LocalVexoPalette.current
     val maxDur=playback.durationMs.coerceAtLeast(1L).toFloat()
@@ -348,7 +336,7 @@ fun CompactTransportBar(
     val pos=(scrub?:playback.positionMs.toFloat()).coerceIn(0f,maxDur)
     val enabled=playback.durationMs>0
     val seek by rememberUpdatedState(onSeek)
-    Column(modifier.background(palette.panel).clipToBounds().padding(horizontal=10.dp,vertical=3.dp)){
+    Column(modifier.padding(horizontal=3.dp,vertical=3.dp) .clip(palette.playerShape).background(if(glassBacked)Color.Transparent else palette.glassPanel,palette.playerShape).border(1.dp,palette.border.copy(alpha=.8f),palette.playerShape).padding(horizontal=10.dp,vertical=4.dp)){
         Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
             Column(Modifier.weight(1f)){
                 Text(if(playback.importTotal>0)"Importing ${playback.importCompleted}/${playback.importTotal}" else if(playback.queue.isEmpty())"Import music" else playback.trackMeta.title,style=MaterialTheme.typography.bodySmall,fontWeight=FontWeight.SemiBold,color=palette.textPrimary,maxLines=1,overflow=TextOverflow.Ellipsis)
@@ -356,7 +344,7 @@ fun CompactTransportBar(
             }
             IconButton(onClick=onPickAudio,modifier=Modifier.size(36.dp)){Icon(Icons.Outlined.FolderOpen,"Import audio",tint=palette.accent,modifier=Modifier.size(18.dp))}
             IconButton(onClick=onPrev,enabled=playback.queue.isNotEmpty(),modifier=Modifier.size(36.dp)){Icon(Icons.Default.SkipPrevious,"Previous",tint=palette.textPrimary,modifier=Modifier.size(20.dp))}
-            IconButton(onClick=onTogglePlay,enabled=playback.queue.isNotEmpty(),modifier=Modifier.size(40.dp).clip(palette.shape).background(palette.accent,palette.shape)){Icon(if(playback.isPlaying)Icons.Default.Pause else Icons.Default.PlayArrow,if(playback.isPlaying)"Pause" else "Play",tint=palette.accentOn,modifier=Modifier.size(23.dp))}
+            IconButton(onClick=onTogglePlay,enabled=playback.queue.isNotEmpty(),modifier=Modifier.size(44.dp).clip(palette.buttonShape).background(if(playback.queue.isNotEmpty())palette.accent else palette.border,palette.buttonShape)){Icon(if(playback.isPlaying)Icons.Default.Pause else Icons.Default.PlayArrow,if(playback.isPlaying)"Pause" else "Play",tint=palette.accentOn,modifier=Modifier.size(23.dp))}
             IconButton(onClick=onNext,enabled=playback.queue.isNotEmpty(),modifier=Modifier.size(36.dp)){Icon(Icons.Default.SkipNext,"Next",tint=palette.textPrimary,modifier=Modifier.size(20.dp))}
         }
         Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)){
@@ -365,15 +353,11 @@ fun CompactTransportBar(
                 progressBarRangeInfo=ProgressBarRangeInfo(pos,0f..maxDur)
                 if(enabled)setProgress{v->seek(v.coerceIn(0f,maxDur).toLong());true}
             }.pointerInput(enabled,maxDur){
-                if(enabled)detectTapGestures{point->val p=((point.x-5.dp.toPx())/(size.width-10.dp.toPx()).coerceAtLeast(1f)).coerceIn(0f,1f)*maxDur;seek(p.toLong())}
+                if(enabled)detectTapGestures{point->val p=((point.x-9.dp.toPx())/(size.width-18.dp.toPx()).coerceAtLeast(1f)).coerceIn(0f,1f)*maxDur;seek(p.toLong())}
             }.pointerInput(enabled,maxDur){
-                if(enabled)detectHorizontalDragGestures(onDragStart={point->scrub=((point.x-5.dp.toPx())/(size.width-10.dp.toPx()).coerceAtLeast(1f)).coerceIn(0f,1f)*maxDur},onDragEnd={scrub?.let{seek(it.toLong())};scrub=null},onDragCancel={scrub=null}){change,_->change.consume();scrub=((change.position.x-5.dp.toPx())/(size.width-10.dp.toPx()).coerceAtLeast(1f)).coerceIn(0f,1f)*maxDur}
+                if(enabled)detectHorizontalDragGestures(onDragStart={point->scrub=((point.x-9.dp.toPx())/(size.width-18.dp.toPx()).coerceAtLeast(1f)).coerceIn(0f,1f)*maxDur},onDragEnd={scrub?.let{seek(it.toLong())};scrub=null},onDragCancel={scrub=null}){change,_->change.consume();scrub=((change.position.x-9.dp.toPx())/(size.width-18.dp.toPx()).coerceAtLeast(1f)).coerceIn(0f,1f)*maxDur}
             }){
-                val pad=5.dp.toPx();val y=size.height*.5f;val end=(size.width-pad).coerceAtLeast(pad);val thumb=pad+(end-pad)*(pos/maxDur)
-                drawLine(palette.border,Offset(pad,y),Offset(end,y),4.dp.toPx(),cap=androidx.compose.ui.graphics.StrokeCap.Round)
-                for(i in 1..19){val x=pad+(end-pad)*i/20f;drawLine(palette.textSecondary.copy(alpha=.3f),Offset(x,y-5.dp.toPx()),Offset(x,y-3.dp.toPx()),1.dp.toPx())}
-                drawLine(palette.accent,Offset(pad,y),Offset(thumb,y),4.dp.toPx(),cap=androidx.compose.ui.graphics.StrokeCap.Round)
-                if(enabled){drawCircle(palette.accent.copy(alpha=.22f),8.dp.toPx(),Offset(thumb,y));drawCircle(palette.accent,5.dp.toPx(),Offset(thumb,y));drawCircle(palette.accentOn,2.dp.toPx(),Offset(thumb,y))}
+                drawStudioTrack(palette,pos/maxDur,enabled)
             }
             Text(formatDuration(playback.durationMs),style=MaterialTheme.typography.labelSmall,color=palette.textSecondary)
         }
@@ -389,11 +373,22 @@ private fun StudioWorkspacePanel(
     onPickImage: () -> Unit,
     onImportPreset: () -> Unit,
     onExportPreset: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    glassBacked:Boolean=false
 ) {
     val palette = LocalVexoPalette.current
-    Column(modifier = modifier.background(if(palette.wallpaperActive)palette.panel.copy(alpha=.65f) else palette.panel).clipToBounds()) {
-        Box(Modifier.weight(1f).fillMaxWidth().clipToBounds().background(if(palette.wallpaperActive)Color.Transparent else palette.bg)) {
+    Column(modifier = modifier.background(if(glassBacked)Color.Transparent else palette.glassPanel).clipToBounds()) {
+        Row(Modifier.fillMaxWidth().padding(horizontal=4.dp,vertical=3.dp),horizontalArrangement=Arrangement.spacedBy(3.dp)){
+            StudioTab.entries.forEach{tab->
+                val selected=uiState.studioTab==tab
+                val icon=when(tab){StudioTab.LAYERS->Icons.Outlined.Layers;StudioTab.PROPERTIES->Icons.Outlined.Tune;StudioTab.ASSETS->Icons.Outlined.Image;StudioTab.PRESETS->Icons.Outlined.Dashboard}
+                Row(Modifier.weight(1f).height(34.dp).clip(palette.buttonShape).background(if(selected)palette.accent else palette.glassElevated,palette.buttonShape).clickable{vm.selectStudioTab(tab)},horizontalArrangement=Arrangement.Center,verticalAlignment=Alignment.CenterVertically){
+                    Icon(icon,tab.label,tint=if(selected)palette.accentOn else palette.textSecondary,modifier=Modifier.size(16.dp))
+                    if(selected)Text(tab.label,style=MaterialTheme.typography.labelSmall,color=palette.accentOn,maxLines=1,overflow=TextOverflow.Ellipsis,modifier=Modifier.padding(start=3.dp))
+                }
+            }
+        }
+        Box(Modifier.weight(1f).fillMaxWidth().clipToBounds()) {
         when (uiState.studioTab) {
             StudioTab.LAYERS -> LayersTab(vm = vm, uiState = uiState)
             StudioTab.PROPERTIES -> PropertiesTab(vm = vm, uiState = uiState, settings = settings)
@@ -511,8 +506,9 @@ private fun LayersTab(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .clip(palette.shape)
+                        .background(if (isSelected) palette.glassElevated else palette.glassPanel,palette.shape)
                         .border(1.dp, if (isSelected) palette.accent else palette.border, palette.shape)
-                        .background(if (isSelected) palette.panelElevated else palette.panel)
                         .clickable { if(multi)selectedIds=if(layer.common.id in selectedIds)selectedIds-layer.common.id else selectedIds+layer.common.id else {vm.selectLayer(layer.common.id); vm.selectStudioTab(StudioTab.PROPERTIES)} }
                         .padding(horizontal = 8.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -1851,7 +1847,7 @@ private fun PresetsTab(
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         LayerPresetLibrary(vm)
-        Text("VEX PROJECT LIBRARY", style = MaterialTheme.typography.labelMedium, color = palette.accent)
+        Text("VIXO PRESET LIBRARY", style = MaterialTheme.typography.labelMedium, color = palette.accent)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Box(
                 modifier = Modifier
@@ -1861,7 +1857,7 @@ private fun PresetsTab(
                     .padding(vertical = 11.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text("OPEN .VEX", style = MaterialTheme.typography.labelSmall, color = palette.accentOn)
+                Text("OPEN .VIXO", style = MaterialTheme.typography.labelSmall, color = palette.accentOn)
             }
             Box(
                 modifier = Modifier
@@ -1872,7 +1868,7 @@ private fun PresetsTab(
                     .padding(vertical = 11.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text("SAVE .VEX", style = MaterialTheme.typography.labelSmall, color = palette.accent)
+                Text("SAVE .VIXO", style = MaterialTheme.typography.labelSmall, color = palette.accent)
             }
         }
 
@@ -2095,7 +2091,7 @@ private fun LayerPresetSavePanel(vm:StudioViewModel,layer:LayerNode){
     var name by remember(layer.common.id){mutableStateOf(layer.common.name)}
     val supported=com.vexo.studio.engine.scene.SceneGraph.referencesOf(layer.config).isEmpty()
     TextButton(enabled=supported,onClick={open=true}){Text("SAVE LAYER PRESET")}
-    if(!supported)Text("Composition-dependent layers can be saved in a VEX project instead.",style=MaterialTheme.typography.labelSmall)
+    if(!supported)Text("Composition-dependent layers can be saved in a VIXO project instead.",style=MaterialTheme.typography.labelSmall)
     if(open)AlertDialog(onDismissRequest={open=false},title={Text("SAVE LAYER STYLE")},text={
         Column{
             OutlinedTextField(name,{name=it.take(60)},label={Text("Preset name")},singleLine=true)
