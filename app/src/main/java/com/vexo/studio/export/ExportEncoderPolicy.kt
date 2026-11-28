@@ -12,6 +12,15 @@ object ExportEncoderPolicy {
             else even(shortSide.toDouble()*wRatio/hRatio) to even(shortSide.toDouble())
     }
     fun samplePreferences(smooth:Boolean):List<Int> = if(smooth)listOf(4,2,0)else listOf(0)
+    /** Large surfaces and high-FPS exports avoid expensive 4x multisample buffers.
+     * Shader effects and exact output dimensions/FPS are unchanged. */
+    fun surfaceSamples(smooth:Boolean,width:Int,height:Int,fps:Int):List<Int> =
+        if(!smooth||width.toLong()*height>1920L*1080||fps>=50)listOf(0)else samplePreferences(true)
+
+    val frameRates=listOf(24,25,30,50,60)
+    fun preferredRate(available:List<Int>,requested:Int):Int? =
+        available.takeIf{requested in it}?.let{requested}
+            ?:available.filter{it<=requested}.maxOrNull()?:available.minOrNull()
 
     /** Resolution/FPS-based starting target; not a content-complexity bitrate estimator. */
     fun targetBitrate(s:ExportSettings):Int {

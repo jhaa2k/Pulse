@@ -29,7 +29,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.yield
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
-import android.media.MediaCodecList
 import java.io.RandomAccessFile
 import java.io.BufferedOutputStream
 import java.io.File
@@ -118,37 +117,11 @@ class VexoVideoExporter(private val context: Context) {
             require(sampleRate in 8000..192000) {"Unsupported audio sample rate: $sampleRate"}
             val requestedDurationUs = endUs - startUs
 
-            // Select supported encoder before spending time decoding audio.
-            fun format(mime:String,bps:Int)=MediaFormat.createVideoFormat(mime,width,height).apply{
-                setInteger(MediaFormat.KEY_COLOR_FORMAT,MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
-                setInteger(MediaFormat.KEY_BIT_RATE,bps)
-                setInteger(MediaFormat.KEY_FRAME_RATE,fps)
-                setInteger(MediaFormat.KEY_I_FRAME_INTERVAL,1)
+            // Same exact capability rules as the export screen.
+            val supported=DeviceExportCapabilities.candidates(settings)
+            check(supported.isNotEmpty()) {
+                "No encoder supports ${width}×${height} at $fps FPS and the selected bitrate. Open export settings and choose a supported combination or automatic bitrate."
             }
-            val codecList=MediaCodecList(MediaCodecList.REGULAR_CODECS)
-            val candidates=if(settings.useHevcIfSupported)listOf(MediaFormat.MIMETYPE_VIDEO_HEVC,MediaFormat.MIMETYPE_VIDEO_AVC) else listOf(MediaFormat.MIMETYPE_VIDEO_AVC)
-            data class Candidate(val mime:String,val format:MediaFormat,val name:String,val bps:Int,val hardware:Boolean)
-            val supported = candidates.flatMap { mime ->
-                val preferred=runCatching{codecList.findEncoderForFormat(format(mime,bitrate))}.getOrNull()
-                codecList.codecInfos.asSequence().filter{it.isEncoder&&it.supportedTypes.any{type->type.equals(mime,true)}}
-                    .mapNotNull{info->runCatching{
-                        val caps=info.getCapabilitiesForType(mime)
-                        val video=caps.videoCapabilities?:return@runCatching null
-                        if(MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface !in caps.colorFormats)return@runCatching null
-                        if(!video.areSizeAndRateSupported(width,height,fps.toDouble()))return@runCatching null
-                        val range=video.bitrateRange
-                        val bps=ExportEncoderPolicy.fitBitrate(bitrate,range.lower,range.upper,settings.adaptiveVideoBitrate)
-                            ?:return@runCatching null
-                        val f=format(mime,bps)
-                        if(!caps.isFormatSupported(f))return@runCatching null
-                        val hardware=if(Build.VERSION.SDK_INT>=29)info.isHardwareAccelerated else
-                            !info.name.startsWith("OMX.google.",true)&&!info.name.startsWith("c2.android.",true)
-                        Candidate(mime,f,info.name,bps,hardware)
-                    }.getOrNull()}.sortedWith(compareByDescending<Candidate>{it.hardware}
-                        .thenBy{ kotlin.math.abs(it.bps.toLong()-bitrate) }.thenByDescending{it.name==preferred})
-                    .toList()
-            }.sortedByDescending{it.hardware}
-            check(supported.isNotEmpty()) { "No compatible encoder for selected resolution, FPS and bitrate. Try automatic bitrate or a lower resolution/FPS." }
             val required=ExportBudget.workingBytes(requestedDurationUs,supported.maxOf{it.bps},settings.audioBitrateKbps.coerceIn(96,320)*1000,sampleRate,channels)
             check(context.cacheDir.usableSpace>=required){"Not enough free cache storage. Need about %.0f MB".format(required/1_000_000.0)}
             onProgress(ExportProgress(isRunning=true,progress=.01f,statusText="Decoding audio"))
@@ -192,7 +165,7 @@ class VexoVideoExporter(private val context: Context) {
                 eglSurface=EGL14.EGL_NO_SURFACE;eglContext=EGL14.EGL_NO_CONTEXT
             }
             fun bindEncoderSurface(input:Surface):Boolean{
-                for(samples in ExportEncoderPolicy.samplePreferences(settings.smoothEdges)){
+                for(samples in ExportEncoderPolicy.surfaceSamples(settings.smoothEdges,width,height,fps)){
                     val attributes=intArrayOf(
                         EGL14.EGL_RED_SIZE,8,EGL14.EGL_GREEN_SIZE,8,EGL14.EGL_BLUE_SIZE,8,EGL14.EGL_ALPHA_SIZE,8,
                         EGL14.EGL_SURFACE_TYPE,EGL14.EGL_WINDOW_BIT,EGL14.EGL_RENDERABLE_TYPE,EGL14.EGL_OPENGL_ES2_BIT,
@@ -247,7 +220,7 @@ class VexoVideoExporter(private val context: Context) {
             videoEncoder = configured.second
             encoderSurface = configured.third
             val codecLabel=if(videoMime==MediaFormat.MIMETYPE_VIDEO_HEVC)"HEVC" else "H.264"
-            val renderLabel="$codecLabel · %.1f Mbps".format(selectedBitrate/1_000_000.0)
+            val renderLabel="${width}×${height} · $fps FPS · $codecLabel · %.1f Mbps".format(selectedBitrate/1_000_000.0)
             onProgress(ExportProgress(isRunning=true,progress=.10f,statusText="Rendering · $renderLabel · $selectedEncoderName"))
 
             // Configure AAC Audio Encoder

@@ -370,6 +370,21 @@ fun ExportScreen(
     val palette = LocalVexoPalette.current
     val exp = uiState.project.exportSettings
     val trackDurMs = playback.durationMs.coerceAtLeast(1000L)
+    // Recompute only when encoder-relevant settings change, off the UI thread.
+    val capabilityState=remember(exp.aspectRatio,exp.adaptiveVideoBitrate,exp.videoBitrateMbps,exp.useHevcIfSupported){
+        mutableStateOf<Map<VideoResolution,List<com.vexo.studio.export.DeviceExportCapabilities.Choice>>?>(null)
+    }
+    androidx.compose.runtime.LaunchedEffect(capabilityState){
+        capabilityState.value=kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO){
+            com.vexo.studio.export.DeviceExportCapabilities.matrix(exp)
+        }
+    }
+    val capabilities=capabilityState.value
+    val resolutions=VideoResolution.entries.filter{capabilities?.get(it).orEmpty().isNotEmpty()}
+    val rates=capabilities?.get(exp.resolution).orEmpty()
+    val currentChoice=rates.firstOrNull{it.fps==exp.fps}
+    val canExport=currentChoice!=null
+    val dimensions=com.vexo.studio.export.ExportEncoderPolicy.dimensions(exp.aspectRatio.widthRatio,exp.aspectRatio.heightRatio,exp.resolution.shortSide)
 
     Column(
         modifier = Modifier
@@ -384,11 +399,22 @@ fun ExportScreen(
             vm.updateExportSettings { it.copy(aspectRatio = ratio) }
             vm.setAspectRatio(ratio)
         }
-        StudioChipSelector("Resolution", VideoResolution.entries, exp.resolution, { it.label }) { res ->
-            vm.updateExportSettings { it.copy(resolution = res) }
-        }
-        StudioChipSelector("Frame Rate", listOf(24, 25, 30, 50, 60), exp.fps, { "$it FPS" }) { fps ->
-            vm.updateExportSettings { it.copy(fps = fps) }
+        if(capabilities==null){
+            Text("CHECKING DEVICE ENCODERS…",style=MaterialTheme.typography.labelSmall,color=palette.textSecondary)
+        }else if(resolutions.isEmpty()){
+            Text("No encoder supports the current ratio and bitrate. Try automatic bitrate or another aspect ratio.",style=MaterialTheme.typography.bodySmall,color=palette.danger)
+        }else{
+            StudioChipSelector("Resolution",resolutions,exp.resolution,{if(it==VideoResolution.QHD_1440)"2K / 1440p" else it.label}){res->
+                val supportedRates=capabilities[res].orEmpty().map{it.fps}
+                val fps=com.vexo.studio.export.ExportEncoderPolicy.preferredRate(supportedRates,exp.fps)
+                if(fps!=null)vm.updateExportSettings{it.copy(resolution=res,fps=fps)}
+            }
+            if(rates.isNotEmpty())StudioChipSelector("Frame Rate",rates.map{it.fps},exp.fps,{"$it FPS"}){fps->
+                vm.updateExportSettings{it.copy(fps=fps)}
+            }
+            if(currentChoice!=null)Text("${dimensions.first} × ${dimensions.second} · ${exp.fps} FPS · ${currentChoice.codec}",color=palette.accent,style=MaterialTheme.typography.labelMedium)
+            else Text("Saved export quality is unsupported. Select an available resolution and frame rate.",color=palette.danger,style=MaterialTheme.typography.bodySmall)
+            Text("Only device-reported supported options are shown. Changing resolution may select the nearest supported FPS.",style=MaterialTheme.typography.labelSmall,color=palette.textSecondary)
         }
         StudioToggleRow("Automatic video bitrate",exp.adaptiveVideoBitrate){v->vm.updateExportSettings{it.copy(adaptiveVideoBitrate=v)}}
         if(!exp.adaptiveVideoBitrate)StudioSlider(
@@ -403,10 +429,12 @@ fun ExportScreen(
         )
 
         StudioToggleRow("Prefer HEVC (H.265)",exp.useHevcIfSupported){v->vm.updateExportSettings{it.copy(useHevcIfSupported=v)}}
-        StudioToggleRow("Smooth edges (GPU MSAA)",exp.smoothEdges){v->vm.updateExportSettings{it.copy(smoothEdges=v)}}
+        val heavySurface=dimensions.first.toLong()*dimensions.second>1920L*1080||exp.fps>=50
+        if(!heavySurface)StudioToggleRow("Smooth edges (GPU MSAA)",exp.smoothEdges){v->vm.updateExportSettings{it.copy(smoothEdges=v)}}
+        else Text("High-quality export: surface MSAA disabled to reduce GPU memory. Composition effects remain enabled.",style=MaterialTheme.typography.labelSmall,color=palette.textSecondary)
         StudioToggleRow("Smooth composition edges",exp.offscreenSmoothEdges){v->vm.updateExportSettings{it.copy(offscreenSmoothEdges=v)}}
         StudioToggleRow("High resolution image textures",exp.highResolutionTextures){v->vm.updateExportSettings{it.copy(highResolutionTextures=v)}}
-        Text("HEVC is used only if the device reports support; otherwise H.264 is selected.",style=MaterialTheme.typography.labelSmall,color=palette.textSecondary)
+        Text("H.264 and HEVC are tried in preference order, with hardware encoders prioritized. HEVC can be used as a fallback when H.264 is unavailable.",style=MaterialTheme.typography.labelSmall,color=palette.textSecondary)
         val estimatedMs=(if(exp.trimEndMs>exp.trimStartMs)minOf(trackDurMs,exp.trimEndMs) else trackDurMs)-exp.trimStartMs
         val targetBitrate=com.vexo.studio.export.ExportEncoderPolicy.targetBitrate(exp)
         if(exp.adaptiveVideoBitrate)Text("Automatic target: %.1f Mbps · adjusted to codec limits".format(targetBitrate/1_000_000.0),style=MaterialTheme.typography.labelSmall,color=palette.textSecondary)
@@ -504,12 +532,12 @@ fun ExportScreen(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(palette.accent)
-                    .clickable { vm.startVideoExport() }
+                    .background(if(canExport)palette.accent else palette.panelElevated)
+                    .clickable(enabled=canExport) { vm.startVideoExport() }
                     .padding(vertical = 14.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text("START MP4 EXPORT", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = palette.accentOn)
+                Text(if(canExport)"START MP4 EXPORT" else if(capabilities==null)"CHECKING ENCODERS" else "SELECT SUPPORTED QUALITY", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = if(canExport)palette.accentOn else palette.textSecondary)
             }
         }
 
