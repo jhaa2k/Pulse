@@ -1,0 +1,3 @@
+# Phase 72 — time-normalized spectrum reaction history
+
+Phase 71 CI passed (46036100821). Audited 27 Bars across the eight supplied original archives: Visualizer 15 contains delays 6/4/2/0, other layers zero; all accumulated delays zero. Replace render-frame count with a bounded interpolated history using 60 Hz reference frames (assumption, not exact Avee timing). Delay peak markers with the bars, reset when source signature or sample count changes, remove history on zero delay and correctly prune both segment histories. Four JVM tests compare delay across 24–120 FPS, signed interpolation, source resets, overflow. No new FFT tuning, shape-dependent bar width or polygon normal geometry; no device visual verification. Main unchanged.

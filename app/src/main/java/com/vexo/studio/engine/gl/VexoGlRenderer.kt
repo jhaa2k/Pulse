@@ -140,7 +140,7 @@ class VexoGlRenderer(
     private val bitmapSizes = mutableMapOf<Int, Pair<Int, Int>>()
     private val bitmapKeyColors=mutableMapOf<Int,Int>()
     private val particleSims = mutableMapOf<String, ParticleSimulator>()
-    private val barDelayHistory = mutableMapOf<String, ArrayDeque<FloatArray>>()
+    private val barDelayHistory = mutableMapOf<String, com.vexo.studio.engine.scene.SpectrumReactionHistory>()
     private var lastProjectId: String? = null
     private var graphProject: com.vexo.studio.model.VexoProject?=null
     private var animationTracks=com.vexo.studio.engine.scene.PreparedAnimationIndex.EMPTY
@@ -309,7 +309,7 @@ class VexoGlRenderer(
             measureFilter.retain(cachedLayerIds)
             previousMotionTarget.keys.retainAll(cachedTrails)
             particleSims.keys.retainAll(cachedLayerIds)
-            barDelayHistory.keys.removeAll{it.removeSuffix("_waveform").removeSuffix("_segment2") !in cachedLayerIds}
+            barDelayHistory.keys.removeAll{it.substringBefore('|') !in cachedLayerIds}
             fboPool.retainSceneBuffers((0 until checkNotNull(cachedSlots).slotCount).toSet(),cachedTrails)
             if(activeLayers.none{it.config is LayerConfig.BlurEffect})fboPool.releaseByPrefix("blur_")
             if(activeLayers.none{(it.config as? LayerConfig.Image)?.blurEnabled==true}){
@@ -470,7 +470,7 @@ class VexoGlRenderer(
             is LayerConfig.Bars -> {
                 val offset=scalar("gradient",cfg.colorBlendMeasure)
                 val measured=cfg.copy(colorBlendOffset=MeasureEvaluator.colorProgress(cfg.colorBlendMeasure,cfg.colorBlendOffset+offset))
-                drawBarsLayer(c.id, com.vexo.studio.engine.scene.DynamicSpectrum.evaluate(measured,audioSnap,scene.trackMeta.positionMs), audioSnap, opacity, w, h)
+                drawBarsLayer(c.id, com.vexo.studio.engine.scene.DynamicSpectrum.evaluate(measured,audioSnap,scene.trackMeta.positionMs), audioSnap, opacity, w, h,deltaSec)
             }
             is LayerConfig.Image -> drawImageLayer(cfg, scene, MeasureEvaluator.colorProgress(cfg.measureColorBlend,scalar("imageColor",cfg.measureColorBlend)),scalar("imageCreative",cfg.creative.audio), opacity, w, h, compTextures)
             is LayerConfig.Text -> drawTextLayer(cfg, scene, scalar("textAnimation",cfg.animationAudio), opacity, w, h)
@@ -495,20 +495,27 @@ class VexoGlRenderer(
         audioSnap: AudioProviderSnapshot?,
         opacity: Float,
         w: Int,
-        h: Int
+        h: Int,
+        deltaSec:Float
     ) {
         if (cfg.segment1 == BarsSegmentType.NONE && cfg.segment2 == BarsSegmentType.NONE) return
         if (cfg.segment2 != BarsSegmentType.NONE) {
-            if (cfg.segment1 != BarsSegmentType.NONE) drawBarsLayer(layerId, cfg.copy(segment2 = BarsSegmentType.NONE), audioSnap, opacity, w, h)
-            drawBarsLayer("${layerId}_segment2", cfg.copy(segment1 = cfg.segment2, segment2 = BarsSegmentType.NONE, barWidth = cfg.segment2Width, barHeightMultiplier = cfg.segment2HeightMultiplier, fixedHeight = cfg.segment2FixedHeight, mirror = cfg.segment2Mirror, alternatingDirection=cfg.segment2AlternatingDirection?:cfg.alternatingDirection, creativeStyle=cfg.secondaryCreativeStyle, colorFromArgb = cfg.segment2ColorFrom, colorToArgb = cfg.segment2ColorTo, barStrokeWidth=cfg.segment2StrokeWidth,barStrokeColorArgb=cfg.segment2StrokeColorArgb,barFillOpacity=cfg.segment2FillOpacity), audioSnap, opacity, w, h)
+            if (cfg.segment1 != BarsSegmentType.NONE) drawBarsLayer(layerId, cfg.copy(segment2 = BarsSegmentType.NONE), audioSnap, opacity, w, h,deltaSec)
+            drawBarsLayer("${layerId}|segment2", cfg.copy(segment1 = cfg.segment2, segment2 = BarsSegmentType.NONE, barWidth = cfg.segment2Width, barHeightMultiplier = cfg.segment2HeightMultiplier, fixedHeight = cfg.segment2FixedHeight, mirror = cfg.segment2Mirror, alternatingDirection=cfg.segment2AlternatingDirection?:cfg.alternatingDirection, creativeStyle=cfg.secondaryCreativeStyle, colorFromArgb = cfg.segment2ColorFrom, colorToArgb = cfg.segment2ColorTo, barStrokeWidth=cfg.segment2StrokeWidth,barStrokeColorArgb=cfg.segment2StrokeColorArgb,barFillOpacity=cfg.segment2FillOpacity), audioSnap, opacity, w, h,deltaSec)
             return
         }
         val rawBars = (if(cfg.signedWaveform) audioSnap?.waveform else audioSnap?.bars) ?: FloatArray(64)
         val sampled = SpectrumGeometry.resample(rawBars, cfg.barCount)
-        val delayedBars = applyReactionDelay(if(cfg.signedWaveform)"${layerId}_waveform" else layerId, if(cfg.signedWaveform) sampled else SpectrumFilters.smooth(sampled,cfg.softness), (cfg.reactionDelay + cfg.reactionAccumulatedDelay).coerceIn(0, 9))
+        val delay=com.vexo.studio.engine.scene.SpectrumReactionHistory.delayFrames(cfg.reactionDelay,cfg.reactionAccumulatedDelay)
+        val historyKey="$layerId|bars"
+        val signature="${cfg.audioProviderIndex}|${cfg.signedWaveform}|${cfg.softness}"
+        val delayedBars = applyReactionDelay(historyKey, if(cfg.signedWaveform) sampled else SpectrumFilters.smooth(sampled,cfg.softness),delay,deltaSec,signature)
         val count = delayedBars.size
         if (count == 0) return
-        val peaks=if(!cfg.signedWaveform && cfg.showPeaks && audioSnap!=null && audioSnap.peakBars.isNotEmpty()) SpectrumGeometry.resample(audioSnap.peakBars,count) else null
+        val peakKey="$layerId|peaks"
+        val peaks=if(!cfg.signedWaveform && cfg.showPeaks && audioSnap!=null && audioSnap.peakBars.isNotEmpty())
+            applyReactionDelay(peakKey,SpectrumGeometry.resample(audioSnap.peakBars,count),delay,deltaSec,signature)
+        else {barDelayHistory.remove(peakKey);null}
         if(cfg.creativePath!=com.vexo.studio.model.CreativeSpectrumPath.LEGACY || cfg.creativeStyle!=com.vexo.studio.model.CreativeSpectrumStyle.BARS || cfg.sampleOffset!=0f || cfg.sampleRepeats!=1 || cfg.amplitudeCurve!=1f || cfg.baselineOffset!=0f || cfg.signedWaveform || cfg.curveSubdivisions!=1 || cfg.gradientRepeats!=1 || cfg.customPathEnabled || cfg.pathStretchX!=1f || cfg.pathStretchY!=1f || cfg.barStrokeWidth!=0f || cfg.barFillOpacity!=1f || cfg.barTipWidth!=1f || cfg.barGradientMode!=com.vexo.studio.model.SpectrumGradientMode.PATH || cfg.waveDashRatio!=1f || cfg.waveLineGap!=2.5f || cfg.waveRibbonWidth!=1f || cfg.waveCurveTension!=.5f || cfg.gradientCycle || cfg.peakMarkerStyle!=com.vexo.studio.model.SpectrumPeakStyle.LINE || cfg.peakMarkerWidth!=1f || cfg.peakMarkerThickness!=1f || cfg.peakMarkerOffset!=0f || cfg.peakMarkerColorArgb!=null || cfg.reactiveStroke!=0f){
             drawCreativeSpectrum(cfg,delayedBars,peaks,opacity,w,h)
             return
@@ -1512,14 +1519,10 @@ class VexoGlRenderer(
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
     }
 
-    private fun applyReactionDelay(layerId: String, current: FloatArray, delayFrames: Int): FloatArray {
-        val d = delayFrames.coerceIn(0, 9)
-        if (d == 0) return current
-        val q = barDelayHistory.getOrPut(layerId) { ArrayDeque() }
-        if(q.firstOrNull()?.size != current.size) q.clear()
-        q.addLast(current.copyOf())
-        while (q.size > d + 1) q.removeFirst()
-        return q.first()
+    private fun applyReactionDelay(key:String,current:FloatArray,delayFrames:Int,dt:Float,signature:String):FloatArray{
+        if(delayFrames==0){barDelayHistory.remove(key);return current}
+        return barDelayHistory.getOrPut(key){com.vexo.studio.engine.scene.SpectrumReactionHistory()}
+            .sample(current,delayFrames,dt,signature)
     }
 
     private fun uploadArtworkTexture(bitmap: Bitmap?) {
