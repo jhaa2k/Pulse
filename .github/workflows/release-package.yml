@@ -4,7 +4,10 @@ on:
   push:
     branches: ["engine/**", "fix/**"]
     paths:
-      - "app/build.gradle.kts"
+      - "app/**"
+      - "tools/studio-fonts.txt"
+      - "gradle/**"
+      - "gradle.properties"
       - ".github/workflows/release-package.yml"
   workflow_dispatch:
     inputs:
