@@ -352,6 +352,16 @@ private fun VexoRootApp(vm: StudioViewModel) {
     }
 
     uiState.pendingPreset?.let{tpl->AlertDialog(onDismissRequest={vm.resolvePresetSwitch(false,false)},title={Text("UNSAVED EDITS")},text={Text("Apply "+tpl.name+"? Save the current edits first, or discard them. Music and canvas ratio will stay unchanged.")},confirmButton={TextButton(onClick={vm.resolvePresetSwitch(true,false)}){Text("SAVE & APPLY")}},dismissButton={Row{TextButton(onClick={vm.resolvePresetSwitch(false,true)}){Text("DISCARD & APPLY")};TextButton(onClick={vm.resolvePresetSwitch(false,false)}){Text("CANCEL")}}})}
+    uiState.pendingProjectSwitch?.let{target->
+        val action=when(target){
+            is com.vexo.studio.ui.ProjectSwitch.Open->"OPEN PROJECT"
+            is com.vexo.studio.ui.ProjectSwitch.Create->"CREATE PROJECT"
+        }
+        AlertDialog(onDismissRequest={vm.resolveProjectSwitch(false,false)},title={Text("UNSAVED EDITS")},
+            text={Text("Save the current project before switching, discard unsaved changes, or cancel to continue editing.")},
+            confirmButton={TextButton(onClick={vm.resolveProjectSwitch(true,false)}){Text("SAVE & "+action)}},
+            dismissButton={Column{TextButton(onClick={vm.resolveProjectSwitch(false,true)}){Text("DISCARD & "+action)};TextButton(onClick={vm.resolveProjectSwitch(false,false)}){Text("CANCEL")}}})
+    }
     pendingImage?.let { uri ->
         val targetMatches = uiState.project.id == pendingImageProject &&
             uiState.selectedLayerId == pendingImageLayer &&

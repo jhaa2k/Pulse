@@ -224,13 +224,20 @@ class VexoPlaybackController(
 
     private fun saveQueue(){
         val id=queueProjectId?:return
-        if(restoringQueue||_state.value.importTotal>0)return
+        if(restoringQueue)return
         val q=_state.value.queue
+        // During import the published queue still matches the player except during the
+        // synchronous append operation; avoid saving a transient mismatched timeline.
+        if(q.size!=player.mediaItemCount)return
         val index=player.currentMediaItemIndex
         val selected=q.getOrNull(index)?.id
         val pos=player.currentPosition.coerceAtLeast(0L)
         if(q===lastSavedQueue&&selected==lastSavedId&&pos==lastSavedPosition)return
         runCatching{queueStore.save(id,q,selected,pos,q!==lastSavedQueue)}.onSuccess{lastSavedQueue=q;lastSavedId=selected;lastSavedPosition=pos}
+    }
+    fun copyProjectQueue(from:String,to:String){
+        if(queueProjectId==from)saveQueue()
+        runCatching{queueStore.copy(from,to)}
     }
     fun forgetProjectQueue(id:String){
         if(queueProjectId==id){queueProjectId=null;lastSavedQueue=null;cancelAudioImport()}
@@ -262,10 +269,11 @@ class VexoPlaybackController(
                 player.setMediaItems(tracks.map(::mediaItem),restored.index,restored.positionMs)
                 player.prepare();updateCurrentTrackMetadata(restored.index)
             }
-            lastSavedQueue=tracks
+            lastSavedQueue=null
         }
         restoringQueue=false
         if(restored==null&&!uri.isNullOrBlank())importTracks(listOf(Uri.parse(uri)),playFirstImmediately=false)
+        else if(restored!=null)saveQueue()
     }
 
     fun importTracks(uris:List<Uri>,playFirstImmediately:Boolean=true,onImported:(AudioTrackItem)->Unit={}){

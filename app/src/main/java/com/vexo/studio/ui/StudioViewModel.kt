@@ -45,6 +45,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.UUID
 
+sealed interface ProjectSwitch {
+    data class Open(val id:String):ProjectSwitch
+    data class Create(val project:VexoProject):ProjectSwitch
+}
+
 data class StudioUiState(
     val navDestination: NavDestination = NavDestination.STUDIO,
     val studioTab: StudioTab = StudioTab.LAYERS,
@@ -63,7 +68,8 @@ data class StudioUiState(
     val previewPanY: Float = 0f,
     val statusBanner: String? = null,
     val unsaved:Boolean=false,
-    val pendingPreset:VexoProject?=null
+    val pendingPreset:VexoProject?=null,
+    val pendingProjectSwitch:ProjectSwitch?=null
 )
 
 @UnstableApi
@@ -750,7 +756,25 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
 
     fun createNewProject(name:String,template:VexoProject=VexoTemplates.monochromeStudio()){
         val fresh=template.copy(id=UUID.randomUUID().toString(),name=name.ifBlank{"Untitled Studio"},updatedAtMs=System.currentTimeMillis())
-        replaceWithDraft(fresh,false)
+        requestProjectSwitch(ProjectSwitch.Create(fresh))
+    }
+
+    private fun requestProjectSwitch(target:ProjectSwitch){
+        if(_uiState.value.unsaved){_uiState.value=_uiState.value.copy(pendingProjectSwitch=target);return}
+        performProjectSwitch(target)
+    }
+    fun resolveProjectSwitch(save:Boolean,discard:Boolean){
+        val target=_uiState.value.pendingProjectSwitch?:return
+        if(!save&&!discard){_uiState.value=_uiState.value.copy(pendingProjectSwitch=null);return}
+        if(save&&!saveCurrentProject())return
+        _uiState.value=_uiState.value.copy(pendingProjectSwitch=null)
+        performProjectSwitch(target)
+    }
+    private fun performProjectSwitch(target:ProjectSwitch){
+        when(target){
+            is ProjectSwitch.Open->openProjectNow(target.id)
+            is ProjectSwitch.Create->replaceWithDraft(target.project,false)
+        }
     }
 
     private fun replaceWithDraft(fresh:VexoProject,keepMusic:Boolean){
@@ -766,8 +790,16 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
         else playbackController.loadProjectAudio(fresh.id,fresh.audioUri)
     }
 
-    fun openProject(id: String) {
-        val loaded = synchronized(saveLock) { projectRepo.loadProject(id) } ?: return
+    fun openProject(id:String){
+        if(id==_uiState.value.project.id){navigateTo(NavDestination.STUDIO);return}
+        requestProjectSwitch(ProjectSwitch.Open(id))
+    }
+
+    private fun openProjectNow(id: String) {
+        val loaded = synchronized(saveLock) { projectRepo.loadProject(id) } ?: run{
+            _uiState.value=_uiState.value.copy(statusBanner="Project unavailable or unreadable")
+            return
+        }
         synchronized(saveLock){latestSave.remove(_uiState.value.project.id);projectRepo.autosave(loaded)}
         history.clear()
         val comp = loaded.compositions.firstOrNull { it.index == 1 } ?: loaded.compositions.first()
@@ -777,7 +809,7 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
             selectedLayerId = comp.layers.firstOrNull()?.common?.id,
             canUndo = false,
             canRedo = false,
-            unsaved=false,previewSelectedComposition=false,selectedProviderIndex=loaded.audioProviders.first().index,
+            unsaved=false,previewSelectedComposition=false,previewZoom=1f,previewPanX=0f,previewPanY=0f,selectedProviderIndex=loaded.audioProviders.first().index,
             navDestination = NavDestination.STUDIO
         )
         synchronized(saveLock){projectRepo.markActive(loaded.id)}
@@ -785,8 +817,9 @@ class StudioViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun duplicateProject(id: String) {
-        synchronized(saveLock){projectRepo.duplicateProject(id)}
-        _uiState.value = _uiState.value.copy(projects = projectRepo.listProjects())
+        val duplicate=synchronized(saveLock){projectRepo.duplicateProject(id)}
+        if(duplicate!=null)playbackController.copyProjectQueue(id,duplicate.id)
+        _uiState.value = _uiState.value.copy(projects = projectRepo.listProjects(),statusBanner=if(duplicate!=null)"Project and audio queue duplicated" else "Unable to duplicate project")
     }
 
     fun restorePreviousProject(id:String){

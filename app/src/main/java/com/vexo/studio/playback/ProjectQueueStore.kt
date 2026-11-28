@@ -38,5 +38,9 @@ internal class ProjectQueueStore(private val context:Context){
         }
         editor.putString("selected",currentId).putLong("position",position.coerceAtLeast(0)).apply()
     }
+    fun copy(from:String,to:String){
+        val source=read(from)?:return
+        save(to,source.tracks,source.tracks.getOrNull(source.index)?.id,source.positionMs,true)
+    }
     fun delete(id:String){if(valid(id))context.deleteSharedPreferences("queue_"+id)}
 }
