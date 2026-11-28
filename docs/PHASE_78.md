@@ -1,0 +1,3 @@
+# Phase 78 — export encoder/EGL startup recovery
+
+Phase 77 CI (46097740221) failed compilation because the last unsupported-property diagnostic was removed, leaving an untyped empty buildList. Remove the obsolete block. Use nearest-even export dimensions (854x480 landscape SD), keep requested FPS/short side. Treat codec configuration, startup and recordable EGL binding as one candidate attempt; try up to 32 advertised EGL configurations for each MSAA tier, destroy rejected contexts/surfaces before stopping/releasing the codec and trying the next encoder. Respect coroutine cancellation. Three CPU policy tests. No fallback during an already-started render, no physical-device test, no claim all resolution/FPS combinations are supported. Main unchanged.

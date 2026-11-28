@@ -4,6 +4,15 @@ import com.vexo.studio.model.ExportSettings
 import kotlin.math.roundToInt
 
 object ExportEncoderPolicy {
+    /** Nearest even pixel count, without truncating an already rounded dimension. */
+    fun dimensions(wRatio:Int,hRatio:Int,shortSide:Int):Pair<Int,Int>{
+        require(wRatio>0&&hRatio>0&&shortSide>=320)
+        fun even(v:Double)=((v/2).roundToInt()*2).coerceAtLeast(320)
+        return if(wRatio<=hRatio)even(shortSide.toDouble()) to even(shortSide.toDouble()*hRatio/wRatio)
+            else even(shortSide.toDouble()*wRatio/hRatio) to even(shortSide.toDouble())
+    }
+    fun samplePreferences(smooth:Boolean):List<Int> = if(smooth)listOf(4,2,0)else listOf(0)
+
     /** Resolution/FPS-based starting target; not a content-complexity bitrate estimator. */
     fun targetBitrate(s:ExportSettings):Int {
         if(!s.adaptiveVideoBitrate)return s.videoBitrateMbps.coerceIn(2,80)*1_000_000

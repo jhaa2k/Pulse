@@ -88,10 +88,6 @@ object TemplateDiagnostics {
                     if(provider !in providerIndices)warn("MISSING_PROVIDER","${c.name}: missing audio provider $provider")
                     else if(provider !in enabledProviders)warn("DISABLED_PROVIDER","${c.name}: audio provider $provider disabled")
                 }
-                // Known legacy properties that are not implemented; raw metadata stays intact.
-                val unsupported=buildList {
-                }
-                if(unsupported.isNotEmpty())warn("LEGACY_PROPERTY","${c.name}: preserved but not implemented: "+unsupported.joinToString())
             }
         }
         for(track in project.keyframes){

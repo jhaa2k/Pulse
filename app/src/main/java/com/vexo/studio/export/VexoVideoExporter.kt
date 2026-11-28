@@ -35,7 +35,6 @@ import java.io.BufferedOutputStream
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import kotlin.math.roundToInt
 
 data class ExportProgress(
     val isRunning: Boolean = false,
@@ -63,7 +62,7 @@ class VexoVideoExporter(private val context: Context) {
     ): String {
         val audioUri = Uri.parse(audioUriStr)
         val settings = project.exportSettings
-        val (width, height) = computeDimensions(settings.aspectRatio.widthRatio, settings.aspectRatio.heightRatio, settings.resolution.shortSide)
+        val (width, height) = ExportEncoderPolicy.dimensions(settings.aspectRatio.widthRatio, settings.aspectRatio.heightRatio, settings.resolution.shortSide)
         val fps = settings.fps.coerceIn(24, 60)
         val bitrate = ExportEncoderPolicy.targetBitrate(settings)
 
@@ -180,7 +179,42 @@ class VexoVideoExporter(private val context: Context) {
             check(kotlin.math.abs(totalDurationUs - requestedDurationUs) <= maxOf(250_000L, requestedDurationUs / 100)) { "Decoded audio duration differs from selected trim. Check the source audio." }
             val totalFrames = ExportClock.frameCount(totalDurationUs, fps)
 
-            // Configure selected video encoder + EGL surface
+            // Treat encoder startup and EGL binding as one candidate attempt.
+            // Do not start muxing until both are usable.
+            eglDisplay=EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY)
+            check(eglDisplay!=EGL14.EGL_NO_DISPLAY){"No EGL display available"}
+            val vers=IntArray(2)
+            check(EGL14.eglInitialize(eglDisplay,vers,0,vers,1)){"EGL initialization failed"}
+            fun clearEglCandidate(){
+                EGL14.eglMakeCurrent(eglDisplay,EGL14.EGL_NO_SURFACE,EGL14.EGL_NO_SURFACE,EGL14.EGL_NO_CONTEXT)
+                if(eglSurface!=EGL14.EGL_NO_SURFACE)EGL14.eglDestroySurface(eglDisplay,eglSurface)
+                if(eglContext!=EGL14.EGL_NO_CONTEXT)EGL14.eglDestroyContext(eglDisplay,eglContext)
+                eglSurface=EGL14.EGL_NO_SURFACE;eglContext=EGL14.EGL_NO_CONTEXT
+            }
+            fun bindEncoderSurface(input:Surface):Boolean{
+                for(samples in ExportEncoderPolicy.samplePreferences(settings.smoothEdges)){
+                    val attributes=intArrayOf(
+                        EGL14.EGL_RED_SIZE,8,EGL14.EGL_GREEN_SIZE,8,EGL14.EGL_BLUE_SIZE,8,EGL14.EGL_ALPHA_SIZE,8,
+                        EGL14.EGL_SURFACE_TYPE,EGL14.EGL_WINDOW_BIT,EGL14.EGL_RENDERABLE_TYPE,EGL14.EGL_OPENGL_ES2_BIT,
+                        EGL14.EGL_SAMPLE_BUFFERS,if(samples>0)1 else 0,EGL14.EGL_SAMPLES,samples,
+                        0x3142,1,EGL14.EGL_NONE
+                    )
+                    val count=IntArray(1)
+                    if(!EGL14.eglChooseConfig(eglDisplay,attributes,0,null,0,0,count,0)||count[0]<=0)continue
+                    val configs=arrayOfNulls<EGLConfig>(minOf(count[0],32))
+                    if(!EGL14.eglChooseConfig(eglDisplay,attributes,0,configs,0,configs.size,count,0))continue
+                    for(config in configs.filterNotNull()){
+                        exportContext.ensureActive()
+                        eglContext=EGL14.eglCreateContext(eglDisplay,config,EGL14.EGL_NO_CONTEXT,
+                            intArrayOf(EGL14.EGL_CONTEXT_CLIENT_VERSION,2,EGL14.EGL_NONE),0)
+                        if(eglContext==EGL14.EGL_NO_CONTEXT)continue
+                        eglSurface=EGL14.eglCreateWindowSurface(eglDisplay,config,input,intArrayOf(EGL14.EGL_NONE),0)
+                        if(eglSurface!=EGL14.EGL_NO_SURFACE&&EGL14.eglMakeCurrent(eglDisplay,eglSurface,eglSurface,eglContext))return true
+                        clearEglCandidate()
+                    }
+                }
+                return false
+            }
             var lastEncoderError: Exception? = null
             var selectedBitrate=bitrate
             var selectedEncoderName=""
@@ -195,16 +229,20 @@ class VexoVideoExporter(private val context: Context) {
                     val input = candidate.createInputSurface()
                     surface = input
                     candidate.start()
+                    check(bindEncoderSurface(input)){"Cannot bind recordable EGL surface for $encoderName"}
                     selectedBitrate=bps
                     selectedEncoderName=encoderName
                     Triple(mime, candidate, input)
                 } catch (e: Exception) {
                     lastEncoderError = e
+                    clearEglCandidate()
+                    runCatching { codec?.stop() }
                     runCatching { codec?.release() }
                     runCatching { surface?.release() }
+                    exportContext.ensureActive()
                     null
                 }
-            } ?: throw IllegalStateException("Unable to start a video encoder. Try lower resolution, FPS or bitrate.", lastEncoderError)
+            } ?: throw IllegalStateException("Unable to start a video encoder with a recordable EGL surface. Try disabling smooth edges, automatic bitrate, or lower resolution/FPS.", lastEncoderError)
             val videoMime = configured.first
             videoEncoder = configured.second
             encoderSurface = configured.third
@@ -225,37 +263,6 @@ class VexoVideoExporter(private val context: Context) {
             audioEncoder = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_AAC)
             audioEncoder.configure(audioOutFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
             audioEncoder.start()
-
-            // Initialize EGL14 Context on encoderSurface
-            eglDisplay = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY)
-            val vers = IntArray(2)
-            check(EGL14.eglInitialize(eglDisplay, vers, 0, vers, 1)) { "EGL initialization failed" }
-            // Prefer multisampled window surfaces. Some recordable configurations
-            // advertise MSAA but cannot bind the codec surface; retry without it.
-            var bound=false
-            for(samples in (if(settings.smoothEdges)listOf(4,2,0)else listOf(0))){
-                val attribList=intArrayOf(
-                    EGL14.EGL_RED_SIZE,8,EGL14.EGL_GREEN_SIZE,8,EGL14.EGL_BLUE_SIZE,8,EGL14.EGL_ALPHA_SIZE,8,
-                    EGL14.EGL_SURFACE_TYPE,EGL14.EGL_WINDOW_BIT,
-                    EGL14.EGL_RENDERABLE_TYPE,EGL14.EGL_OPENGL_ES2_BIT,
-                    EGL14.EGL_SAMPLE_BUFFERS,if(samples>0)1 else 0,EGL14.EGL_SAMPLES,samples,
-                    0x3142,1,EGL14.EGL_NONE
-                )
-                val configs=arrayOfNulls<EGLConfig>(1)
-                val count=IntArray(1)
-                if(!EGL14.eglChooseConfig(eglDisplay,attribList,0,configs,0,1,count,0)||count[0]==0)continue
-                eglContext=EGL14.eglCreateContext(eglDisplay,configs[0],EGL14.EGL_NO_CONTEXT,
-                    intArrayOf(EGL14.EGL_CONTEXT_CLIENT_VERSION,2,EGL14.EGL_NONE),0)
-                if(eglContext==EGL14.EGL_NO_CONTEXT)continue
-                eglSurface=EGL14.eglCreateWindowSurface(eglDisplay,configs[0],encoderSurface,intArrayOf(EGL14.EGL_NONE),0)
-                if(eglSurface!=EGL14.EGL_NO_SURFACE&&EGL14.eglMakeCurrent(eglDisplay,eglSurface,eglSurface,eglContext)){
-                    bound=true;break
-                }
-                if(eglSurface!=EGL14.EGL_NO_SURFACE)EGL14.eglDestroySurface(eglDisplay,eglSurface)
-                EGL14.eglDestroyContext(eglDisplay,eglContext)
-                eglSurface=EGL14.EGL_NO_SURFACE;eglContext=EGL14.EGL_NO_CONTEXT
-            }
-            check(bound){"Cannot bind a recordable EGL surface. Try disabling smooth edges or reducing export quality."}
 
             val renderer = VexoGlRenderer(context, isExportRenderer = true,highResolutionTextures=settings.highResolutionTextures)
             glRenderer = renderer
@@ -700,19 +707,5 @@ class VexoVideoExporter(private val context: Context) {
         }
     }
 
-    private fun computeDimensions(wRatio: Int, hRatio: Int, shortSide: Int): Pair<Int, Int> {
-        val rawW: Int
-        val rawH: Int
-        if (wRatio <= hRatio) {
-            rawW = shortSide
-            rawH = (shortSide.toFloat() * hRatio / wRatio).roundToInt()
-        } else {
-            rawH = shortSide
-            rawW = (shortSide.toFloat() * wRatio / hRatio).roundToInt()
-        }
-        // Preserve requested resolution; H.264 requires even dimensions. Device capability is checked separately.
-        val alignedW = (rawW / 2) * 2
-        val alignedH = (rawH / 2) * 2
-        return alignedW.coerceAtLeast(320) to alignedH.coerceAtLeast(320)
-    }
+
 }
