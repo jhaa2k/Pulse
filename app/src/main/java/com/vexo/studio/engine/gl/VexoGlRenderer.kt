@@ -132,6 +132,7 @@ class VexoGlRenderer(
 
     // Caches & simulation state
     private val videoFrames = VideoFrameTextures(context,isExportRenderer)
+    private val animatedImages=AnimatedGifTextures(context)
     private val textureCache = LinkedHashMap<String,Int>(32,.75f,true)
     private val failedImageUntil=LinkedHashMap<String,Long>()
     private var imageDecodeLimit=2048
@@ -227,6 +228,7 @@ class VexoGlRenderer(
 
     fun releaseGlResources() {
         videoFrames.close()
+        animatedImages.close()
         diagnosticCounter.reset();diagnostics=PreviewDiagnostics()
         graphProject=null;animationTracks=com.vexo.studio.engine.scene.PreparedAnimationIndex.EMPTY;cachedGraph=null;cachedSlots=null;previewError=null;cachedReachable=emptySet();cachedDisplay=-1;cachedLayerIds=emptySet();cachedTrails=emptySet()
         particleSims.clear();barDelayHistory.clear()
@@ -275,6 +277,7 @@ class VexoGlRenderer(
             // A larger render target must not reuse a previously downsampled image.
             removeCachedTextures{key->!key.startsWith("internalres:")&&!key.startsWith("txt_")}
             failedImageUntil.clear()
+            animatedImages.close()
             imageDecodeLimit=nextDecodeLimit
         }
 
@@ -285,7 +288,7 @@ class VexoGlRenderer(
             barDelayHistory.clear()
             previousMotion.clear(); previousMotionTarget.clear(); measureFilter.clear()
         }
-        if (lastProjectId != scene.project.id) { fboPool.releaseByPrefix("comp_"); videoFrames.close(); failedImageUntil.clear() }
+        if (lastProjectId != scene.project.id) { fboPool.releaseByPrefix("comp_"); videoFrames.close(); animatedImages.close(); failedImageUntil.clear() }
         lastProjectId = scene.project.id
         lastPositionMs = position
         if (scene.trackMeta.artworkVersion != lastArtworkVersion || (artworkTexId == 0 && scene.trackMeta.artwork != null)) {
@@ -472,7 +475,7 @@ class VexoGlRenderer(
                 val measured=cfg.copy(colorBlendOffset=MeasureEvaluator.colorProgress(cfg.colorBlendMeasure,cfg.colorBlendOffset+offset))
                 drawBarsLayer(c.id, com.vexo.studio.engine.scene.DynamicSpectrum.evaluate(measured,audioSnap,scene.trackMeta.positionMs), audioSnap, opacity, w, h,deltaSec)
             }
-            is LayerConfig.Image -> drawImageLayer(cfg, scene, MeasureEvaluator.colorProgress(cfg.measureColorBlend,scalar("imageColor",cfg.measureColorBlend)),scalar("imageCreative",cfg.creative.audio), opacity, w, h, compTextures)
+            is LayerConfig.Image -> drawImageLayer(cfg, scene, MeasureEvaluator.colorProgress(cfg.measureColorBlend,scalar("imageColor",cfg.measureColorBlend)),scalar("imageCreative",cfg.creative.audio), scalar("imageAnimation",cfg.animationSpeedMeasure), opacity, w, h, compTextures)
             is LayerConfig.Text -> drawTextLayer(cfg, scene, scalar("textAnimation",cfg.animationAudio), opacity, w, h)
             is LayerConfig.Shape -> {
                 drawShapeLayer(cfg.copy(radius=(cfg.radius+scalar("shapeRadius",cfg.pulse)*.15f).coerceIn(.005f,.8f),strokeWidth=(cfg.strokeWidth+scalar("shapeStroke",cfg.strokePulse)*12f).coerceIn(0f,32f)),opacity,w,h)
@@ -736,16 +739,20 @@ class VexoGlRenderer(
         scene: RenderSceneSnapshot,
         colorReactive:Float,
         creativeReactive:Float,
+        animationReactive:Float,
         opacity: Float,
         w: Int,
         h: Int,
         compTextures: Map<Int, Int>
     ) {
+        val animated=if(cfg.sourceType==ImageSourceType.IMPORTED&&!cfg.videoEnabled)
+            animatedImages.texture(cfg.customUri,ImageAnimationClock.position(scene.trackMeta.positionMs,cfg.imageAnimationSpeed,animationReactive,cfg.animationSpeedMeasure.measureWhat),minOf(imageDecodeLimit,1024))
+        else null
         val texId = when (cfg.sourceType) {
             ImageSourceType.COMPOSITION -> compTextures[cfg.sourceCompositionIndex] ?: return
             ImageSourceType.ALBUM_ART -> if (artworkTexId != 0) artworkTexId else ensureInternalTex("internalres:vignette80")
             ImageSourceType.INTERNAL -> ensureInternalTex(cfg.internalRes)
-            ImageSourceType.IMPORTED -> if(cfg.videoEnabled) videoFrames.texture(cfg,scene.trackMeta.positionMs) else ensureUriTex(cfg.customUri)
+            ImageSourceType.IMPORTED -> if(cfg.videoEnabled) videoFrames.texture(cfg,scene.trackMeta.positionMs) else animated?.id?:ensureUriTex(cfg.customUri)
             ImageSourceType.SOLID_COLOR -> ensureInternalTex("internalres:white")
         }
         if (texId == 0) return
@@ -754,11 +761,11 @@ class VexoGlRenderer(
         val tint = MeasureEvaluator.blendArgb(cfg.colorArgb, cfg.colorToArgb, colorBlend)
 
         val sourceIsFbo=cfg.sourceType==ImageSourceType.COMPOSITION
-        val (sourceW,sourceH)=if(sourceIsFbo)w to h else (if(cfg.videoEnabled&&cfg.sourceType==ImageSourceType.IMPORTED)videoFrames.size(texId)else bitmapSizes[texId])?: (w to h)
+        val (sourceW,sourceH)=if(sourceIsFbo)w to h else (if(cfg.videoEnabled&&cfg.sourceType==ImageSourceType.IMPORTED)videoFrames.size(texId)else animated?.size?:bitmapSizes[texId])?: (w to h)
         val blur=if(cfg.blurEnabled)cfg.blurRadius.coerceIn(0,64).toFloat()/cfg.blurDivider.coerceAtLeast(1)else 0f
         val imageRatio=sourceW.toFloat()/sourceH.coerceAtLeast(1)
         val needsBorder=cfg.blurredBorder&&cfg.keepAspectRatio&&!cfg.keepAspectRatioAndCropToFit&&cfg.shape==ImageShape.NONE&&kotlin.math.abs(imageRatio-w.toFloat()/h.coerceAtLeast(1))>.001f
-        val immutableSource=!sourceIsFbo&&!(cfg.sourceType==ImageSourceType.IMPORTED&&cfg.videoEnabled)
+        val immutableSource=!sourceIsFbo&&animated==null&&!(cfg.sourceType==ImageSourceType.IMPORTED&&cfg.videoEnabled)
         fun filtered(sigma:Float,prefix:String):Int{
             val key=StaticBlurKey(texId,sourceW,sourceH,w,h,sigma,cfg.blurQuality)
             if(immutableSource)staticBlurResults[prefix]?.let{if(it.first==key)return it.second}

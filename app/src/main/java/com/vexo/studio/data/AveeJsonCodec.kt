@@ -396,6 +396,8 @@ object AveeJsonCodec {
                 colorArgb = obj.propInt("vexoTint", parseHsla4fToArgb(obj.propString("Color", "1 1 1 1"))),
                 colorToArgb = obj.propInt("vexoTintTo", parseHsla4fToArgb(obj.propString("ColorTo", "1 1 1 1"))),
                 measureColorBlend = parseMeasure(obj.rawProp("MeasureColorBlend")),
+                animationSpeedMeasure=parseMeasure(obj.rawProp("measureAnimationSpeed")),
+                imageAnimationSpeed=obj.propFloat("vexoImageAnimationSpeed",1f),
                 shape = ImageShape.fromAvee(obj.propString("Shape", "None")),
                 keepAspectRatio = obj.propBool("keepAspectRatio", false),
                 keepAspectRatioAndCropToFit = obj.propBool("keepAspectRatioAndCropToFit", false),
@@ -751,6 +753,8 @@ object AveeJsonCodec {
                 put("Color",encodeLegacyColor(c.extraFields,"Color",cfg.colorArgb))
                 put("ColorTo",encodeLegacyColor(c.extraFields,"ColorTo",cfg.colorToArgb))
                 put("MeasureColorBlend", encodeMeasure(cfg.measureColorBlend))
+                put("measureAnimationSpeed",encodeMeasure(cfg.animationSpeedMeasure))
+                put("vexoImageAnimationSpeed",propObj(cfg.imageAnimationSpeed))
                 put("Shape", propObj(cfg.shape.aveeName))
                 put("keepAspectRatio", propObj(if (cfg.keepAspectRatio) 1 else 0))
                 put("keepAspectRatioAndCropToFit", propObj(if (cfg.keepAspectRatioAndCropToFit) 1 else 0))

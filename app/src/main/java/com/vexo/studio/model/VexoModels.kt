@@ -483,7 +483,9 @@ sealed interface LayerConfig {
         val videoSampleFps: Int = 12,
         val videoDecodeMode: VideoDecodeMode = VideoDecodeMode.AUTO,
         val videoTextureLimit: Int = 1280,
-        val creative: CreativeImageConfig = CreativeImageConfig()
+        val creative: CreativeImageConfig = CreativeImageConfig(),
+        val animationSpeedMeasure:MeasureConfig=MeasureConfig(),
+        val imageAnimationSpeed:Float=1f
     ) : LayerConfig
 
     @Serializable

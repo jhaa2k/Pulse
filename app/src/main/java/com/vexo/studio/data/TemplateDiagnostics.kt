@@ -75,7 +75,7 @@ object TemplateDiagnostics {
                 measure(c.measurePos);measure(c.measureScale);measure(c.measureRot);measure(c.measureOpacity)
                 when(cfg){
                     is LayerConfig.Bars->{used.add(cfg.audioProviderIndex);measure(cfg.colorBlendMeasure)}
-                    is LayerConfig.Image->{measure(cfg.measureColorBlend);measure(cfg.creative.audio)}
+                    is LayerConfig.Image->{measure(cfg.measureColorBlend);measure(cfg.creative.audio);measure(cfg.animationSpeedMeasure)}
                     is LayerConfig.Text->measure(cfg.animationAudio)
                     is LayerConfig.Shape->{measure(cfg.pulse);measure(cfg.strokePulse)}
                     is LayerConfig.Particles->{measure(cfg.measureOverallSpeed);if(cfg.burstCount>0||cfg.reactiveEmission!=0f)used.add(cfg.burstProvider)}
@@ -90,7 +90,6 @@ object TemplateDiagnostics {
                 }
                 // Known legacy properties that are not implemented; raw metadata stays intact.
                 val unsupported=buildList {
-                    if(cfg is LayerConfig.Image&&c.extraFields.keys.any{it.equals("measureAnimationSpeed",true)})add("animated-image speed")
                     if(cfg is LayerConfig.Bars&&c.extraFields.keys.any{it.equals("barWidthAffectedByShape",true)})add("shape-dependent bar width")
                 }
                 if(unsupported.isNotEmpty())warn("LEGACY_PROPERTY","${c.name}: preserved but not implemented: "+unsupported.joinToString())

@@ -13,6 +13,7 @@ object LegacyAssetReferences {
         return when {
             b(0)==137&&b(1)==80&&b(2)==78&&b(3)==71&&b(4)==13&&b(5)==10&&b(6)==26&&b(7)==10 -> "png"
             b(0)==255&&b(1)==216&&b(2)==255 -> "jpg"
+            bytes.size>=6&&String(bytes,0,6,Charsets.US_ASCII) in setOf("GIF87a","GIF89a") -> "gif"
             bytes.size>=12&&String(bytes,0,4,Charsets.US_ASCII)=="RIFF"&&String(bytes,8,4,Charsets.US_ASCII)=="WEBP" -> "webp"
             else -> null
         }
