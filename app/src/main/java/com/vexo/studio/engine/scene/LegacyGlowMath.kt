@@ -8,6 +8,13 @@ object LegacyGlowMath {
         val sum=safe(x)+safe(y)
         return if(sum<=0f)1f else 2f*safe(x)/sum
     }
+    /** Replace one displayed axis, preserve the other even for imported asymmetric values. */
+    fun editAxis(scale:Float,ratio:Float,value:Float,horizontal:Boolean):Pair<Float,Float>{
+        val (x,y)=axes(scale,ratio)
+        val nx=if(horizontal)safe(value) else x
+        val ny=if(horizontal)y else safe(value)
+        return meanScale(nx,ny) to axisRatio(nx,ny)
+    }
     fun axes(scale:Float,ratio:Float):Pair<Float,Float>{
         val s=safe(scale)
         val r=ratio.takeIf{it.isFinite()}?.coerceIn(0f,2f)?:1f

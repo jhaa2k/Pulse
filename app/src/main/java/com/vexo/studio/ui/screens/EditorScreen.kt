@@ -999,6 +999,8 @@ private fun PropertiesTab(
                         StudioColorPickerRow("Segment 2 Stroke Color",cfg.segment2StrokeColorArgb){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.Bars).copy(segment2StrokeColorArgb=v))}}
                         StudioSlider("Segment 2 Fill Opacity",cfg.segment2FillOpacity,0f,1f,1f,"",.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.Bars).copy(segment2FillOpacity=v))}},onCommit=::endDrag)
                         StudioToggleRow("Segment 2 Mirror", cfg.segment2Mirror) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(segment2Mirror = v)) } }
+                        StudioToggleRow("Segment 2 Alternating Direction",cfg.segment2AlternatingDirection?:cfg.alternatingDirection){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.Bars).copy(segment2AlternatingDirection=v))}}
+                        if(cfg.segment2AlternatingDirection!=null)TextButton(onClick={vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.Bars).copy(segment2AlternatingDirection=null))}}){Text("INHERIT PRIMARY DIRECTION")}
                         StudioColorPickerRow("Segment 2 Color From", cfg.segment2ColorFrom) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(segment2ColorFrom = v)) } }
                         StudioColorPickerRow("Segment 2 Color To", cfg.segment2ColorTo) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(segment2ColorTo = v)) } }
                     }
@@ -1107,6 +1109,13 @@ private fun PropertiesTab(
                     }
                     StudioToggleRow("Flip Horizontal", cfg.flipU) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(flipU = v)) } }
                     StudioToggleRow("Flip Vertical", cfg.flipV) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(flipV = v)) } }
+                }
+                if(cfg.sourceType==ImageSourceType.IMPORTED&&!cfg.videoEnabled){
+                    ExpandableSectionHeader("Image animation",expandedSections["Image_animation"]==true,{toggleAccordion(expandedSections,"Image_animation")}){
+                        Text("Applies to supported animated GIF images.",style=MaterialTheme.typography.bodySmall)
+                        StudioSlider("GIF Speed",cfg.imageAnimationSpeed,0f,8f,1f,"x",.05f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.Image).copy(imageAnimationSpeed=v))}},onCommit=::endDrag)
+                        MeasureBindingControls("Image Animation Audio Binding",cfg.animationSpeedMeasure,uiState.project.audioProviders.map{it.index},::beginDrag,::endDrag){v,undo->vm.updateLayer(layer.common.id,undo){it.copy(config=(it.config as LayerConfig.Image).copy(animationSpeedMeasure=v))}}
+                    }
                 }
                 ExpandableSectionHeader("Mask & chroma key", expandedSections["Image_Maskchromakey"] == true, { toggleAccordion(expandedSections, "Image_Maskchromakey") }) {
                     MediaAssetButton("IMPORT MASK") { uri -> vm.attachLayerAsset(layer.common.id,uri,"mask") }
@@ -1289,6 +1298,8 @@ private fun PropertiesTab(
                     StudioSlider("Side Wave Magnitude", cfg.sideSineWaveMag, 0f, 10f, 0f, "", 0.1f, onValueChange = { v ->
                         beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(sideSineWaveMag = v)) }
                     }, onCommit = ::endDrag)
+                    StudioSlider("Side Wave Frequency Random",cfg.sideSineWaveFreqRandom,-10f,10f,0f,"",.05f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.Particles).copy(sideSineWaveFreqRandom=v))}},onCommit=::endDrag)
+                    StudioSlider("Side Wave Magnitude Random",cfg.sideSineWaveMagRandom,-10f,10f,0f,"",.05f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.Particles).copy(sideSineWaveMagRandom=v))}},onCommit=::endDrag)
                     StudioToggleRow("Random Vector", cfg.useRandomVectorInstead) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(useRandomVectorInstead = v)) } }
                     StudioToggleRow("Vector Relative To Center", cfg.vectorRelativeToCenter) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(vectorRelativeToCenter = v)) } }
                     StudioChipSelector("Force Field", ForceFieldType.entries, cfg.forceField, { it.label }) { f ->
@@ -1312,6 +1323,7 @@ private fun PropertiesTab(
                     StudioSlider("Random End Size", cfg.endSizeRandom, 0f, 20f, 0f, "", 0.1f, onValueChange = { v ->
                         beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(endSizeRandom = v)) }
                     }, onCommit = ::endDrag)
+                    StudioSlider("Size Aspect Ratio",cfg.sizeAspectRatio,.1f,10f,1f,"x",.05f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.Particles).copy(sizeAspectRatio=v))}},onCommit=::endDrag)
                     StudioSlider("Fade In / Out", cfg.fadeInAndOutTime, 0.02f, 0.49f, 0.15f, "", 0.01f, onValueChange = { v ->
                         beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(fadeInAndOutTime = v)) }
                     }, onCommit = ::endDrag)
@@ -1383,10 +1395,43 @@ private fun PropertiesTab(
                     StudioChipSelector("Glow Blend",BlendMode.entries,cfg.glowBlendMode?:cfg.blendModeContent,{it.label}){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.BlurEffect).copy(glowBlendMode=v))}}
                     StudioChipSelector("Original Content Blend",BlendMode.entries,cfg.unblurredBlendMode?:cfg.blendModeContent,{it.label}){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.BlurEffect).copy(unblurredBlendMode=v))}}
                     StudioSlider("Glow 1 Scale",cfg.layer1Scale,0f,4f,1f,"x",.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.BlurEffect).copy(layer1Scale=v))}},onCommit=::endDrag)
+                    val glow1Axes=com.vexo.studio.engine.scene.LegacyGlowMath.axes(cfg.layer1Scale,cfg.layer1AxisRatio)
+                    StudioSlider("Glow 1 Scale X",glow1Axes.first,0f,4f,1f,"x",.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){l->
+                        val current=l.config as LayerConfig.BlurEffect
+                        val (scale,ratio)=com.vexo.studio.engine.scene.LegacyGlowMath.editAxis(current.layer1Scale,current.layer1AxisRatio,v,true)
+                        l.copy(config=current.copy(layer1Scale=scale,layer1AxisRatio=ratio))
+                    }},onCommit=::endDrag)
+                    StudioSlider("Glow 1 Scale Y",glow1Axes.second,0f,4f,1f,"x",.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){l->
+                        val current=l.config as LayerConfig.BlurEffect
+                        val (scale,ratio)=com.vexo.studio.engine.scene.LegacyGlowMath.editAxis(current.layer1Scale,current.layer1AxisRatio,v,false)
+                        l.copy(config=current.copy(layer1Scale=scale,layer1AxisRatio=ratio))
+                    }},onCommit=::endDrag)
                     StudioColorPickerRow("Glow 1 Color",cfg.layer1ColorArgb){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.BlurEffect).copy(layer1ColorArgb=v))}}
                     StudioSlider("Glow 2 Scale",cfg.layer2Scale,0f,4f,0f,"x",.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.BlurEffect).copy(layer2Scale=v))}},onCommit=::endDrag)
+                    val glow2Axes=com.vexo.studio.engine.scene.LegacyGlowMath.axes(cfg.layer2Scale,cfg.layer2AxisRatio)
+                    StudioSlider("Glow 2 Scale X",glow2Axes.first,0f,4f,0f,"x",.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){l->
+                        val current=l.config as LayerConfig.BlurEffect
+                        val (scale,ratio)=com.vexo.studio.engine.scene.LegacyGlowMath.editAxis(current.layer2Scale,current.layer2AxisRatio,v,true)
+                        l.copy(config=current.copy(layer2Scale=scale,layer2AxisRatio=ratio))
+                    }},onCommit=::endDrag)
+                    StudioSlider("Glow 2 Scale Y",glow2Axes.second,0f,4f,0f,"x",.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){l->
+                        val current=l.config as LayerConfig.BlurEffect
+                        val (scale,ratio)=com.vexo.studio.engine.scene.LegacyGlowMath.editAxis(current.layer2Scale,current.layer2AxisRatio,v,false)
+                        l.copy(config=current.copy(layer2Scale=scale,layer2AxisRatio=ratio))
+                    }},onCommit=::endDrag)
                     StudioColorPickerRow("Glow 2 Color",cfg.layer2ColorArgb){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.BlurEffect).copy(layer2ColorArgb=v))}}
                     StudioSlider("Glow 3 Scale",cfg.layer3Scale,0f,4f,0f,"x",.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.BlurEffect).copy(layer3Scale=v))}},onCommit=::endDrag)
+                    val glow3Axes=com.vexo.studio.engine.scene.LegacyGlowMath.axes(cfg.layer3Scale,cfg.layer3AxisRatio)
+                    StudioSlider("Glow 3 Scale X",glow3Axes.first,0f,4f,0f,"x",.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){l->
+                        val current=l.config as LayerConfig.BlurEffect
+                        val (scale,ratio)=com.vexo.studio.engine.scene.LegacyGlowMath.editAxis(current.layer3Scale,current.layer3AxisRatio,v,true)
+                        l.copy(config=current.copy(layer3Scale=scale,layer3AxisRatio=ratio))
+                    }},onCommit=::endDrag)
+                    StudioSlider("Glow 3 Scale Y",glow3Axes.second,0f,4f,0f,"x",.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){l->
+                        val current=l.config as LayerConfig.BlurEffect
+                        val (scale,ratio)=com.vexo.studio.engine.scene.LegacyGlowMath.editAxis(current.layer3Scale,current.layer3AxisRatio,v,false)
+                        l.copy(config=current.copy(layer3Scale=scale,layer3AxisRatio=ratio))
+                    }},onCommit=::endDrag)
                     StudioColorPickerRow("Glow 3 Color",cfg.layer3ColorArgb){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.BlurEffect).copy(layer3ColorArgb=v))}}
                     RegisteredSlider("blurRadius", cfg.blurRadius, settings.showPropertyHelpHints, { v ->
                         beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(blurRadius = v)) }
@@ -1399,7 +1444,14 @@ private fun PropertiesTab(
             is LayerConfig.RgbSplitEffect -> {
                 ExpandableSectionHeader("Source & blend", expandedSections["RgbSplitEffect_Sourceblend"] == true, { toggleAccordion(expandedSections, "RgbSplitEffect_Sourceblend") }) {
                     StudioChipSelector("Source Composition", uiState.project.compositions.map { it.index }.filter { it != uiState.selectedCompositionIndex }, cfg.targetCompositionIndex, { "Composition $it" }) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(targetCompositionIndex = v)) } }
-                    StudioChipSelector("Effect Blend", BlendMode.entries, cfg.blendModeContent, { it.label }) { v -> vm.updateLayer(layer.common.id) { it.copy(config = cfg.copy(blendModeContent = v)) } }
+                    StudioChipSelector("Effect Blend",BlendMode.entries,cfg.effectBlendMode?:cfg.blendModeContent,{it.label}){v->vm.updateLayer(layer.common.id){l->
+                        val current=l.config as LayerConfig.RgbSplitEffect
+                        l.copy(config=current.copy(effectBlendMode=v,blendModeContent=if(current.effectBlendMode==null)BlendMode.ALPHA else current.blendModeContent))
+                    }}
+                    StudioChipSelector("Content Blend",BlendMode.entries,if(cfg.effectBlendMode==null)BlendMode.ALPHA else cfg.blendModeContent,{it.label}){v->vm.updateLayer(layer.common.id){l->
+                        val current=l.config as LayerConfig.RgbSplitEffect
+                        l.copy(config=current.copy(effectBlendMode=current.effectBlendMode?:current.blendModeContent,blendModeContent=v))
+                    }}
                     StudioToggleRow("Source Under",cfg.showUnblurredContentUnder){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.RgbSplitEffect).copy(showUnblurredContentUnder=v))}}
                     StudioToggleRow("Source Above",cfg.showUnblurredContent){v->vm.updateLayer(layer.common.id){it.copy(config=(it.config as LayerConfig.RgbSplitEffect).copy(showUnblurredContent=v))}}
                 }
@@ -1411,6 +1463,7 @@ private fun PropertiesTab(
                     StudioSlider("Center Y",cfg.aberrationCenterY,0f,1f,0.5f,"",0.01f,onValueChange={v->beginDrag();vm.updateLayer(layer.common.id,false){it.copy(config=(it.config as LayerConfig.RgbSplitEffect).copy(aberrationCenterY=v))}},onCommit=::endDrag)
                     }
                     MeasureBindingControls("RGB Split Audio Binding",cfg.splitMeasure,uiState.project.audioProviders.map{it.index},::beginDrag,::endDrag){v,undo->vm.updateLayer(layer.common.id,undo){it.copy(config=(it.config as LayerConfig.RgbSplitEffect).copy(splitMeasure=v))}}
+                    MeasureBindingControls("RGB Multiplier Audio Binding",cfg.splitMultiplierMeasure,uiState.project.audioProviders.map{it.index},::beginDrag,::endDrag){v,undo->vm.updateLayer(layer.common.id,undo){it.copy(config=(it.config as LayerConfig.RgbSplitEffect).copy(splitMultiplierMeasure=v))}}
                     StudioSlider("Split Y", cfg.splitAmountY, -0.1f, 0.1f, 0.008f, "", 0.002f, onValueChange = { v ->
                         beginDrag(); vm.updateLayer(layer.common.id, false) { it.copy(config = cfg.copy(splitAmountY = v)) }
                     }, onCommit = ::endDrag)
