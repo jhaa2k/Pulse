@@ -93,7 +93,8 @@ class VexoGlRenderer(
     private var motionShader: GlShaderProgram? = null
     private val previousMotion=mutableMapOf<String,com.vexo.studio.engine.scene.MotionPose>()
     private val measureFilter=com.vexo.studio.engine.scene.ReactiveMeasureFilter()
-    private val previousMotionTarget=mutableMapOf<String,Int>()
+    private data class MotionHistoryKey(val target:Int,val source:com.vexo.studio.model.MotionSource,val relative:Boolean,val rotationZoom:Boolean)
+    private val previousMotionTarget=mutableMapOf<String,MotionHistoryKey>()
     private var particleUv = allocFloatBuffer(12)
     private val fonts = mutableMapOf<String,Typeface>()
 
@@ -1164,7 +1165,10 @@ class VexoGlRenderer(
         val filteredTex=if(hasGlow&&cfg.bloomIntensity>0f&&((if(radial)radialStrength else sigma)>.001f||cfg.bloomThreshold>0f)){
             filterTexture(srcTex,w,h,true,w,h,sigma,cfg.blurAngleDeg,cfg.blurCrossAxis,cfg.blurQuality,
                 cfg.filterMode.ordinal,radialStrength,cfg.radialCenterX,cfg.radialCenterY,cfg.bloomThreshold,cfg.bloomKnee,"blur_scene")
-        }else srcTex
+        }else {
+            fboPool.releaseByPrefix("blur_scene_")
+            srcTex
+        }
 
         val img = imageShader ?: return
         resetImageState(img)
@@ -1323,8 +1327,9 @@ class VexoGlRenderer(
         GLES20.glUniform1i(img.uniform("uColorKeyEnabled"), 0)
         GLES20.glUniform1f(img.uniform("uSaturation"), 1f)
         GLES20.glUniform4f(img.uniform("uTint"), 1f, 1f, 1f, 1f)
-        val previousTarget = previousMotionTarget.put(layerId,cfg.targetCompositionIndex)
-        val firstFrame = previousTarget != cfg.targetCompositionIndex || !previousMotion.containsKey(layerId)
+        val motionKey=MotionHistoryKey(cfg.targetCompositionIndex,cfg.motionSource,cfg.relativeMotionMode,cfg.includeRotationAndZoom)
+        val previousTarget = previousMotionTarget.put(layerId,motionKey)
+        val firstFrame = previousTarget != motionKey || !previousMotion.containsKey(layerId)
         if(firstFrame) clearBackground(0x00000000)
         val persist = if(firstFrame||!cfg.blurAmountMultiplier.isFinite()||cfg.blurAmountMultiplier<=0f) 0f else MotionMath.persistence(cfg.trailPersistence,deltaSec)
         // Decay the entire previous frame, including pixels outside the current source.
@@ -1334,7 +1339,7 @@ class VexoGlRenderer(
         GLES20.glUniform1f(img.uniform("uOpacity"), 1f - persist)
         drawTexturedQuad(img, 0f, 0f, w.toFloat(), h.toFloat(), flipV = true)
         val previous=previousMotion.put(layerId,pose)
-        val direction=com.vexo.studio.engine.scene.MotionSampling.evaluate(cfg,pose,if(firstFrame)null else previous)
+        val direction=com.vexo.studio.engine.scene.MotionSampling.evaluate(cfg,pose,if(firstFrame)null else previous,deltaSec)
         val motion=motionShader
         if(motion!=null){
             // Add the new weighted sample to the decayed history; opaque backgrounds no longer erase the trail.

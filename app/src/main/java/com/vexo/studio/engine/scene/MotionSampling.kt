@@ -6,7 +6,9 @@ import kotlin.math.*
 data class MotionPose(val x:Float,val y:Float,val degrees:Float,val scaleX:Float,val scaleY:Float)
 data class MotionSample(val x:Float,val y:Float,val radians:Float,val zoom:Float)
 object MotionSampling {
-    fun evaluate(c:LayerConfig.MotionBlurEffect,pose:MotionPose,previous:MotionPose?):MotionSample{
+    /** Relative transform deltas describe motion over a 60 Hz reference exposure.
+     * Manual displacement and absolute transforms are already frame-independent. */
+    fun evaluate(c:LayerConfig.MotionBlurEffect,pose:MotionPose,previous:MotionPose?,deltaSec:Float=1f/60f):MotionSample{
         val gain=c.blurAmountMultiplier.coerceIn(0f,3f)
         val manual=c.motionSource==MotionSource.MANUAL
         val old=previous?:pose
@@ -19,7 +21,10 @@ object MotionSampling {
         fun size(p:MotionPose)=sqrt(maxOf(.0001f,abs(p.scaleX*p.scaleY)))
         val zoom=if(manual)c.manualZoom else if(c.includeRotationAndZoom)
             ln((size(pose)/if(c.relativeMotionMode)size(old) else 1f).coerceIn(.1f,10f)) else 0f
-        fun safe(v:Float,limit:Float)=(v*gain).takeIf{it.isFinite()}?.coerceIn(-limit,limit)?:0f
+        val exposure=if(!manual&&c.relativeMotionMode)
+            (1f/60f)/(deltaSec.takeIf{it.isFinite()}?.coerceIn(.001f,.25f)?:1f/60f)
+            else 1f
+        fun safe(v:Float,limit:Float)=(v*gain*exposure).takeIf{it.isFinite()}?.coerceIn(-limit,limit)?:0f
         return MotionSample(safe(x,.25f),safe(y,.25f),safe(rotation*PI.toFloat()/180f,PI.toFloat()/2f),safe(zoom,.7f))
     }
 }

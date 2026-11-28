@@ -1,0 +1,3 @@
+# Phase 74 — frame-rate-stable motion effects
+
+Phase 73 CI passed (46092276982). Normalize relative transform displacement/rotation/log zoom to a 60 Hz exposure before applying gain and clamps. Manual and absolute motion stay unchanged. Reset motion history when source composition, motion source, relative mode or rotation/zoom flag changes; sanitize persistence. Use highp image/mirror shader precision when advertised, mediump otherwise. Release scene blur scratch when not needed. Three JVM tests. 60 Hz exposure is a native design assumption, not verified original Avee behavior; no new mirror folding, glow kernel, force-field or blend-mode algorithm. No device screenshot or export performance verification. Main unchanged.

@@ -125,7 +125,11 @@ object VexoShaders {
     """
 
     const val IMAGE_FRAGMENT = """
+        #ifdef GL_FRAGMENT_PRECISION_HIGH
+        precision highp float;
+        #else
         precision mediump float;
+        #endif
         varying vec2 vUv;
         uniform sampler2D uTex;
         uniform vec4 uTint;
@@ -466,7 +470,11 @@ object VexoShaders {
         }
     """
     const val MIRROR_FRAGMENT = """
+        #ifdef GL_FRAGMENT_PRECISION_HIGH
+        precision highp float;
+        #else
         precision mediump float;
+        #endif
         varying vec2 vUv;
         uniform sampler2D uTex;
         uniform int uMode;
